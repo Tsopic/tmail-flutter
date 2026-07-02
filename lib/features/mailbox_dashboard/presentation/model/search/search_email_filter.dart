@@ -18,8 +18,18 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/sear
 import 'package:tmail_ui_user/features/thread/domain/model/search_query.dart';
 
 class SearchEmailFilter with EquatableMixin, OptionParamMixin {
-
-  static const EmailSortOrderType defaultSortOrder = EmailSortOrderType.relevance;
+  static const EmailSortOrderType defaultSortOrder =
+      EmailSortOrderType.relevance;
+  static const Set<String> _commonEmailDomainSuffixes = {
+    '.com',
+    '.ee',
+    '.net',
+    '.org',
+    '.io',
+    '.ai',
+    '.co',
+    '.eu',
+  };
 
   final Set<String> from;
   final Set<String> to;
@@ -60,15 +70,15 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
     Set<String>? notKeyword,
     Set<String>? hasKeyword,
     EmailSortOrderType? sortOrderType,
-  })  : from = from ?? <String>{},
-        to = to ?? <String>{},
-        notKeyword = notKeyword ?? <String>{},
-        hasKeyword = hasKeyword ?? <String>{},
-        hasAttachment = hasAttachment ?? false,
-        unread = unread ?? false,
-        emailReceiveTimeType =
-          emailReceiveTimeType ?? EmailReceiveTimeType.allTime,
-        sortOrderType = sortOrderType ?? defaultSortOrder;
+  }) : from = from ?? <String>{},
+       to = to ?? <String>{},
+       notKeyword = notKeyword ?? <String>{},
+       hasKeyword = hasKeyword ?? <String>{},
+       hasAttachment = hasAttachment ?? false,
+       unread = unread ?? false,
+       emailReceiveTimeType =
+           emailReceiveTimeType ?? EmailReceiveTimeType.allTime,
+       sortOrderType = sortOrderType ?? defaultSortOrder;
 
   SearchEmailFilter copyWith({
     Option<Set<String>>? fromOption,
@@ -96,7 +106,10 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
       notKeyword: getOptionParam(notKeywordOption, notKeyword),
       hasKeyword: getOptionParam(hasKeywordOption, hasKeyword),
       mailbox: getOptionParam(mailboxOption, mailbox),
-      emailReceiveTimeType: getOptionParam(emailReceiveTimeTypeOption, emailReceiveTimeType),
+      emailReceiveTimeType: getOptionParam(
+        emailReceiveTimeTypeOption,
+        emailReceiveTimeType,
+      ),
       hasAttachment: getOptionParam(hasAttachmentOption, hasAttachment),
       unread: getOptionParam(unreadOption, unread),
       before: getOptionParam(beforeOption, before),
@@ -109,38 +122,27 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
   }
 
   Filter? mappingToEmailFilterCondition({
-    EmailFilterCondition? moreFilterCondition
+    EmailFilterCondition? moreFilterCondition,
   }) {
     final textTokens = text?.toFilterTokens() ?? [];
+    final textFilter = _generateFilterFromTextTokens(textTokens);
 
     final emailEmailFilterConditionShared = EmailFilterCondition(
-      text: textTokens.length == 1 ? textTokens.first : null,
       inMailbox: mailbox?.mailboxId,
       after: emailReceiveTimeType.getAfterDate(startDate),
       hasAttachment: !hasAttachment ? null : hasAttachment,
-      subject: subject?.trim().isNotEmpty == true
-        ? subject?.trim()
-        : null,
+      subject: subject?.trim().isNotEmpty == true ? subject?.trim() : null,
       before: emailReceiveTimeType.getBeforeDate(endDate, before),
-      from: from.length == 1
-        ? from.first
-        : null,
-      hasKeyword: hasKeyword.length == 1
-        ? hasKeyword.first
-        : null,
+      from: from.length == 1 ? from.first : null,
+      hasKeyword: hasKeyword.length == 1 ? hasKeyword.first : null,
       notKeyword: unread ? KeyWordIdentifier.emailSeen.value : null,
     );
 
     final listEmailCondition = {
       if (emailEmailFilterConditionShared.hasCondition)
         emailEmailFilterConditionShared,
-      if (textTokens.length > 1)
-        LogicFilterOperator(
-          Operator.AND,
-          textTokens.map((token) => EmailFilterCondition(text: token)).toSet(),
-        ),
-      if (to.isNotEmpty)
-        ..._generateFilterFromToField(),
+      if (textFilter != null) textFilter,
+      if (to.isNotEmpty) ..._generateFilterFromToField(),
       if (from.length > 1)
         LogicFilterOperator(
           Operator.OR,
@@ -159,7 +161,7 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
       if (label?.keyword?.value != null)
         EmailFilterCondition(hasKeyword: label!.keyword!.value),
       if (moreFilterCondition != null && moreFilterCondition.hasCondition)
-        moreFilterCondition
+        moreFilterCondition,
     };
 
     if (listEmailCondition.isEmpty) {
@@ -174,29 +176,92 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
   @visibleForTesting
   List<Filter> generateFilterFromToField() => _generateFilterFromToField();
 
+  @visibleForTesting
+  Filter? generateFilterFromTextTokens(List<String> tokens) =>
+      _generateFilterFromTextTokens(tokens);
+
+  Filter? _generateFilterFromTextTokens(List<String> tokens) {
+    if (tokens.isEmpty) {
+      return null;
+    }
+
+    if (tokens.length == 1) {
+      return _generateFilterFromTextToken(tokens.first);
+    }
+
+    return LogicFilterOperator(
+      Operator.AND,
+      tokens.map(_generateFilterFromTextToken).toSet(),
+    );
+  }
+
+  Filter _generateFilterFromTextToken(String token) {
+    final participantValues = _generateParticipantSearchValues(token);
+
+    if (participantValues.isEmpty) {
+      return EmailFilterCondition(text: token);
+    }
+
+    return LogicFilterOperator(Operator.OR, {
+      EmailFilterCondition(text: token),
+      for (final value in participantValues) ...{
+        EmailFilterCondition(from: value),
+        EmailFilterCondition(to: value),
+        EmailFilterCondition(cc: value),
+        EmailFilterCondition(bcc: value),
+      },
+    });
+  }
+
+  Set<String> _generateParticipantSearchValues(String token) {
+    final value = token.trim();
+
+    if (value.isEmpty || _isQuotedPhrase(value)) {
+      return {};
+    }
+
+    final values = {value};
+
+    if (_isBareDomainToken(value)) {
+      for (final suffix in _commonEmailDomainSuffixes) {
+        values
+          ..add('$value$suffix')
+          ..add('@$value$suffix');
+      }
+    }
+
+    return values;
+  }
+
+  bool _isQuotedPhrase(String value) =>
+      value.length >= 2 && value.startsWith('"') && value.endsWith('"');
+
+  bool _isBareDomainToken(String value) =>
+      value.length >= 3 &&
+      !value.contains('@') &&
+      !value.contains('.') &&
+      !value.contains(':') &&
+      !value.contains(RegExp(r'\s')) &&
+      RegExp(r'^[A-Za-z0-9-]+$').hasMatch(value);
+
   List<Filter> _generateFilterFromToField() {
     if (to.length == 1) {
-      return [
-        _generateFilterFromAValueOfToField(to.first),
-      ];
+      return [_generateFilterFromAValueOfToField(to.first)];
     }
 
     return to.map(_generateFilterFromAValueOfToField).toList();
   }
 
   Filter _generateFilterFromAValueOfToField(String value) {
-    return LogicFilterOperator(
-      Operator.OR,
-      {
-        EmailFilterCondition(to: value),
-        EmailFilterCondition(cc: value),
-        EmailFilterCondition(bcc: value),
-      },
-    );
+    return LogicFilterOperator(Operator.OR, {
+      EmailFilterCondition(to: value),
+      EmailFilterCondition(cc: value),
+      EmailFilterCondition(bcc: value),
+    });
   }
 
   Set<String> getContactApplied(PrefixEmailAddress prefixEmailAddress) {
-    switch(prefixEmailAddress) {
+    switch (prefixEmailAddress) {
       case PrefixEmailAddress.from:
         return from;
       case PrefixEmailAddress.to:
@@ -206,33 +271,38 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
     }
   }
 
-  bool get isApplied => from.isNotEmpty ||
-    to.isNotEmpty ||
-    text?.value.trim().isNotEmpty == true ||
-    subject?.trim().isNotEmpty == true ||
-    hasKeyword.isNotEmpty ||
-    notKeyword.isNotEmpty ||
-    emailReceiveTimeType != EmailReceiveTimeType.allTime ||
-    sortOrderType != SearchEmailFilter.defaultSortOrder ||
-    (mailbox != null && mailbox?.id != PresentationMailbox.unifiedMailbox.id) ||
-    label != null ||
-    hasAttachment ||
-    unread;
+  bool get isApplied =>
+      from.isNotEmpty ||
+      to.isNotEmpty ||
+      text?.value.trim().isNotEmpty == true ||
+      subject?.trim().isNotEmpty == true ||
+      hasKeyword.isNotEmpty ||
+      notKeyword.isNotEmpty ||
+      emailReceiveTimeType != EmailReceiveTimeType.allTime ||
+      sortOrderType != SearchEmailFilter.defaultSortOrder ||
+      (mailbox != null &&
+          mailbox?.id != PresentationMailbox.unifiedMailbox.id) ||
+      label != null ||
+      hasAttachment ||
+      unread;
 
-  bool get isContainFlagged => hasKeyword.contains(KeyWordIdentifier.emailFlagged.value);
+  bool get isContainFlagged =>
+      hasKeyword.contains(KeyWordIdentifier.emailFlagged.value);
 
-  bool get isOnlyStarredApplied => from.isEmpty &&
-    to.isEmpty &&
-    text?.value.trim().isNotEmpty != true &&
-    subject?.trim().isNotEmpty != true &&
-    hasKeyword.firstOrNull == KeyWordIdentifier.emailFlagged.value &&
-    notKeyword.isEmpty &&
-    emailReceiveTimeType == EmailReceiveTimeType.allTime &&
-    sortOrderType == SearchEmailFilter.defaultSortOrder &&
-    (mailbox == null || mailbox?.id == PresentationMailbox.unifiedMailbox.id) &&
-    label == null &&
-    !hasAttachment &&
-    !unread;
+  bool get isOnlyStarredApplied =>
+      from.isEmpty &&
+      to.isEmpty &&
+      text?.value.trim().isNotEmpty != true &&
+      subject?.trim().isNotEmpty != true &&
+      hasKeyword.firstOrNull == KeyWordIdentifier.emailFlagged.value &&
+      notKeyword.isEmpty &&
+      emailReceiveTimeType == EmailReceiveTimeType.allTime &&
+      sortOrderType == SearchEmailFilter.defaultSortOrder &&
+      (mailbox == null ||
+          mailbox?.id == PresentationMailbox.unifiedMailbox.id) &&
+      label == null &&
+      !hasAttachment &&
+      !unread;
 
   @override
   List<Object?> get props => [

@@ -92,7 +92,7 @@ void main() {
         expect(result, isNull);
       });
 
-      test('SHOULD creates a simple filter WHEN text is provided', () {
+      test('SHOULD expands simple text to participant domain filters', () {
         // Arrange
         final filter = SearchEmailFilter(text: SearchQuery('example'));
 
@@ -100,9 +100,25 @@ void main() {
         final result = filter.mappingToEmailFilterCondition();
 
         // Assert
-        expect(result, isA<EmailFilterCondition>());
-        final emailCondition = result as EmailFilterCondition;
-        expect(emailCondition.text, 'example');
+        expect(result, isA<LogicFilterOperator>());
+        final logicFilter = result as LogicFilterOperator;
+        expect(logicFilter.operator, Operator.OR);
+        expect(
+          logicFilter.conditions,
+          contains(EmailFilterCondition(text: 'example')),
+        );
+        expect(
+          logicFilter.conditions,
+          contains(EmailFilterCondition(from: 'example')),
+        );
+        expect(
+          logicFilter.conditions,
+          contains(EmailFilterCondition(from: 'example.com')),
+        );
+        expect(
+          logicFilter.conditions,
+          contains(EmailFilterCondition(from: '@example.com')),
+        );
       });
 
       test(
@@ -209,10 +225,12 @@ void main() {
           expect(logicFilter.operator, Operator.AND);
           expect(logicFilter.conditions.length, equals(2));
 
-          final conditions = logicFilter.conditions.toList();
-          final textValues = conditions
+          final textValues = logicFilter.conditions
+              .whereType<LogicFilterOperator>()
+              .expand((filter) => filter.conditions)
               .whereType<EmailFilterCondition>()
               .map((c) => c.text)
+              .whereType<String>()
               .toSet();
           expect(textValues, equals({'portal', 'access'}));
         },
@@ -248,10 +266,15 @@ void main() {
           expect(logicFilter.operator, Operator.AND);
           expect(logicFilter.conditions.length, equals(2));
 
-          final conditions = logicFilter.conditions.toList();
-          final textValues = conditions
+          final textValues = logicFilter.conditions
+              .expand(
+                (condition) => condition is LogicFilterOperator
+                    ? condition.conditions
+                    : {condition},
+              )
               .whereType<EmailFilterCondition>()
               .map((c) => c.text)
+              .whereType<String>()
               .toSet();
           expect(textValues, equals({'"portal access"', 'denied'}));
         },
@@ -275,18 +298,37 @@ void main() {
         },
       );
 
-      test('SHOULD treat single word text same as before', () {
-        // Arrange
-        final filter = SearchEmailFilter(text: SearchQuery('portal'));
+      test(
+        'SHOULD include email domain variants for bare single word text',
+        () {
+          // Arrange
+          final filter = SearchEmailFilter(text: SearchQuery('portal'));
 
-        // Act
-        final result = filter.mappingToEmailFilterCondition();
+          // Act
+          final result = filter.mappingToEmailFilterCondition();
 
-        // Assert
-        expect(result, isA<EmailFilterCondition>());
-        final emailCondition = result as EmailFilterCondition;
-        expect(emailCondition.text, 'portal');
-      });
+          // Assert
+          expect(result, isA<LogicFilterOperator>());
+          final logicFilter = result as LogicFilterOperator;
+          expect(logicFilter.operator, Operator.OR);
+          expect(
+            logicFilter.conditions,
+            contains(EmailFilterCondition(text: 'portal')),
+          );
+          expect(
+            logicFilter.conditions,
+            contains(EmailFilterCondition(from: 'portal')),
+          );
+          expect(
+            logicFilter.conditions,
+            contains(EmailFilterCondition(from: 'portal.com')),
+          );
+          expect(
+            logicFilter.conditions,
+            contains(EmailFilterCondition(from: '@portal.com')),
+          );
+        },
+      );
 
       test('SHOULD convert the notKeyword set into a NOT LogicFilterOperator containing multiple EmailFilterCondition instances,\n'
           'each representing a keyword from the set', () {
