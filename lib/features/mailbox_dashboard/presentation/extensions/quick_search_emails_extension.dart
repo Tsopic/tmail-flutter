@@ -14,6 +14,7 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/domain/state/quick_sear
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/search_controller.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/email_receive_time_type.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/quick_search_filter.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/search_email_filter.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_query.dart';
 
 extension QuickSearchEmailsExtension on SearchController {
@@ -24,57 +25,67 @@ extension QuickSearchEmailsExtension on SearchController {
     required String query,
   }) async {
     currentSearchText = query;
-    return await quickSearchEmailInteractor.execute(
-      session,
-      accountId,
-      limit: UnsignedInt(5),
-      sort: searchEmailFilter.value.sortOrderType
-                  .getSortOrder()
-                  .toNullable(),
-      filter: _mappingToFilterOnSuggestionForm(
-        currentUserEmail: ownEmailAddress,
-        query: query,
-      ),
-      properties: EmailUtils.getPropertiesForEmailGetMethod(session, accountId),
-    ).then((result) => result.fold(
-      (failure) => <PresentationEmail>[],
-      (success) => success is QuickSearchEmailSuccess
-        ? success.emailList
-        : <PresentationEmail>[]
-    ));
-  } 
+    return await quickSearchEmailInteractor
+        .execute(
+          session,
+          accountId,
+          limit: UnsignedInt(5),
+          sort: searchEmailFilter.value.sortOrderType
+              .getSortOrder()
+              .toNullable(),
+          filter: _mappingToFilterOnSuggestionForm(
+            currentUserEmail: ownEmailAddress,
+            query: query,
+          ),
+          properties: EmailUtils.getPropertiesForEmailGetMethod(
+            session,
+            accountId,
+          ),
+        )
+        .then(
+          (result) => result.fold(
+            (failure) => <PresentationEmail>[],
+            (success) => success is QuickSearchEmailSuccess
+                ? success.emailList
+                : <PresentationEmail>[],
+          ),
+        );
+  }
 
-  Filter? _mappingToFilterOnSuggestionForm({required String query, required String currentUserEmail}) {
+  Filter? _mappingToFilterOnSuggestionForm({
+    required String query,
+    required String currentUserEmail,
+  }) {
     log('SearchController::_mappingToFilterOnSuggestionForm():query: $query');
     final tokens = SearchQuery(query).toFilterTokens();
+    final textFilter = SearchEmailFilter.initial().generateFilterFromTextTokens(
+      tokens,
+    );
 
     final baseCondition = EmailFilterCondition(
-      text: tokens.length == 1 ? tokens.first : null,
       after: listFilterOnSuggestionForm.contains(QuickSearchFilter.last7Days)
-        ? EmailReceiveTimeType.last7Days.toOldestUTCDate()
-        : null,
+          ? EmailReceiveTimeType.last7Days.toOldestUTCDate()
+          : null,
       before: listFilterOnSuggestionForm.contains(QuickSearchFilter.last7Days)
-        ? EmailReceiveTimeType.last7Days.toLatestUTCDate()
-        : null,
-      hasAttachment: listFilterOnSuggestionForm.contains(QuickSearchFilter.hasAttachment)
-        ? true
-        : null,
-      from: listFilterOnSuggestionForm.contains(QuickSearchFilter.fromMe) && currentUserEmail.isNotEmpty
-        ? currentUserEmail
-        : null,
+          ? EmailReceiveTimeType.last7Days.toLatestUTCDate()
+          : null,
+      hasAttachment:
+          listFilterOnSuggestionForm.contains(QuickSearchFilter.hasAttachment)
+          ? true
+          : null,
+      from:
+          listFilterOnSuggestionForm.contains(QuickSearchFilter.fromMe) &&
+              currentUserEmail.isNotEmpty
+          ? currentUserEmail
+          : null,
       hasKeyword: listFilterOnSuggestionForm.contains(QuickSearchFilter.starred)
-        ? KeyWordIdentifier.emailFlagged.value
-        : null
+          ? KeyWordIdentifier.emailFlagged.value
+          : null,
     );
 
     final conditions = <Filter>{
-      if (baseCondition.hasCondition)
-        baseCondition,
-      if (tokens.length > 1)
-        LogicFilterOperator(
-          Operator.AND,
-          tokens.map((token) => EmailFilterCondition(text: token)).toSet(),
-        ),
+      if (baseCondition.hasCondition) baseCondition,
+      if (textFilter != null) textFilter,
     };
 
     if (conditions.isEmpty) {
