@@ -9,10 +9,12 @@ import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_bu
 import '../../base/base_test_scenario.dart';
 import '../../models/provisioning_email.dart';
 import '../../robots/thread_robot.dart';
+import '../../utils/test_timeouts.dart';
+import '../../utils/wait_for_condition.dart';
 
 class DisplayAndScrollEmailWithLongContentScenario extends BaseTestScenario {
 
-  const DisplayAndScrollEmailWithLongContentScenario(super.$);
+  const DisplayAndScrollEmailWithLongContentScenario(super.$, super.robots);
 
   static const String subject = 'Email with long content';
   static const String longContent = '''
@@ -55,16 +57,20 @@ class DisplayAndScrollEmailWithLongContentScenario extends BaseTestScenario {
   }
 
   Future<void> _expectEmailViewWithLongContent() async {
-    expect(
-      $(HtmlContentViewer).which<HtmlContentViewer>((view) {
-        return view.contentHtml.contains('Lorem ipsum dolor sit amet, consectetur adipiscing elit.');
-      }),
-      findsOneWidget,
-    );
+    final view = $(HtmlContentViewer).which<HtmlContentViewer>((view) {
+      return view.contentHtml
+          .contains('Lorem ipsum dolor sit amet, consectetur adipiscing elit.');
+    });
+    await $.waitUntilExists(view);
+    expect(view, findsOneWidget);
   }
 
   Future<void> _expectEmailViewScrollableWithLongContent() async {
     expect($(EmailSubjectWidget).visible, isTrue);
+    await waitForCondition(
+      () => $(#integration_testing_email_detailed_divider).exists,
+      timeout: TestTimeouts.long,
+    );
 
     await $.scrollUntilVisible(
       finder: $(#integration_testing_email_detailed_divider),
@@ -72,7 +78,7 @@ class DisplayAndScrollEmailWithLongContentScenario extends BaseTestScenario {
       delta: 150,
       maxScrolls: 100,
     );
-    await $.pumpAndSettle();
+    await $.pumpAndTrySettle();
 
     expect($(EmailSubjectWidget).visible, isFalse);
   }

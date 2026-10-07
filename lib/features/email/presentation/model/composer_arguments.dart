@@ -7,7 +7,9 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'package:tmail_ui_user/features/composer/presentation/model/screen_display_mode.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/data/model/composer_cache.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/data/model/composer_persistent_cache.dart';
 import 'package:tmail_ui_user/features/sending_queue/domain/model/sending_email.dart';
+import 'package:tmail_ui_user/features/email/domain/extensions/email_attachment_classifier_extension.dart';
 import 'package:tmail_ui_user/features/sending_queue/presentation/model/sending_email_action_type.dart';
 import 'package:tmail_ui_user/main/routes/router_arguments.dart';
 
@@ -39,6 +41,7 @@ class ComposerArguments extends RouterArguments {
   final EmailActionType? savedActionType;
   final EmailId? savedEmailDraftId;
   final EmailId? savedEmailTemplateId;
+  final MailboxId? savedDraftMailboxId;
 
   ComposerArguments({
     this.emailActionType = EmailActionType.compose,
@@ -68,6 +71,7 @@ class ComposerArguments extends RouterArguments {
     this.savedActionType,
     this.savedEmailDraftId,
     this.savedEmailTemplateId,
+    this.savedDraftMailboxId,
   });
 
   factory ComposerArguments.fromSendingEmail(SendingEmail sendingEmail) =>
@@ -109,10 +113,13 @@ class ComposerArguments extends RouterArguments {
     bcc: bcc,
   );
 
-  factory ComposerArguments.editDraftEmail(PresentationEmail presentationEmail) =>
-    ComposerArguments(
+  factory ComposerArguments.editDraftEmail({
+    required PresentationEmail presentationEmail,
+    required MailboxId savedDraftMailboxId,
+  }) => ComposerArguments(
       emailActionType: EmailActionType.editDraft,
       presentationEmail: presentationEmail,
+      savedDraftMailboxId: savedDraftMailboxId,
     );
   
   factory ComposerArguments.editAsNewEmail(
@@ -124,14 +131,17 @@ class ComposerArguments extends RouterArguments {
     savedEmailTemplateId: savedEmailTemplateId,
   );
 
-  factory ComposerArguments.fromSessionStorageBrowser(ComposerCache composerCache) =>
-    ComposerArguments(
+  factory ComposerArguments.fromSessionStorageBrowser(ComposerCache composerCache) {
+    final classified = composerCache.email?.toPresentationAttachments();
+    return ComposerArguments(
       emailActionType: EmailActionType.reopenComposerBrowser,
       presentationEmail: composerCache.email?.toPresentationEmail(),
       emailContents: composerCache.email?.emailContentList.asHtmlString,
-      attachments: composerCache.email?.allAttachments.getListAttachmentsDisplayedOutside(composerCache.email?.htmlBodyAttachments ?? []),
+      attachments: classified?.attachments,
       selectedIdentityId: composerCache.email?.identityIdFromHeader,
-      inlineImages: composerCache.email?.allAttachments.listAttachmentsDisplayedInContent,
+      inlineImages: classified?.inlineImages,
+      messageId: composerCache.email?.inReplyTo,
+      references: composerCache.email?.references,
       hasRequestReadReceipt: composerCache.hasRequestReadReceipt,
       displayMode: composerCache.displayMode,
       isMarkAsImportant: composerCache.isMarkAsImportant,
@@ -140,7 +150,11 @@ class ComposerArguments extends RouterArguments {
       savedActionType: composerCache.actionType,
       savedEmailDraftId: composerCache.draftEmailId,
       savedEmailTemplateId: composerCache.templateEmailId,
+      savedDraftMailboxId: composerCache.actionType == EmailActionType.editDraft
+          ? composerCache.email?.mailboxIds?.keys.firstOrNull
+          : null,
     );
+  }
 
   factory ComposerArguments.replyEmail({
     required PresentationEmail presentationEmail,
@@ -221,6 +235,26 @@ class ComposerArguments extends RouterArguments {
     ? SendingEmailActionType.edit
     : SendingEmailActionType.create;
 
+  factory ComposerArguments.fromComposerPersistentCache(ComposerPersistentCache cache) {
+    final classified = cache.email?.toPresentationAttachments();
+    return ComposerArguments(
+      emailActionType: EmailActionType.restoreComposerFromPersistentCache,
+      presentationEmail: cache.email?.toPresentationEmail(),
+      emailContents: cache.email?.emailContentList.asHtmlString,
+      attachments: classified?.attachments,
+      selectedIdentityId: cache.email?.identityIdFromHeader,
+      inlineImages: classified?.inlineImages,
+      hasRequestReadReceipt: cache.hasRequestReadReceipt,
+      isMarkAsImportant: cache.isMarkAsImportant,
+      composerId: cache.composerId,
+      displayMode: cache.displayMode,
+      savedDraftHash: cache.draftHash,
+      savedActionType: cache.actionType,
+      savedEmailDraftId: cache.draftEmailId,
+      savedEmailTemplateId: cache.templateEmailId,
+    );
+  }
+
   factory ComposerArguments.fromUnsubscribeMailtoLink({
     List<EmailAddress>? listEmailAddress,
     String? subject,
@@ -265,6 +299,7 @@ class ComposerArguments extends RouterArguments {
     savedActionType,
     savedEmailDraftId,
     sendingEmailActionType,
+    savedDraftMailboxId,
   ];
 
   ComposerArguments copyWith({
@@ -295,6 +330,7 @@ class ComposerArguments extends RouterArguments {
     EmailActionType? savedActionType,
     EmailId? savedEmailDraftId,
     EmailId? savedEmailTemplateId,
+    MailboxId? savedDraftMailboxId,
   }) {
     return ComposerArguments(
       emailActionType: emailActionType ?? this.emailActionType,
@@ -324,6 +360,7 @@ class ComposerArguments extends RouterArguments {
       savedActionType: savedActionType ?? this.savedActionType,
       savedEmailDraftId: savedEmailDraftId ?? this.savedEmailDraftId,
       savedEmailTemplateId: savedEmailTemplateId ?? this.savedEmailTemplateId,
+      savedDraftMailboxId: savedDraftMailboxId ?? this.savedDraftMailboxId,
     );
   }
 }

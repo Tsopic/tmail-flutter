@@ -1,4 +1,8 @@
+import 'package:core/domain/exceptions/app_base_exception.dart';
 
-class NotFoundLinagoraEcosystem implements Exception {}
+class NotFoundLinagoraEcosystem extends AppBaseException {
+  NotFoundLinagoraEcosystem([super.message]);
 
-class NotFoundPaywallUrl implements Exception {}
+  @override
+  String get exceptionName => 'NotFoundLinagoraEcosystem';
+}

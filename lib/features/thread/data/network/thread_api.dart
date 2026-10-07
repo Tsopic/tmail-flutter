@@ -26,13 +26,15 @@ import 'package:tmail_ui_user/features/base/mixin/mail_api_mixin.dart';
 import 'package:jmap_dart_client/jmap/mail/email/search_snippet/search_snippet.dart';
 import 'package:jmap_dart_client/jmap/mail/email/search_snippet/search_snippet_get_method.dart';
 import 'package:jmap_dart_client/jmap/mail/email/search_snippet/search_snippet_get_response.dart';
+import 'package:tmail_ui_user/features/base/mixin/session_mixin.dart';
 import 'package:tmail_ui_user/features/thread/data/extensions/list_email_id_extension.dart';
+import 'package:tmail_ui_user/features/thread/data/extensions/query_email_method_extension.dart';
 import 'package:tmail_ui_user/features/thread/data/model/email_change_response.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/email_response.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_emails_response.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
 
-class ThreadAPI with HandleSetErrorMixin, MailAPIMixin {
+class ThreadAPI with HandleSetErrorMixin, SessionMixin, MailAPIMixin {
 
   final HttpClient httpClient;
 
@@ -46,6 +48,7 @@ class ThreadAPI with HandleSetErrorMixin, MailAPIMixin {
       int? position,
       Set<Comparator>? sort,
       Filter? filter,
+      bool? collapseThreads,
       Properties? properties
     }
   ) async {
@@ -57,6 +60,7 @@ class ThreadAPI with HandleSetErrorMixin, MailAPIMixin {
       position: position,
       sort: sort,
       filter: filter,
+      collapseThreads: collapseThreads,
       properties: properties,
     );
   }
@@ -69,6 +73,7 @@ class ThreadAPI with HandleSetErrorMixin, MailAPIMixin {
       int? position,
       Set<Comparator>? sort,
       Filter? filter,
+      bool? collapseThreads,
       Properties? properties
     }
   ) async {
@@ -77,15 +82,12 @@ class ThreadAPI with HandleSetErrorMixin, MailAPIMixin {
     final jmapRequestBuilder = JmapRequestBuilder(httpClient, processingInvocation);
 
     // Email/query
-    final queryEmailMethod = QueryEmailMethod(accountId);
-
-    if (limit != null) queryEmailMethod.addLimit(limit);
-
-    if (position != null && position > 0) queryEmailMethod.addPosition(position);
-
-    if (sort != null) queryEmailMethod.addSorts(sort);
-
-    if (filter != null) queryEmailMethod.addFilters(filter);
+    final queryEmailMethod = QueryEmailMethod(accountId)
+      ..addLimitIfNotNull(limit)
+      ..addPositionIfAvailable(position)
+      ..addSortsIfNotNull(sort)
+      ..addFiltersIfNotNull(filter)
+      ..addCollapseThreadsIfAvailable(collapseThreads);
 
     final queryEmailInvocation = jmapRequestBuilder.invocation(queryEmailMethod);
 

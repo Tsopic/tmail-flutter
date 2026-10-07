@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
@@ -27,7 +28,7 @@ import 'package:tmail_ui_user/features/mailbox/domain/model/rename_mailbox_reque
 import 'package:tmail_ui_user/features/mailbox/domain/model/mailbox_right_request.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/subscribe_mailbox_request.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/subscribe_multiple_mailbox_request.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 class MailboxDataSourceImpl extends MailboxDataSource {
 
@@ -172,7 +173,7 @@ class MailboxDataSourceImpl extends MailboxDataSource {
     StreamController<dartz.Either<Failure, Success>>? onProgressController,
   }) {
     return Future.sync(() async {
-      if (PlatformInfo.isWeb) {
+      if (PlatformInfo.isWeb || Platform.numberOfProcessors == 1) {
         return await mailboxAPI.moveFolderContent(
           session: session,
           accountId: accountId,

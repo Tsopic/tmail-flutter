@@ -30,10 +30,11 @@ extension SessionExtension on Session {
     } else if (downloadUrl.hasOrigin) {
       downloadUrlValid = downloadUrl;
     } else {
-      throw UnknownUriException();
+      throw const UnknownUriException();
     }
 
-    var baseUrl = '${downloadUrlValid.origin}${downloadUrlValid.path}?${downloadUrlValid.query}';
+    final normalizedUrl = downloadUrlValid.normalizePathSlashes();
+    var baseUrl = '${normalizedUrl.origin}${normalizedUrl.path}?${normalizedUrl.query}';
     if (baseUrl.endsWith('/')) {
       baseUrl = baseUrl.substring(0, baseUrl.length - 1);
     }
@@ -56,10 +57,11 @@ extension SessionExtension on Session {
     } else if (uploadUrl.hasOrigin) {
       uploadUrlValid = uploadUrl;
     } else {
-      throw UnknownUriException();
+      throw const UnknownUriException();
     }
 
-    final baseUrl = '${uploadUrlValid.origin}${uploadUrlValid.path}';
+    final normalizedUrl = uploadUrlValid.normalizePathSlashes();
+    final baseUrl = '${normalizedUrl.origin}${normalizedUrl.path}';
     final uploadUriTemplate = UriTemplate(Uri.decodeFull(baseUrl));
     final uploadUri = uploadUriTemplate.expand({
       'accountId' : accountId.id.value
@@ -109,7 +111,7 @@ extension SessionExtension on Session {
     return username.value.isEmail ? username.value
         : _getOwnEmailAddressFromPersonalAccount()
         ?? _getOwnEmailAddressFromPrincipalsCapability()
-        ?? (throw UnknownAddressException());
+        ?? (throw const UnknownAddressException());
   }
 
   String? _getOwnEmailAddressFromPersonalAccount() {
@@ -168,7 +170,7 @@ extension SessionExtension on Session {
         return listPersonalAccount.first;
       }
     }
-    throw NotFoundPersonalAccountException();
+    throw const NotFoundPersonalAccountException();
   }
 
   AccountId get accountId => personalAccount.accountId;
@@ -177,7 +179,7 @@ extension SessionExtension on Session {
     try {
       return personalAccount.accountId;
     } catch (e) {
-      logError('SessionExtension::safeAccountId:Exception: $e');
+      logWarning('SessionExtension::safeAccountId:Exception: $e');
       return null;
     }
   }

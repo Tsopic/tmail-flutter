@@ -6,11 +6,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as parser;
 import 'package:html_unescape/html_unescape.dart';
 
-import 'js_interop_stub.dart' if (dart.library.html) 'dart:js_interop';
-import 'dart:typed_data';
-
 import 'package:core/data/constants/constant.dart';
-import 'package:core/presentation/extensions/html_extension.dart';
 import 'package:core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:universal_html/html.dart' as html;
@@ -106,11 +102,14 @@ class HtmlUtils {
   );
 
   static ({String name, String script}) registerSelectionChangeListener(
-    String viewId,
-  ) => (
-    script:
-        '''
+    String viewId, {
+    bool isWebPlatform = false,
+  }) =>
+      (
+        script: '''
       let lastSelectedText = '';
+
+      const isWebPlatform = $isWebPlatform;
 
       const sendSelectionChangeMessage = (data) => {
         // When iframe
@@ -134,10 +133,17 @@ class HtmlUtils {
       function getEditableFromSelection(selection) {
         const node = selection?.focusNode || selection?.anchorNode;
         const el = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-        return (
-          el?.closest('.note-editor .note-editable') ||
-          document.querySelector('.note-editor .note-editable')
-        );
+
+        if (isWebPlatform) {
+          return (
+            el?.closest('.note-editor .note-editable') ||
+            document.querySelector('.note-editor .note-editable')
+          );
+        } else {
+          return (
+            el?.closest('#editor')
+          );
+        }
       }
       
       function clamp(v, min, max) {
@@ -175,9 +181,13 @@ class HtmlUtils {
           }
       
           const lastRect = rects[rects.length - 1];
-      
-          let x = lastRect.right - editableRect.left;
-          let y = lastRect.bottom - editableRect.top;
+
+          // Avoid native selection marks in mobile
+          // Offset has been arbitrary determined to avoid selection marks on Android and iOS
+          const buttonOffset = isWebPlatform ? { x: 0, y: 0 } : { x: 24, y: -24 };
+
+          let x = lastRect.right - editableRect.left + buttonOffset.x;
+          let y = lastRect.bottom - editableRect.top + buttonOffset.y;
       
           const isInside =
             lastRect.bottom >= editableRect.top &&
@@ -212,11 +222,265 @@ class HtmlUtils {
     name: 'onSelectionChange',
   );
 
+  /// Intercepts Enter inside a drive-link file card row (a DIV whose direct
+  /// children include a `contenteditable="false"` card) and breaks the row
+  /// into two rows at the caret's position, with a new empty paragraph in
+  /// between - instead of letting the editor's native paragraph-split run.
+  /// Pressing Enter at the very start/end of the row just adds a blank line
+  /// before/after it instead of producing a pointless empty row.
+  ///
+  /// Neither editor's own Enter can be reused here, and the reason is worth
+  /// recording because the alternative looks tempting. The row contains only
+  /// cards, so it holds no text node. Summernote's `insertParagraph` first
+  /// calls `range.normalize()`, which for a collapsed caret walks *backward*
+  /// looking for a "visible point"; that check accepts any text node but never
+  /// consults `contenteditable`, so with nothing at row level it descends into
+  /// the previous card and lands on its title text. `ancestor(sc, isPara)`
+  /// then resolves to the card's inner DIV - Summernote's `isPara` matches
+  /// `/^DIV|^P|^LI|^H[1-7]/` - and `splitTree` splits *inside* the card, which
+  /// is what made Enter grow the card before the caret. Mobile's raw
+  /// `contenteditable` div hits the same missing-text-node problem natively.
+  ///
+  /// Padding the row with zero-width text nodes to give the caret somewhere
+  /// legal to sit was measured and rejected: it fixes only the row's two ends,
+  /// and each filler costs an extra arrow press to cross because its two
+  /// offsets render at the same pixel.
+  static ({String name, String script}) registerFileLinkRowEnterKeyHandler({
+    bool isWebPlatform = false,
+  }) =>
+      (
+        script: '''
+      (() => {
+        const isWebPlatform = $isWebPlatform;
+        const root = isWebPlatform
+          ? document.querySelector('.note-editor .note-editable')
+          : document.querySelector('#editor');
+        if (!root || root.dataset.fileLinkRowEnterHandlerAttached) return;
+        root.dataset.fileLinkRowEnterHandlerAttached = 'true';
+
+        function isFileLinkCardRow(el) {
+          if (!el || el.tagName !== 'DIV') return false;
+          let child = el.firstElementChild;
+          while (child) {
+            if (child.tagName === 'A' && child.classList.contains('tmail-file-link-card')) {
+              return true;
+            }
+            child = child.nextElementSibling;
+          }
+          return false;
+        }
+
+        function findFileLinkCardRow(node) {
+          let el = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+          while (el && el !== root) {
+            if (isFileLinkCardRow(el)) return el;
+            el = el.parentElement;
+          }
+          return null;
+        }
+
+        function isEmptyBlock(el) {
+          return !!el
+            && (el.tagName === 'P' || el.tagName === 'DIV')
+            && !isFileLinkCardRow(el)
+            && el.textContent.trim() === '';
+        }
+
+        // Index into row.childNodes (not just element children), splitting
+        // a text node in two if the caret sits mid-text - handles text typed
+        // between cards, which lands as a direct child text node of `row`.
+        function getSplitIndex(row, selection) {
+          const node = selection.anchorNode;
+          const offset = selection.anchorOffset;
+
+          if (node === row) return Math.min(offset, row.childNodes.length);
+
+          if (node.nodeType === Node.TEXT_NODE && node.parentNode === row) {
+            if (offset > 0 && offset < node.length) {
+              node.splitText(offset);
+            }
+            const index = Array.prototype.indexOf.call(row.childNodes, node);
+            return offset === 0 ? index : index + 1;
+          }
+
+          let el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+          while (el && el.parentNode !== row) {
+            el = el.parentNode;
+          }
+          if (!el) return row.childNodes.length;
+          const index = Array.prototype.indexOf.call(row.childNodes, el);
+          return index < 0 ? row.childNodes.length : index + 1;
+        }
+
+        function makeEmptyParagraph() {
+          const p = document.createElement('p');
+          p.innerHTML = '<br>';
+          return p;
+        }
+
+        function placeCaretAtStart(selection, target) {
+          const range = document.createRange();
+          range.setStart(target, 0);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+
+        // Reuses an already-empty block sibling of `row` (on `side`) as the
+        // caret's landing line instead of stacking a new blank line on top
+        // of one that's already there, creating one only if needed.
+        function placeCaretInAdjacentLine(row, side, selection) {
+          const sibling = side === 'before' ? row.previousElementSibling : row.nextElementSibling;
+          let target = sibling;
+          if (!isEmptyBlock(target)) {
+            target = makeEmptyParagraph();
+            row.parentNode.insertBefore(target, side === 'before' ? row : row.nextSibling);
+          }
+          placeCaretAtStart(selection, target);
+        }
+
+        function hasCard(nodes) {
+          return nodes.some(function (node) {
+            return node.nodeType === Node.ELEMENT_NODE && node.tagName === 'A';
+          });
+        }
+
+        // Splits row's child nodes at splitIndex. If a side has no card
+        // left, docks the caret in the adjacent line instead.
+        function splitRowAt(row, splitIndex, selection) {
+          const childNodes = Array.prototype.slice.call(row.childNodes);
+          const before = childNodes.slice(0, splitIndex);
+          const after = childNodes.slice(splitIndex);
+
+          if (!hasCard(before)) {
+            placeCaretInAdjacentLine(row, 'before', selection);
+            return;
+          }
+          if (!hasCard(after)) {
+            placeCaretInAdjacentLine(row, 'after', selection);
+            return;
+          }
+
+          const secondRow = row.cloneNode(false);
+          after.forEach(function (node) {
+            secondRow.appendChild(node);
+          });
+          const newLine = makeEmptyParagraph();
+          row.parentNode.insertBefore(newLine, row.nextSibling);
+          row.parentNode.insertBefore(secondRow, newLine.nextSibling);
+          placeCaretAtStart(selection, newLine);
+        }
+
+        root.addEventListener('keydown', function (event) {
+          if (event.key !== 'Enter') return;
+
+          try {
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) return;
+
+            const row = findFileLinkCardRow(selection.anchorNode);
+            if (!row) return;
+
+            event.preventDefault();
+
+            splitRowAt(row, getSplitIndex(row, selection), selection);
+            root.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (error) {
+            console.error('File link row Enter handler error:', error);
+          }
+        }, true);
+      })();''',
+        name: 'registerFileLinkRowEnterKeyHandler',
+      );
+
+  /// JS handler name used to bridge file-link-card taps back to Dart on
+  /// mobile, since `window.open()` inside the InAppWebView editor has no
+  /// `onCreateWindow` wired up and is silently swallowed.
+  static const String fileLinkCardClickHandlerName = 'tmailFileLinkCardClick';
+
+  /// `target="_blank"` on the card anchor doesn't survive
+  /// StandardizeHtmlSanitizingTransformers (draft reload strips it), and
+  /// Summernote's image-handle module hijacks mousedown on any `<img>` before
+  /// it reaches the anchor - so this bypasses both by opening the link itself
+  /// on a capture-phase listener. On mobile, `window.open()` inside the
+  /// InAppWebView editor has no `onCreateWindow` handler and is silently
+  /// swallowed, so the tap is bridged to Dart instead, which opens the link
+  /// via `url_launcher`.
+  static ({String name, String script}) registerFileLinkCardClickHandler({
+    bool isWebPlatform = false,
+  }) =>
+      (
+        script: '''
+      (() => {
+        const isWebPlatform = $isWebPlatform;
+        const root = isWebPlatform
+          ? document.querySelector('.note-editor .note-editable')
+          : document.querySelector('#editor');
+        if (!root || root.dataset.fileLinkCardClickHandlerAttached) return;
+        root.dataset.fileLinkCardClickHandlerAttached = 'true';
+
+        function closestCardAnchor(node) {
+          let el = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+          while (el && el !== root.parentElement) {
+            if (el.tagName === 'A' && el.classList.contains('tmail-file-link-card')) {
+              return el;
+            }
+            el = el.parentElement;
+          }
+          return null;
+        }
+
+        function isSafeCardHref(href) {
+          try {
+            const protocol = new URL(href, window.location.href).protocol;
+            return protocol === 'http:' || protocol === 'https:';
+          } catch (error) {
+            return false;
+          }
+        }
+
+        root.addEventListener('mousedown', function (event) {
+          if (closestCardAnchor(event.target)) {
+            event.preventDefault();
+            event.stopPropagation();
+            // preventDefault() also blocks the native focus shift, so the
+            // app's onFocus->hideMenu bridge never fires. Refocus explicitly
+            // (preventScroll avoids the iframe scroll-into-view jump).
+            if (document.activeElement !== root) {
+              root.focus({ preventScroll: true });
+            }
+          }
+        }, true);
+
+        root.addEventListener('click', function (event) {
+          const anchor = closestCardAnchor(event.target);
+          if (!anchor) return;
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          try {
+            const href = anchor.getAttribute('href');
+            if (href && isSafeCardHref(href)) {
+              if (isWebPlatform) {
+                window.open(href, '_blank', 'noopener,noreferrer');
+              } else {
+                window.flutter_inappwebview.callHandler('$fileLinkCardClickHandlerName', href);
+              }
+            }
+          } catch (error) {
+            console.error('File link card click handler error:', error);
+          }
+        }, true);
+      })();''',
+        name: 'registerFileLinkCardClickHandler',
+      );
+
   static const collapseSelectionToEnd = (
     script: '''
       (() => {
         const selection = window.getSelection();
-        if (selection) {
+        if (selection && selection.rangeCount > 0) {
           selection.collapseToEnd()
         }
       })();''',
@@ -234,6 +498,62 @@ class HtmlUtils {
       })();''',
     name: 'deleteSelectionContent',
   );
+
+  static const saveSelection = (
+    script: '''
+      (() => {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          window._savedRange = selection.getRangeAt(0).cloneRange();
+          const result = selection.toString()
+          window.parent.postMessage(JSON.stringify({ "type": "toDart: saveSelection", result }), "*");
+          return result;
+        }
+        delete window._savedRange;
+        window.parent.postMessage(JSON.stringify({ "type": "toDart: saveSelection", result: "" }), "*");
+        return "";
+      })();''',
+    name: 'saveSelection');
+
+  static const restoreSelection = (
+    script: '''
+      (() => {
+        if (window._savedRange) {
+          const selection = window.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(window._savedRange);
+            delete window._savedRange;
+            const result = selection.toString()
+            window.parent.postMessage(JSON.stringify({ "type": "toDart: restoreSelection", result }), "*");
+            return result;
+          }
+        }
+        window.parent.postMessage(JSON.stringify({ "type": "toDart: restoreSelection", result: "" }), "*");
+        return "";
+      })();''',
+    name: 'restoreSelection');
+
+  static const getSavedSelection = (
+    script: '''
+      (() => {
+        if(window._savedRange) {
+          const result = window._savedRange.toString();
+          window.parent.postMessage(JSON.stringify({ "type": "toDart: getSavedSelection", result }), "*");
+          return result;
+        } else {
+          window.parent.postMessage(JSON.stringify({ "type": "toDart: getSavedSelection", result: "" }), "*");
+          return "";
+        }
+      })();''',
+    name: 'getSavedSelection');
+
+  static const clearSavedSelection = (
+    script: '''
+      (() => {
+        delete window._savedRange;
+      })();''',
+    name: 'clearSavedSelection');
 
   static recalculateEditorHeight({double? maxHeight}) => (
     script:
@@ -253,7 +573,7 @@ class HtmlUtils {
     return '''
       <style>
         .note-frame, .note-tooltip-content, .note-popover {
-          font-family: 'Inter', sans-serif;
+          font-family: '${HtmlTemplate.fontFamilyApp}', sans-serif;
           color: #222222;
         }
         
@@ -296,10 +616,12 @@ class HtmlUtils {
     required String base64Data,
     required String mimeType,
   }) {
-    if (!base64Data.endsWith('==')) {
-      base64Data.append('==');
+    try {
+      return 'data:$mimeType;base64,${base64.normalize(base64Data)}';
+    } catch (e) {
+      logWarning('HtmlUtils::convertBase64ToImageResourceData: $e');
+      return 'data:$mimeType;base64,$base64Data';
     }
-    return 'data:$mimeType;base64,$base64Data';
   }
 
   static String generateHtmlDocument({
@@ -325,6 +647,10 @@ class HtmlUtils {
         
         ${useDefaultFontStyle ? HtmlTemplate.defaultFontStyle(fontSize: fontSize) : ''}
         
+        *, *::before, *::after {
+          box-sizing: border-box;
+        }
+
         .tmail-content {
           min-height: ${minHeight ?? 0}px;
           min-width: ${minWidth ?? 0}px;
@@ -365,7 +691,7 @@ class HtmlUtils {
             width: 100% !important;
           }
           
-          a {
+          a:not(.tmail-file-link-card) {
             width: -webkit-fill-available !important;
           }
         }
@@ -379,6 +705,7 @@ class HtmlUtils {
       </head>
       <body ${direction == TextDirection.rtl ? 'dir="rtl"' : ''} style = "overflow-x: hidden; ${contentPadding != null ? 'margin: $contentPadding;' : ''}";>
       <div class="tmail-content">$content</div>
+      <style>html, body { height: auto !important; }</style>
       ${javaScripts ?? ''}
       </body>
       </html> 
@@ -413,289 +740,24 @@ class HtmlUtils {
     html.Url.revokeObjectUrl(url);
   }
 
-  static String chromePdfViewer(Uint8List bytes, String fileName) {
-    return '''
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-        <meta charset="utf-8" />
-        <title>$fileName</title>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.min.mjs" type="module"></script>
-        <style>
-          body {
-            background-color: black;
-          }
-
-          #pdf-container {
-            $_pdfContainerStyle
-          }
-
-          #pdf-viewer {
-            $_pdfViewerStyle
-          }
-
-          #app-bar {
-            $_pdfAppBarStyle
-          }
-
-          #download-btn {
-            $_pdfDownloadButtonStyle
-          }
-
-          #file-info {
-            $_pdfFileInfoStyle
-          }
-
-          #file-name {
-            $_pdfFileNameStyle
-          }
-        </style>
-        </head>
-        <body>
-          <div id="pdf-container">
-            $_pdfAppbarElement
-            <div id="pdf-viewer"></div>
-          </div>
-
-          <script type="module">
-            function renderPage(pdfDoc, pageNumber, canvas) {
-              pdfDoc.getPage(pageNumber).then(page => {
-                const viewport = page.getViewport({ scale: 1 });
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-
-                const context = canvas.getContext('2d');
-                const renderContext = {
-                  canvasContext: context,
-                  viewport: viewport
-                };
-
-                page.render(renderContext);
-              });
-            }
-
-            const bytesJs = new Uint8Array(${bytes.toJS});
-            const pdfContainer = document.getElementById('pdf-viewer');
-
-            var { pdfjsLib } = globalThis;
-
-            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
-
-            var loadingTask = pdfjsLib.getDocument(bytesJs);
-            loadingTask.promise.then(function(pdf) {
-              const numPages = pdf.numPages;
-
-              for (let i = 1; i <= numPages; i++) {
-                const pageContainer = document.createElement('div');
-                pageContainer.classList.add('pdf-page');
-
-                const canvas = document.createElement('canvas');
-                canvas.id = `page-\${i}`;
-
-                pageContainer.appendChild(canvas);
-                pdfContainer.appendChild(pageContainer);
-
-                renderPage(pdf, i, canvas);
-              }
-            }, function (reason) {
-              console.error(reason);
-            });
-
-            ${_fileInfoScript(fileName)}
-
-            ${_downloadButtonListenerScript(bytes, fileName)}
-          </script>
-        </body>
-      </html>''';
-  }
-
-  static String safariPdfViewer(Uint8List bytes, String fileName) {
-    final base64 = base64Encode(bytes);
-
-    return '''
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-        <meta charset="utf-8" />
-        <title>$fileName</title>
-        <style>
-          body {
-            background-color: black;
-          }
-
-          body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-          }
-          
-          #pdf-container {
-            $_pdfContainerStyle
-            overflow: hidden;
-          }
-
-          #pdf-viewer {
-            $_pdfViewerStyle
-            width: 100%;
-            height: calc(100vh - 53px);
-          }
-
-          #app-bar {
-            $_pdfAppBarStyle
-          }
-
-          #download-btn {
-            $_pdfDownloadButtonStyle
-          }
-
-          #file-info {
-            $_pdfFileInfoStyle
-          }
-
-          #file-name {
-            $_pdfFileNameStyle
-          }
-        </style>
-        </head>
-        <body>
-          <div id="pdf-container">
-            $_pdfAppbarElement
-            <div id="pdf-viewer"></div>
-          </div>
-
-          <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfobject/2.3.0/pdfobject.min.js"></script>
-          <script>
-            const bytesJs = new Uint8Array(${bytes.toJS});
-            PDFObject.embed('data:application/pdf;base64,$base64', "#pdf-viewer");
-
-            ${_fileInfoScript(fileName)}
-
-            ${_downloadButtonListenerScript(bytes, fileName)}
-          </script>
-        </body>
-      </html>''';
-  }
-
-  static void openFileViewer({
-    required Uint8List bytes,
-    required String fileName,
-    String? mimeType,
-  }) {
-    final blob = html.Blob([bytes], mimeType);
-    final file = html.File([blob], fileName, {'type': mimeType});
-    final url = html.Url.createObjectUrl(file);
-    html.window.open(url, '_blank');
-    html.Url.revokeObjectUrl(url);
-  }
-
-  static const String _pdfContainerStyle = '''
-    display: flex;
-    flex-direction: column;
-    width: 100%;''';
-
-  static const String _pdfViewerStyle = '''
-    flex: 1; /* Allow viewer to fill remaining space */
-    border: 1px solid #ddd;
-    margin-left: auto;
-    margin-right: auto;
-    padding-top: 53px;
-    border: none;''';
-
-  static const String _pdfAppBarStyle = '''
-    position: fixed; /* Fix app bar to top */
-    top: 0;
-    left: 0;
-    right: 0; /* Stretch across entire viewport */
-    display: flex;
-    justify-content: space-between;
-    padding: 5px 10px;
-    background-color: #f0f0f0;
-    z-index: 100; /* Ensure buttons stay on top */''';
-
-  static const String _pdfDownloadButtonStyle = '''
-    padding: 5px 10px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    cursor: pointer;
-    margin-left: 10px;''';
-
-  static const String _pdfFileInfoStyle = '''
-    width: 30%;
-    display: flex;
-    align-items: center;
-    padding: 5px 10px;''';
-
-  static const String _pdfFileNameStyle = '''
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;''';
-
-  static const String _pdfAppbarElement = '''
-    <div id="app-bar">
-      <div id="file-info">
-        <span id="file-name" style="margin-right: 10px;"></span> 
-        (<span id="file-size" style="white-space: nowrap;"></span>)
-      </div>
-      <div style="width: 10px;"></div>
-      <div id="buttons">
-        <button id="download-btn">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M19 20V18H5V20H19ZM19 10H15V4H9V10H5L12 17L19 10Z" fill="#7B7B7B"/>
-          </svg>
-        </button>
-      </div>
-    </div>''';
-
-  static String _downloadButtonListenerScript(
-    Uint8List bytes,
-    String? fileName,
-  ) {
-    return '''
-      const downloadBtn = document.getElementById('download-btn');
-      downloadBtn.addEventListener('click', () => {
-        const buffer = new Uint8Array(${bytes.toJS}).buffer;
-        const blob = new Blob([buffer], { type: "application/pdf" });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.download = "$fileName";
-        a.href = url;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      });''';
-  }
-
-  static String _fileInfoScript(String? fileName) {
-    return '''
-      function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat(bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
-      }
-
-      const fileNameSpan = document.getElementById('file-name');
-      fileNameSpan.textContent = "$fileName";
-
-      const fileSizeSpan = document.getElementById('file-size');
-      fileSizeSpan.textContent = formatFileSize(bytesJs.length);''';
-  }
+  static String windowFeatures({String? size, required bool noOpener}) =>
+      [if (size != null) size, if (noOpener) 'noopener,noreferrer'].join(',');
 
   static bool openNewWindowByUrl(
-    String url, {
-    int width = 800,
-    int height = 600,
-    bool isFullScreen = false,
-    bool isCenter = true,
-  }) {
+    String url,
+    {
+      int width = 800,
+      int height = 600,
+      bool isFullScreen = false,
+      bool isCenter = true,
+      bool noOpener = false,
+    }
+  ) {
     try {
+      // For untrusted URLs, do not give the opened page a handle on this
+      // window (reverse tabnabbing) nor leak the referrer.
       if (isFullScreen) {
-        html.window.open(url, '_blank');
+        html.window.open(url, '_blank', windowFeatures(noOpener: noOpener));
 
         html.Url.revokeObjectUrl(url);
         return true;
@@ -714,7 +776,10 @@ class HtmlUtils {
         top = random.nextInt(screenHeight ~/ 2);
       }
 
-      final options = 'width=$width,height=$height,top=$top,left=$left';
+      final options = windowFeatures(
+        size: 'width=$width,height=$height,top=$top,left=$left',
+        noOpener: noOpener,
+      );
 
       html.window.open(url, '_blank', options);
 
@@ -906,6 +971,8 @@ class HtmlUtils {
     bool removeQuotes = true,
     bool removeStyle = true,
     bool removeScript = true,
+    bool removeTMailSignature = true,
+    bool removeFileLinkCards = true,
   }) {
     var cleaned = html;
 
@@ -923,6 +990,16 @@ class HtmlUtils {
     }
     if (removeScript) {
       doc.querySelectorAll('script').forEach((e) => e.remove());
+    }
+    if (removeTMailSignature) {
+      doc.querySelectorAll('div.tmail-signature').forEach((e) => e.remove());
+    }
+    if (removeFileLinkCards) {
+      // File-link cards (e.g. Drive attachments, see FileLinkCardHtmlBuilder)
+      // carry the "tmail-file-link-card" class. Their title/action-label
+      // text is card chrome, not user-authored content, so it must not feed
+      // the attachment-reminder keyword scan.
+      doc.querySelectorAll('a.tmail-file-link-card').forEach((e) => e.remove());
     }
 
     cleaned = doc.outerHtml;
@@ -1038,4 +1115,5 @@ class HtmlUtils {
     var values = List<int>.generate(len, (i) => random.nextInt(255));
     return base64UrlEncode(values);
   }
+
 }

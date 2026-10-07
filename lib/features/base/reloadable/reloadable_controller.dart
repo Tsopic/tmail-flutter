@@ -11,6 +11,7 @@ import 'package:model/account/password.dart';
 import 'package:model/oidc/oidc_configuration.dart';
 import 'package:model/oidc/token_oidc.dart';
 import 'package:tmail_ui_user/features/base/base_controller.dart';
+import 'package:tmail_ui_user/features/home/data/exceptions/session_exceptions.dart';
 import 'package:tmail_ui_user/features/home/domain/state/get_session_state.dart';
 import 'package:tmail_ui_user/features/home/domain/usecases/get_session_interactor.dart';
 import 'package:tmail_ui_user/features/login/domain/state/get_authenticated_account_state.dart';
@@ -22,8 +23,11 @@ import 'package:tmail_ui_user/features/login/domain/usecases/get_authenticated_a
 import 'package:tmail_ui_user/features/login/domain/usecases/get_oidc_user_info_interactor.dart';
 import 'package:tmail_ui_user/features/login/domain/usecases/update_account_cache_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/vacation/vacation_interactors_bindings.dart';
+import 'package:tmail_ui_user/main/providers/workplace/drive_attachment_enabled_notifier.dart';
+import 'package:tmail_ui_user/main/providers/workplace/fqdn/workplace_fqdn_user_info_notifier.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
-import 'package:tmail_ui_user/main/exceptions/remote_exception.dart';
+import 'package:tmail_ui_user/main/providers/app_provider_container.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/authentication_exception.dart';
 import 'package:tmail_ui_user/main/utils/app_config.dart';
 
 abstract class ReloadableController extends BaseController {
@@ -47,6 +51,8 @@ abstract class ReloadableController extends BaseController {
         apiUrl: failure.apiUrl);
     } else if (failure is GetOidcUserInfoFailure) {
       twakeAppManager.clearOidcUserInfo();
+      appProviderContainer.read(workplaceFqdnUserInfoProvider.notifier).setFqdn(null);
+      appProviderContainer.read(driveAttachmentEnabledProvider.notifier).setEnabled(null);
     } else {
       super.handleFailureViewState(failure);
     }
@@ -73,6 +79,9 @@ abstract class ReloadableController extends BaseController {
     } else if (success is GetOidcUserInfoSuccess) {
       log('$runtimeType::handleSuccessViewState:GetOidcUserInfoSuccess: OidcUserInfo = ${success.oidcUserInfo.toJson().toString()}');
       twakeAppManager.setOidcUserInfo(success.oidcUserInfo);
+      appProviderContainer
+          .read(workplaceFqdnUserInfoProvider.notifier)
+          .setFqdn(success.oidcUserInfo.workplaceFqdn);
     } else {
       super.handleSuccessViewState(success);
     }
@@ -147,10 +156,44 @@ abstract class ReloadableController extends BaseController {
   }
 
   void handleGetSessionFailure(GetSessionFailure failure) {
-    if (failure.exception is! BadCredentialsException) {
+    final exception = failure.exception;
+    if (exception is! BadCredentialsException) {
       toastManager.showMessageFailure(failure);
     }
-    clearDataAndGoToLoginPage();
+    if (exception is BadCredentialsException ||
+        exception is RefreshTokenFailedException ||
+        exception is NotFoundSessionException) {
+      final authErrorType = _sessionLogoutAuthErrorType(exception);
+      logError(
+        '$runtimeType::handleGetSessionFailure: '
+        'auth_error_type=$authErrorType | will_logout=true — '
+        'session definitively dead — exception=${exception.runtimeType}',
+        exception: exception,
+        stackTrace: StackTrace.current,
+        extras: {'auth_error_type': authErrorType},
+        webConsoleEnabled: true,
+      );
+      clearDataAndGoToLoginPage();
+    } else {
+      logWarning(
+        '$runtimeType::handleGetSessionFailure: NOT logging out — '
+        'exception=${exception.runtimeType} not in {BadCredentials, '
+        'RefreshTokenFailed, NotFoundSession}',
+        webConsoleEnabled: true,
+      );
+    }
+  }
+
+  /// Tags the forced-logout cause from a definitively-dead session so every
+  /// logout is queryable in Sentry by a single `auth_error_type` field.
+  String _sessionLogoutAuthErrorType(Object? exception) {
+    if (exception is RefreshTokenFailedException) {
+      return 'forced_logout_session_refresh_token_failed';
+    }
+    if (exception is NotFoundSessionException) {
+      return 'forced_logout_session_not_found';
+    }
+    return 'forced_logout_session_bad_credentials';
   }
 
   void handleReloaded(Session session) {}

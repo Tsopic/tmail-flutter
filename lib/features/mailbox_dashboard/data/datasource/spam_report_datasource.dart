@@ -10,7 +10,7 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/domain/model/unread_spa
 abstract class SpamReportDataSource {
   Future<void> storeLastTimeDismissedSpamReported(DateTime lastTimeDismissedSpamReported);
 
-  Future<DateTime> getLastTimeDismissedSpamReported();
+  Future<int> getLastTimeDismissedSpamReportedMilliseconds();
 
   Future<void> deleteLastTimeDismissedSpamReported();
 

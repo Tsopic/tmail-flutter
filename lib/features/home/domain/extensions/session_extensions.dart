@@ -14,22 +14,25 @@ import 'package:jmap_dart_client/jmap/core/session/session.dart';
 import 'package:jmap_dart_client/jmap/core/unsigned_int.dart';
 import 'package:labels/model/labels_capability.dart';
 import 'package:labels/utils/labels_constants.dart';
+import 'package:model/ai/ai_capabilities.dart';
 import 'package:model/download_all/download_all_capability.dart';
 import 'package:model/mailbox/mailbox_constants.dart';
 import 'package:model/model.dart';
+import 'package:model/upload/upload_from_url_capability.dart';
 import 'package:scribe/scribe/ai/presentation/model/ai_capability.dart';
-import 'package:scribe/scribe/ai/presentation/utils/ai_scribe_constants.dart';
 import 'package:server_settings/server_settings/capability_server_settings.dart';
 import 'package:tmail_ui_user/features/home/data/model/session_hive_obj.dart';
 import 'package:tmail_ui_user/features/home/domain/converter/session_account_converter.dart';
 import 'package:tmail_ui_user/features/home/domain/converter/session_capabilities_converter.dart';
 import 'package:tmail_ui_user/features/home/domain/converter/session_primary_account_converter.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
+import 'package:uri/uri.dart';
 
 extension SessionExtensions on Session {
   static final CapabilityIdentifier linagoraContactSupportCapability = CapabilityIdentifier(Uri.parse('com:linagora:params:jmap:contact:support'));
   static final CapabilityIdentifier linagoraDownloadAllCapability = CapabilityIdentifier(Uri.parse('com:linagora:params:downloadAll'));
   static final CapabilityIdentifier linagoraSaaSCapability = CapabilityIdentifier(Uri.parse('com:linagora:params:saas'));
+  static final CapabilityIdentifier linagoraUploadFromUrlCapability = CapabilityIdentifier(Uri.parse('com:linagora:params:jmap:upload:from-url'));
 
   static final Map<CapabilityIdentifier, CapabilityProperties Function(Map<String, dynamic>)> customMapCapabilitiesConverter = {
     linagoraContactSupportCapability: ContactSupportCapability.deserialize,
@@ -37,7 +40,8 @@ extension SessionExtensions on Session {
     linagoraDownloadAllCapability: DownloadAllCapability.deserialize,
     capabilityServerSettings: SettingsCapability.deserialize,
     linagoraSaaSCapability: SaaSAccountCapability.deserialize,
-    AiScribeConstants.aiCapability: AICapability.fromJson,
+    linagoraUploadFromUrlCapability: UploadFromUrlCapability.deserialize,
+    AiCapabilities.aiCapability: AICapability.fromJson,
     LabelsConstants.labelsCapability: LabelsCapability.fromJson,
   };
 
@@ -123,17 +127,61 @@ extension SessionExtensions on Session {
     return downloadAllCapability?.endpoint?.isNotEmpty ?? false;
   }
 
-  DownloadAllCapability? getDownloadAllCapability(AccountId? accountId) {
+  DownloadAllCapability? getDownloadAllCapability(AccountId? accountId) =>
+      _getSupportedCapability<DownloadAllCapability>(
+        accountId,
+        linagoraDownloadAllCapability,
+      );
+
+  bool isUploadFromUrlSupported(AccountId? accountId, {required String jmapUrl}) {
+    return getUploadFromUrlUri(accountId, jmapUrl: jmapUrl) != null;
+  }
+
+  UploadFromUrlCapability? getUploadFromUrlCapability(AccountId? accountId) =>
+      _getSupportedCapability<UploadFromUrlCapability>(
+        accountId,
+        linagoraUploadFromUrlCapability,
+      );
+
+  // Shared by capability getters that gate on accountId + isSupported before reading properties.
+  T? _getSupportedCapability<T extends CapabilityProperties>(
+    AccountId? accountId,
+    CapabilityIdentifier identifier,
+  ) {
     if (accountId == null) return null;
 
-    if (!linagoraDownloadAllCapability.isSupported(this, accountId)) {
+    if (!identifier.isSupported(this, accountId)) {
       return null;
     }
 
-    return getCapabilityProperties<DownloadAllCapability>(
-      accountId,
-      linagoraDownloadAllCapability,
-    );
+    return getCapabilityProperties<T>(accountId, identifier);
+  }
+
+  /// Resolves the advertised upload-from-url endpoint for [accountId], or null when unavailable.
+  Uri? getUploadFromUrlUri(AccountId? accountId, {required String jmapUrl}) {
+    if (accountId == null) return null;
+
+    final advertisedUrl = getUploadFromUrlCapability(accountId)?.uploadUrl;
+    if (advertisedUrl == null) return null;
+
+    if (!advertisedUrl.hasOrigin && advertisedUrl.host.isNotEmpty) {
+      // Scheme-relative URL ("//host/..."): reject instead of silently gluing it onto jmapUrl.
+      return null;
+    }
+
+    try {
+      final qualifiedUrl = advertisedUrl.toQualifiedUrl(baseUrl: Uri.parse(jmapUrl));
+
+      final normalizedUrl = qualifiedUrl.normalizePathSlashes();
+      // Only unescape the {accountId} delimiters; decoding the whole URI would drop the query string.
+      final uriTemplate = UriTemplate(
+        normalizedUrl.toString().replaceAll('%7B', '{').replaceAll('%7D', '}'),
+      );
+      return Uri.parse(uriTemplate.expand({'accountId': accountId.id.value}));
+    } catch (e) {
+      logWarning('SessionExtensions::getUploadFromUrlUri: failed to build upload uri');
+      return null;
+    }
   }
 
   bool isSubAddressingSupported(AccountId? accountId) {
@@ -187,13 +235,13 @@ extension SessionExtensions on Session {
 
   AICapability? getAICapability(AccountId accountId) {
     try {
-      if (!AiScribeConstants.aiCapability.isSupported(this, accountId)) {
+      if (!AiCapabilities.aiCapability.isSupported(this, accountId)) {
         return null;
       }
 
       final aiCapability = getCapabilityProperties<AICapability>(
         accountId,
-        AiScribeConstants.aiCapability,
+        AiCapabilities.aiCapability,
       );
       log('SessionExtensions::getAICapability:aiCapability = $aiCapability');
       return aiCapability;

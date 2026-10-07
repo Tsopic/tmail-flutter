@@ -1,16 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:labels/labels.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/labels/label_list_view.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/widgets/sidebar/sidebar_label_item.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_builder.dart';
 
 import '../../base/base_test_scenario.dart';
 import '../../mixin/provisioning_label_scenario_mixin.dart';
-import '../../robots/label_robot.dart';
+import '../../robots/labels/label_robot.dart';
 import '../../robots/thread_robot.dart';
 
 class DisplayViewWithAllEmailWithTagScenario extends BaseTestScenario
     with ProvisioningLabelScenarioMixin {
-  const DisplayViewWithAllEmailWithTagScenario(super.$);
+  const DisplayViewWithAllEmailWithTagScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -26,7 +26,7 @@ class DisplayViewWithAllEmailWithTagScenario extends BaseTestScenario
 
     int emailCount = 3;
     for (final label in labels) {
-      await provisionEmail(
+      await robots.commonRobot().provisionEmail(
         buildEmailsForLabel(
           label: label,
           toEmail: emailUser,
@@ -35,8 +35,7 @@ class DisplayViewWithAllEmailWithTagScenario extends BaseTestScenario
         requestReadReceipt: false,
       );
     }
-    await $.pumpAndSettle(duration: const Duration(seconds: 2));
-
+    await $.waitUntilVisible($(EmailTileBuilder));
 
     for (final label in labels) {
       await threadRobot.openMailbox();
@@ -47,19 +46,18 @@ class DisplayViewWithAllEmailWithTagScenario extends BaseTestScenario
         label: label,
         emailCount: emailCount,
       );
-
-      await $.pumpAndSettle(duration: const Duration(seconds: 1));
     }
   }
 
   Future<void> _expectLabelListViewVisible() =>
-      expectViewVisible($(LabelListView));
+      expectViewVisible($(SidebarLabelItem));
 
   Future<void> _expectEmailListDisplayedCorrectByTag({
     required Label label,
     required int emailCount,
   }) async {
     final tagDisplayName = label.safeDisplayName;
+    await $(EmailTileBuilder).waitUntilVisible();
 
     final listEmailTileWithTag = $.tester.widgetList<EmailTileBuilder>(
       $(EmailTileBuilder).which<EmailTileBuilder>((widget) =>

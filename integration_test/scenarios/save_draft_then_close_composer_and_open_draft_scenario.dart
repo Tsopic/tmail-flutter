@@ -4,8 +4,7 @@ import 'package:model/email/prefix_email_address.dart';
 import 'package:tmail_ui_user/features/composer/presentation/composer_view.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/recipient_composer_widget.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/mailbox_view.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/label_mailbox_item_widget.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/mailbox_item_widget.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/widgets/sidebar/sidebar_mailbox_item.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_builder.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
@@ -16,7 +15,7 @@ import '../robots/thread_robot.dart';
 
 class SaveDraftThenCloseComposerAndOpenDraftScenario extends BaseTestScenario {
 
-  const SaveDraftThenCloseComposerAndOpenDraftScenario(super.$);
+  const SaveDraftThenCloseComposerAndOpenDraftScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -54,7 +53,7 @@ class SaveDraftThenCloseComposerAndOpenDraftScenario extends BaseTestScenario {
     await _expectMailboxViewVisible();
     await _expectDraftFolderVisible(appLocalizations);
 
-    await mailboxMenuRobot.openFolderByName(appLocalizations.draftsMailboxDisplayName);
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.draftsMailboxDisplayName));
     await $.pump(const Duration(seconds: 2));
     await _expectDraftEmailWithSubjectVisible(subject);
 
@@ -81,8 +80,7 @@ class SaveDraftThenCloseComposerAndOpenDraftScenario extends BaseTestScenario {
 
   Future<void> _expectDraftFolderVisible(AppLocalizations appLocalizations) =>
     expectViewVisible(
-      $(MailboxItemWidget)
-        .$(LabelMailboxItemWidget)
+      $(SidebarMailboxItem)
         .$(find.text(appLocalizations.draftsMailboxDisplayName))
     );
 

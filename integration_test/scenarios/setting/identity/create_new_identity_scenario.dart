@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/identity_creator/presentation/identity_creator_view.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
@@ -12,10 +14,12 @@ import '../../../robots/thread_robot.dart';
 class CreateNewIdentityScenario extends BaseTestScenario {
   final List<String>? identityNames;
 
-  const CreateNewIdentityScenario(super.$, {this.identityNames});
+  const CreateNewIdentityScenario(super.$, super.robots, {this.identityNames});
 
   @override
   Future<void> runTestLogic() async {
+    await robots.commonRobot().waitForMailboxReady();
+
     final threadRobot = ThreadRobot($);
     final mailboxMenuRobot = MailboxMenuRobot($);
     final settingRobot = SettingRobot($);
@@ -54,7 +58,8 @@ class CreateNewIdentityScenario extends BaseTestScenario {
     }
   }
 
-  Future<void> _expectUserAvatarVisible() => expectViewVisible($(#user_avatar));
+  Future<void> _expectUserAvatarVisible() =>
+      expectViewVisible($(const ValueKey(UiKeys.userAvatar)));
 
   Future<void> _expectSettingViewVisible(AppLocalizations appLocalizations) =>
       expectViewVisible($(find.text(appLocalizations.settings)));

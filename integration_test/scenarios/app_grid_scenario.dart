@@ -1,82 +1,30 @@
-
 import 'package:core/utils/platform_info.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/mailbox_view.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/app_grid/app_grid_icon.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/app_grid/app_shortcut.dart';
 
 import '../base/base_test_scenario.dart';
-import '../robots/app_grid_robot.dart';
-import '../robots/mailbox_menu_robot.dart';
-import '../robots/thread_robot.dart';
 
 class AppGridScenario extends BaseTestScenario {
-
-  const AppGridScenario(super.$);
+  const AppGridScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
-    PlatformInfo.isIntegrationTesting = true;
-    final threadRobot = ThreadRobot($);
-    final mailboxMenuRobot = MailboxMenuRobot($);
-    final appGridRobot = AppGridRobot($);
+    try {
+      PlatformInfo.isIntegrationTesting = true;
+      final threadRobot = robots.threadRobot();
+      final appGridRobot = robots.appGridRobot();
 
-    await threadRobot.openMailbox();
-    await _expectMailboxViewVisible();
-    await _expectAppGridViewVisible();
+      await threadRobot.openMailbox();
+      await threadRobot.assertion.expectAppGridButtonVisible();
+      await threadRobot.openAppGrid();
 
-    await Future.delayed(const Duration(seconds: 2));
+      await appGridRobot.expectAppCountAndLabelsMatch();
+      await appGridRobot.expectListViewVisible();
 
-    await mailboxMenuRobot.openAppGrid();
-    await _expectListViewAppGridVisible();
-    await _expectAllAppInAppGridDisplayedIsFull();
+      await appGridRobot.openAppInAppGrid();
 
-    await appGridRobot.openAppInAppGridByAppName('Twake Drive');
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (PlatformInfo.isAndroid) {
-      await $.platform.android.pressHome();
-      await $.platform.android.openApp();
-
-      await appGridRobot.openAppInAppGridByAppName('Twake Sync');
-      await Future.delayed(const Duration(seconds: 2));
-
-      await $.platform.android.pressBack();
-
-      await appGridRobot.openAppInAppGridByAppName('Twake Chat');
-      await Future.delayed(const Duration(seconds: 2));
-
-      await $.platform.android.pressBack();
-      await $.platform.android.pressBack();
-
-      await _expectMailboxViewVisible();
-    } else if (PlatformInfo.isIOS) {
-      await _expectMailboxViewInVisible();
-    }
-    PlatformInfo.isIntegrationTesting = false;
-  }
-
-  Future<void> _expectMailboxViewVisible() => expectViewVisible($(MailboxView));
-
-  Future<void> _expectAppGridViewVisible() => expectViewVisible($(AppGridIcon));
-
-  Future<void> _expectListViewAppGridVisible() => expectViewVisible($(#list_view_app_grid));
-
-  Future<void> _expectAllAppInAppGridDisplayedIsFull() async {
-    int totalApp = PlatformInfo.isIOS ? 2 : 3;
-    expect(find.byType(AppShortcut), findsNWidgets(totalApp));
-
-    final listAppItem = $.tester
-        .widgetList<AppShortcut>(find.byType(AppShortcut));
-
-    final listAppNames = listAppItem.map((item) => item.label).toList();
-
-    if (PlatformInfo.isIOS) {
-      expect(listAppNames, equals(['Twake Drive', 'Twake Chat']));
-    } else {
-      expect(listAppNames, equals(['Twake Drive', 'Twake Chat', 'Twake Sync']));
+      await appGridRobot.expectAppCountAndLabelsMatch();
+    } finally {
+      PlatformInfo.isIntegrationTesting = false;
     }
   }
-
-  Future<void> _expectMailboxViewInVisible() => expectViewInvisible($(MailboxView));
 }

@@ -11,7 +11,7 @@ import '../../robots/thread_robot.dart';
 
 class MarkAsSpamEmailScenario extends BaseTestScenario {
 
-  const MarkAsSpamEmailScenario(super.$);
+  const MarkAsSpamEmailScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -46,7 +46,7 @@ class MarkAsSpamEmailScenario extends BaseTestScenario {
     _expectEmailViewInvisible();
 
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(appLocalizations.spamMailboxDisplayName);
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.spamMailboxDisplayName));
     await _expectEmailWithSubjectInSpamFolderVisible(subject);
   }
 

@@ -1,14 +1,15 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:core/presentation/resources/image_paths.dart';
+import 'package:model/upload/file_info.dart';
 import 'package:core/presentation/views/button/tmail_button_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:get/get.dart';
 import 'package:model/email/prefix_email_address.dart';
 import 'package:model/extensions/session_extension.dart';
-import 'package:model/upload/file_info.dart';
 import 'package:rich_text_composer/rich_text_composer.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/base/widget/popup_item_widget.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/download_image_as_base64_state.dart';
 import 'package:tmail_ui_user/features/composer/presentation/composer_controller.dart';
@@ -25,6 +26,7 @@ import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 
 import '../base/core_robot.dart';
+import '../extensions/patrol_file_extensions.dart';
 import '../extensions/patrol_finder_extension.dart';
 
 class ComposerRobot extends CoreRobot {
@@ -57,6 +59,7 @@ class ComposerRobot extends CoreRobot {
     if (!isTextFieldFocused) {
       await finder.tap();
     }
+    await $.pumpAndTrySettle();
     await finder.enterTextWithoutTapAction(subject);
   }
 
@@ -74,30 +77,22 @@ class ComposerRobot extends CoreRobot {
 
     await composerController?.htmlEditorApi?.requestFocusLastChild();
 
-    await composerController!.htmlEditorApi!.insertHtml('$content <br><br>');
+    await composerController?.htmlEditorApi?.insertHtml('$content <br><br>');
   }
 
   Future<void> sendEmail(ImagePaths imagePaths) async {
-    await $(AppBarComposerWidget)
-        .$(TMailButtonWidget)
-        .which<TMailButtonWidget>(
-            (widget) => widget.icon == imagePaths.icSendMobile)
-        .tap();
+    await $(const ValueKey(UiKeys.sendEmailButton)).tap();
   }
 
   Future<void> grantContactPermission() async {
-    if (await $.platform.mobile
+    if (await native
         .isPermissionDialogVisible(timeout: const Duration(seconds: 5))) {
-      await $.platform.mobile.grantPermissionWhenInUse();
+      await native.grantPermissionWhenInUse();
     }
   }
 
-  Future<void> tapCloseComposer(ImagePaths imagePaths) async {
-    await $(AppBarComposerWidget)
-        .$(TMailButtonWidget)
-        .which<TMailButtonWidget>(
-            (widget) => widget.icon == imagePaths.icCancel)
-        .tap();
+  Future<void> tapCloseComposer([ImagePaths? imagePaths]) async {
+    await $(const ValueKey(UiKeys.closeComposerButton)).tap();
   }
 
   Future<void> tapSaveButtonOnSaveDraftConfirmDialog(
@@ -142,18 +137,24 @@ class ComposerRobot extends CoreRobot {
     await $(AppLocalizations().saveAsTemplate).tap();
   }
 
+  ComposerController? findComposerController() => getBinding<ComposerController>();
+
   Future<void> addAttachment(File file) async {
-    final controller = Get.find<ComposerController>();
+    final controller = findComposerController()!;
+    final fileInfo = await file.toFileInfo();
+    _uploadAttachment(controller, fileInfo);
+  }
+
+  Future<void> addAttachmentFromBytes(Uint8List bytes, String fileName) async {
+    final controller = findComposerController()!;
+    final fileInfo = FileInfo.fromBytes(bytes: bytes, name: fileName);
+    _uploadAttachment(controller, fileInfo);
+  }
+
+  void _uploadAttachment(ComposerController controller, FileInfo fileInfo) {
     controller.uploadController.justUploadAttachmentsAction(
-      uploadFiles: [
-        FileInfo(
-          fileName: file.path.split('/').last,
-          fileSize: await file.length(),
-          filePath: file.path,
-        )
-      ],
-      uploadUri:
-          controller.mailboxDashBoardController.sessionCurrent!.getUploadUri(
+      uploadFiles: [fileInfo],
+      uploadUri: controller.mailboxDashBoardController.sessionCurrent!.getUploadUri(
         controller.mailboxDashBoardController.accountId.value!,
         jmapUrl: controller.dynamicUrlInterceptors.jmapUrl,
       ),
@@ -161,12 +162,19 @@ class ComposerRobot extends CoreRobot {
   }
 
   Future<void> addInline(File file) async {
-    final controller = Get.find<ComposerController>();
-    controller.handleSuccessViewState(LocalImagePickerSuccess(FileInfo(
-      filePath: file.path,
-      fileSize: await file.length(),
-      fileName: file.path.split('/').last,
-    )));
+    final controller = findComposerController()!;
+    final fileInfo = await file.toFileInfo();
+    await _addInlineFromFileInfo(controller, fileInfo);
+  }
+
+  Future<void> addInlineFromBytes(Uint8List bytes, String fileName) async {
+    final controller = findComposerController()!;
+    final fileInfo = FileInfo.fromBytes(bytes: bytes, name: fileName, isInline: true);
+    await _addInlineFromFileInfo(controller, fileInfo);
+  }
+
+  Future<void> _addInlineFromFileInfo(ComposerController controller, FileInfo fileInfo) async {
+    controller.handleSuccessViewState(LocalImagePickerSuccess(fileInfo));
     await controller.viewState.stream.firstWhere((state) => state.fold(
       (failure) => false,
       (success) => success is DownloadImageAsBase64Success,
@@ -181,20 +189,26 @@ class ComposerRobot extends CoreRobot {
 
   Future<void> addInlineImageFromFile(File file) async {
     final controller = getBinding<ComposerController>();
+    final fileInfo = await file.toFileInfo();
 
-    final filePath = file.path;
-    final fileSize = await file.length();
-    final fileName = filePath.split('/').last;
-
-    final fileInfo = FileInfo(
-      filePath: filePath,
-      fileSize: fileSize,
-      fileName: fileName,
-    );
     controller?.handleSuccessViewState(LocalImagePickerSuccess(fileInfo));
   }
 
   Future<void> tapDiscardChanges() async {
     await $(AppLocalizations().discardChanges).tap();
+  }
+
+  Future<void> tapSaveAsDraftButton() async {
+    await $(const Key(UiKeys.composerMoreButton)).tap();
+    await $.pumpAndSettle();
+    await $(const Key(UiKeys.saveDraftPopupItem)).tap();
+    await $.pumpAndSettle();
+  }
+
+  Future<void> tapSaveAsTemplateButton() async {
+    await $(const Key(UiKeys.composerMoreButton)).tap();
+    await $.pumpAndSettle();
+    await $(const Key(UiKeys.saveTemplatePopupItem)).tap();
+    await $.pumpAndSettle();
   }
 }

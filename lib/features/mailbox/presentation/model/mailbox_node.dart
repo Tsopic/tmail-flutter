@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:jmap_dart_client/jmap/core/id.dart';
 import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
@@ -6,6 +7,7 @@ import 'package:model/mailbox/expand_mode.dart';
 import 'package:model/mailbox/mailbox_state.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
 import 'package:model/mailbox/select_mode.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_tree.dart';
 
 class MailboxNode with EquatableMixin {
   static final PresentationMailbox _root = PresentationMailbox(MailboxId(Id('root')));
@@ -15,6 +17,13 @@ class MailboxNode with EquatableMixin {
   ExpandMode expandMode;
   SelectMode selectMode;
   MailboxState nodeState;
+
+  /// Opaque identity of this occurrence in a sidebar tree.
+  ///
+  /// A server mailbox ID is not sufficient to key a rendered row: malformed
+  /// or transient data can contain the same mailbox more than once. This ID
+  /// keeps those rows distinct while [copyWith] retains their UI identity.
+  final Object sidebarTreeEntryId;
 
   factory MailboxNode.root() => MailboxNode(_root);
 
@@ -35,8 +44,9 @@ class MailboxNode with EquatableMixin {
       this.expandMode = ExpandMode.COLLAPSE,
       this.selectMode = SelectMode.INACTIVE,
       this.nodeState = MailboxState.activated,
+      Object? sidebarTreeEntryId,
     }
-  );
+  ) : sidebarTreeEntryId = sidebarTreeEntryId ?? Object();
 
   bool get nameNotEmpty => item.name?.name.isNotEmpty == true;
 
@@ -138,6 +148,7 @@ extension MailboxNodeExtension on MailboxNode {
       expandMode: newExpandMode ?? expandMode,
       selectMode: newSelectMode ?? selectMode,
       nodeState: newNodeState ?? nodeState,
+      sidebarTreeEntryId: sidebarTreeEntryId,
     );
   }
 
@@ -148,6 +159,7 @@ extension MailboxNodeExtension on MailboxNode {
         expandMode: expandMode,
         selectMode: selectMode == SelectMode.INACTIVE ? SelectMode.ACTIVE : SelectMode.INACTIVE,
         nodeState: nodeState,
+        sidebarTreeEntryId: sidebarTreeEntryId,
     );
   }
 
@@ -158,6 +170,7 @@ extension MailboxNodeExtension on MailboxNode {
         expandMode: newExpandMode ?? expandMode,
         selectMode: selectMode,
         nodeState: nodeState,
+        sidebarTreeEntryId: sidebarTreeEntryId,
     );
   }
 
@@ -172,4 +185,10 @@ extension MailboxNodeExtension on MailboxNode {
 
     return item.sortOrder!.value.value.compareTo(other.item.sortOrder!.value.value);
   }
+
+  MailboxNode? findNodeOnFirstLevel(NodeQuery nodeQuery) =>
+      childrenItems?.firstWhereOrNull(nodeQuery);
+
+  bool get allowedHasEmptyAction =>
+      item.allowedHasEmptyAction || (item.isTrash && hasChildren());
 }

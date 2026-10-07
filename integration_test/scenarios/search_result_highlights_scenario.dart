@@ -1,5 +1,6 @@
 import 'package:core/core.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_builder.dart';
 
 import '../base/base_test_scenario.dart';
 import '../models/provisioning_email.dart';
@@ -7,7 +8,7 @@ import '../robots/search_robot.dart';
 import '../robots/thread_robot.dart';
 
 class SearchResultHighlightsScenario extends BaseTestScenario {
-  SearchResultHighlightsScenario(super.$);
+  SearchResultHighlightsScenario(super.$, super.robots);
 
   static const keyword = 'Search snippet results';
   static const List<String> longEmailContents = [
@@ -39,7 +40,7 @@ class SearchResultHighlightsScenario extends BaseTestScenario {
         ),
       )
       .toList());
-    await $.pumpAndSettle();
+    await $(EmailTileBuilder).waitUntilVisible();
 
     // Search
     await threadRobot.tapOnSearchField();

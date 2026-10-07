@@ -8,7 +8,7 @@ import '../../robots/thread_robot.dart';
 
 class PersistFilterWhenChangeSearchInputTextScenario
     extends BaseTestScenario {
-  const PersistFilterWhenChangeSearchInputTextScenario(super.$);
+  const PersistFilterWhenChangeSearchInputTextScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -49,7 +49,8 @@ class PersistFilterWhenChangeSearchInputTextScenario
   }
 
   Future<void> _expectEmailWithSubjectVisible(String subject) async {
-    await expectViewVisible($(find.text(subject)));
+    await $.pumpAndTrySettle();
+    await expectViewVisible($(subject));
   }
 
   void _expectAttachmentFilterSelected() {

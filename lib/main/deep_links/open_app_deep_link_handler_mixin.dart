@@ -1,4 +1,5 @@
 import 'package:core/presentation/extensions/either_view_state_extension.dart';
+import 'package:core/presentation/utils/app_toast.dart';
 import 'package:core/presentation/utils/theme_utils.dart';
 import 'package:core/utils/app_logger.dart';
 import 'package:core/utils/string_convert.dart';
@@ -56,6 +57,7 @@ mixin OpenAppDeepLinkHandlerMixin {
     bool isSignedIn = true,
   }) {
     if (!openAppDeepLinkData.isValidAuthentication()) {
+      _notifyLinkRefused(openAppDeepLinkData);
       onFailureCallback?.call();
       return;
     }
@@ -74,7 +76,7 @@ mixin OpenAppDeepLinkHandlerMixin {
       _showConfirmDialogSwitchAccount(
         context: currentContext!,
         currentUsername: username.value,
-        newUsername: openAppDeepLinkData.username,
+        newUsername: '${openAppDeepLinkData.username.replaceAll(RegExp(r'[\s\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]+'), ' ').trim()} (${openAppDeepLinkData.jmapHost})',
         onConfirmAction: () => onConfirmLogoutCallback?.call(openAppDeepLinkData),
         onCancelAction: () => onFailureCallback?.call()
       );
@@ -92,6 +94,13 @@ mixin OpenAppDeepLinkHandlerMixin {
     required OnAutoSignInViaDeepLinkSuccessCallback onAutoSignInSuccessCallback,
     required OnDeepLinkFailureCallback onFailureCallback,
   }) async {
+    if (!openAppDeepLinkData.isValidAuthentication()) {
+      logWarning('DeepLinksManager::autoSignInViaDeepLink: invalid or insecure deep link data');
+      _notifyLinkRefused(openAppDeepLinkData);
+      onFailureCallback.call();
+      return;
+    }
+
     try {
       final autoSignInViaDeepLinkInteractor = Get.find<AutoSignInViaDeepLinkInteractor>();
 
@@ -109,6 +118,20 @@ mixin OpenAppDeepLinkHandlerMixin {
       logWarning('DeepLinksManager::_autoSignInViaDeepLink:Exception = $e');
       onFailureCallback.call();
     }
+  }
+
+  void _notifyLinkRefused(OpenAppDeepLinkData openAppDeepLinkData) {
+    // A bare openapp link (web "Open in app" banner) only brings the app up.
+    if (openAppDeepLinkData.accessToken.isEmpty) return;
+
+    final context = currentContext;
+    final overlayContext = currentOverlayContext;
+    if (context == null || overlayContext == null || !Get.isRegistered<AppToast>()) return;
+
+    Get.find<AppToast>().showToastErrorMessage(
+      overlayContext,
+      AppLocalizations.of(context).deepLinkCannotBeOpened,
+    );
   }
 
   void _showConfirmDialogSwitchAccount({

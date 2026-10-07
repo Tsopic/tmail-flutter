@@ -9,7 +9,7 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/domain/model/spam_repor
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/model/unread_spam_emails_response.dart';
 import 'package:tmail_ui_user/features/manage_account/data/local/preferences_setting_manager.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/spam_report_config.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 class LocalSpamReportDataSourceImpl extends SpamReportDataSource {
   final PreferencesSettingManager _preferencesSettingManager;
@@ -21,12 +21,10 @@ class LocalSpamReportDataSourceImpl extends SpamReportDataSource {
   );
 
   @override
-  Future<DateTime> getLastTimeDismissedSpamReported() async {
+  Future<int> getLastTimeDismissedSpamReportedMilliseconds() async {
     return Future.sync(() async {
       final spamReportConfig = await _preferencesSettingManager.getSpamReportConfig();
-      return DateTime.fromMillisecondsSinceEpoch(
-        spamReportConfig.lastTimeDismissedMilliseconds,
-      );
+      return spamReportConfig.lastTimeDismissedMilliseconds;
     }).catchError(_exceptionThrower.throwException);
   }
 

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:tmail_ui_user/features/base/base_bindings.dart';
 import 'package:tmail_ui_user/features/caching/utils/local_storage_manager.dart';
 import 'package:tmail_ui_user/features/caching/utils/session_storage_manager.dart';
+import 'package:tmail_ui_user/features/composer/data/adapter/html_email_transformer_adapter.dart';
 import 'package:tmail_ui_user/features/composer/data/datasource/composer_datasource.dart';
 import 'package:tmail_ui_user/features/composer/data/datasource/contact_datasource.dart';
 import 'package:tmail_ui_user/features/composer/data/datasource_impl/composer_datasource_impl.dart';
@@ -11,15 +12,16 @@ import 'package:tmail_ui_user/features/composer/data/repository/composer_reposit
 import 'package:tmail_ui_user/features/composer/data/repository/contact_repository_impl.dart';
 import 'package:tmail_ui_user/features/composer/domain/repository/composer_repository.dart';
 import 'package:tmail_ui_user/features/composer/domain/repository/contact_repository.dart';
+import 'package:tmail_ui_user/features/composer/domain/transformer/html_email_transformer.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/create_new_and_save_email_to_drafts_interactor.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/create_new_and_send_email_interactor.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/download_image_as_base64_interactor.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/restore_email_inline_images_interactor.dart';
-import 'package:tmail_ui_user/features/composer/domain/usecases/save_composer_cache_on_web_interactor.dart';
+import 'package:tmail_ui_user/features/composer/domain/usecases/save_composer_cache_interactor.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/upload_attachment_interactor.dart';
 import 'package:tmail_ui_user/features/composer/presentation/composer_controller.dart';
-import 'package:tmail_ui_user/features/composer/presentation/controller/rich_text_mobile_tablet_controller.dart';
-import 'package:tmail_ui_user/features/composer/presentation/controller/rich_text_web_controller.dart';
+import 'package:tmail_ui_user/features/composer/presentation/mobile_composer_bindings.dart';
+import 'package:tmail_ui_user/features/composer/presentation/web_composer_bindings.dart';
 import 'package:tmail_ui_user/features/email/data/datasource/email_datasource.dart';
 import 'package:tmail_ui_user/features/email/data/datasource/html_datasource.dart';
 import 'package:tmail_ui_user/features/email/data/datasource/print_file_datasource.dart';
@@ -49,11 +51,9 @@ import 'package:tmail_ui_user/features/mailbox/data/network/mailbox_api.dart';
 import 'package:tmail_ui_user/features/mailbox/data/network/mailbox_isolate_worker.dart';
 import 'package:tmail_ui_user/features/mailbox/data/repository/mailbox_repository_impl.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/repository/mailbox_repository.dart';
-import 'package:tmail_ui_user/features/mailbox_dashboard/data/datasource/session_storage_composer_datasource.dart';
-import 'package:tmail_ui_user/features/mailbox_dashboard/data/datasource_impl/session_storage_composer_datasoure_impl.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/data/datasource/composer_cache_datasource.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/data/repository/composer_cache_repository_impl.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/repository/composer_cache_repository.dart';
-import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/remove_composer_cache_by_id_on_web_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/get_all_identities_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/identities/identity_interactors_bindings.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/preferences/bindings/preferences_interactors_bindings.dart';
@@ -70,17 +70,46 @@ import 'package:tmail_ui_user/features/upload/data/network/file_uploader.dart';
 import 'package:tmail_ui_user/features/upload/domain/usecases/local_file_picker_interactor.dart';
 import 'package:tmail_ui_user/features/upload/domain/usecases/local_image_picker_interactor.dart';
 import 'package:tmail_ui_user/features/upload/presentation/controller/upload_controller.dart';
-import 'package:tmail_ui_user/main/exceptions/cache_exception_thrower.dart';
-import 'package:tmail_ui_user/main/exceptions/remote_exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/cache_exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/remote_exception_thrower.dart';
 import 'package:tmail_ui_user/main/utils/ios_sharing_manager.dart';
 import 'package:uuid/uuid.dart';
 
-class ComposerBindings extends BaseBindings {
+abstract class ComposerBindings extends BaseBindings {
 
-  final String? composerId;
+  final String? _composerId;
   final ComposerArguments? composerArguments;
 
-  ComposerBindings({this.composerId, this.composerArguments});
+  ComposerBindings.base({String? composerId, this.composerArguments})
+      : _composerId = composerId;
+
+  factory ComposerBindings({String? composerId, ComposerArguments? composerArguments}) {
+    if (PlatformInfo.isWeb) {
+      return WebComposerBindings(composerId: composerId, composerArguments: composerArguments);
+    }
+    return MobileComposerBindings(composerId: composerId, composerArguments: composerArguments);
+  }
+
+  /// GetX registration tag. Null on the phone path (ComposerBindings() in
+  /// app_pages.dart has no explicit composerId), matching ComposerView's
+  /// GetWidget<ComposerController> default tag of null.
+  String? get composerId => _composerId;
+
+  /// composerId for the controller's auto-save feature.
+  /// Falls back to route arguments on the phone path so the controller
+  /// always receives a composerId for Riverpod provider keying.
+  String? get _autoSaveComposerId {
+    if (_composerId != null) return _composerId;
+    final args = Get.arguments;
+    return args is ComposerArguments ? args.composerId : null;
+  }
+
+  void bindPlatformCacheDatasourceImpl();
+  void bindPlatformComposerCacheDatasource();
+  void bindPlatformRichTextController();
+  void registerPlatformReloadCacheHandler(ComposerController controller) {}
+  void disposePlatformRichTextController();
+  void disposePlatformCacheImpl();
 
   @override
   void bindingsDataSourceImpl() {
@@ -144,10 +173,7 @@ class ComposerBindings extends BaseBindings {
       Get.find<SessionStorageManager>(),
       Get.find<CacheExceptionThrower>(),
     ), tag: composerId);
-    Get.lazyPut(() => SessionStorageComposerDatasourceImpl(
-      Get.find<HtmlTransform>(),
-      Get.find<CacheExceptionThrower>(),
-    ), tag: composerId);
+    bindPlatformCacheDatasourceImpl();
   }
 
   @override
@@ -184,10 +210,7 @@ class ComposerBindings extends BaseBindings {
       () => Get.find<PrintFileDataSourceImpl>(tag: composerId),
       tag: composerId,
     );
-    Get.lazyPut<SessionStorageComposerDatasource>(
-      () => Get.find<SessionStorageComposerDatasourceImpl>(tag: composerId),
-      tag: composerId,
-    );
+    bindPlatformComposerCacheDatasource();
   }
 
   @override
@@ -199,7 +222,7 @@ class ComposerBindings extends BaseBindings {
       Get.find<Uuid>(),
     ), tag: composerId);
     Get.lazyPut(
-      () => ComposerCacheRepositoryImpl(Get.find<SessionStorageComposerDatasource>(tag: composerId)),
+      () => ComposerCacheRepositoryImpl(Get.find<ComposerCacheDatasource>(tag: composerId)),
       tag: composerId,
     );
     Get.lazyPut(
@@ -268,11 +291,7 @@ class ComposerBindings extends BaseBindings {
       () => GetEmailContentInteractor(Get.find<EmailRepository>(tag: composerId)),
       tag: composerId,
     );
-    Get.lazyPut(
-      () => RemoveComposerCacheByIdOnWebInteractor(Get.find<ComposerCacheRepository>(tag: composerId)),
-      tag: composerId,
-    );
-    Get.lazyPut(() => SaveComposerCacheOnWebInteractor(
+    Get.lazyPut(() => SaveComposerCacheInteractor(
       Get.find<ComposerCacheRepository>(tag: composerId),
       Get.find<ComposerRepository>(tag: composerId),
     ), tag: composerId);
@@ -293,7 +312,15 @@ class ComposerBindings extends BaseBindings {
       Get.find<ComposerRepository>(tag: composerId),
     ), tag: composerId);
     Get.lazyPut(
-      () => RestoreEmailInlineImagesInteractor(Get.find<ComposerCacheRepository>(tag: composerId)),
+      () => HtmlEmailTransformerAdapter(Get.find<HtmlTransform>()),
+      tag: composerId,
+    );
+    Get.lazyPut<HtmlEmailTransformer>(
+      () => Get.find<HtmlEmailTransformerAdapter>(tag: composerId),
+      tag: composerId,
+    );
+    Get.lazyPut(
+      () => RestoreEmailInlineImagesInteractor(Get.find<HtmlEmailTransformer>(tag: composerId)),
       tag: composerId,
     );
     Get.lazyPut(
@@ -312,23 +339,18 @@ class ComposerBindings extends BaseBindings {
 
   @override
   void bindingsController() {
-    if (PlatformInfo.isWeb) {
-      Get.lazyPut(() => RichTextWebController(), tag: composerId);
-    } else {
-      Get.lazyPut(() => RichTextMobileTabletController(), tag: composerId);
-    }
+    bindPlatformRichTextController();
     Get.lazyPut(
       () => UploadController(Get.find<UploadAttachmentInteractor>(tag: composerId)),
       tag: composerId,
     );
-    Get.lazyPut(() => ComposerController(
+    Get.lazyPut(() => _withPlatformReloadCache(ComposerController(
       Get.find<LocalFilePickerInteractor>(tag: composerId),
       Get.find<LocalImagePickerInteractor>(tag: composerId),
       Get.find<GetEmailContentInteractor>(tag: composerId),
       Get.find<GetAllIdentitiesInteractor>(tag: composerId),
       Get.find<UploadController>(tag: composerId),
-      Get.find<RemoveComposerCacheByIdOnWebInteractor>(tag: composerId),
-      Get.find<SaveComposerCacheOnWebInteractor>(tag: composerId),
+      Get.find<SaveComposerCacheInteractor>(tag: composerId),
       Get.find<DownloadImageAsBase64Interactor>(tag: composerId),
       Get.find<TransformHtmlEmailContentInteractor>(tag: composerId),
       Get.find<GetServerSettingInteractor>(tag: composerId),
@@ -338,16 +360,18 @@ class ComposerBindings extends BaseBindings {
       Get.find<ComposerRepository>(tag: composerId),
       Get.find<SaveTemplateEmailInteractor>(tag: composerId),
       composerId: composerId,
+      autoSaveComposerId: _autoSaveComposerId,
       composerArgs: composerArguments,
-    ), tag: composerId);
+    )), tag: composerId);
+  }
+
+  ComposerController _withPlatformReloadCache(ComposerController controller) {
+    registerPlatformReloadCacheHandler(controller);
+    return controller;
   }
 
   void dispose() {
-    if (PlatformInfo.isWeb) {
-      Get.delete<RichTextWebController>(tag: composerId);
-    } else {
-      Get.delete<RichTextMobileTabletController>(tag: composerId);
-    }
+    disposePlatformRichTextController();
     Get.delete<UploadController>(tag: composerId);
     Get.delete<ComposerController>(tag: composerId);
 
@@ -363,7 +387,7 @@ class ComposerBindings extends BaseBindings {
     Get.delete<EmailHiveCacheDataSourceImpl>(tag: composerId);
     Get.delete<EmailLocalStorageDataSourceImpl>(tag: composerId);
     Get.delete<EmailSessionStorageDatasourceImpl>(tag: composerId);
-    Get.delete<SessionStorageComposerDatasourceImpl>(tag: composerId);
+    disposePlatformCacheImpl();
 
     Get.delete<AttachmentUploadDataSource>(tag: composerId);
     Get.delete<ComposerDataSource>(tag: composerId);
@@ -373,7 +397,7 @@ class ComposerBindings extends BaseBindings {
     Get.delete<HtmlDataSource>(tag: composerId);
     Get.delete<StateDataSource>(tag: composerId);
     Get.delete<PrintFileDataSource>(tag: composerId);
-    Get.delete<SessionStorageComposerDatasource>(tag: composerId);
+    Get.delete<ComposerCacheDatasource>(tag: composerId);
 
     Get.delete<ComposerRepositoryImpl>(tag: composerId);
     Get.delete<ComposerCacheRepositoryImpl>(tag: composerId);
@@ -391,13 +415,14 @@ class ComposerBindings extends BaseBindings {
     Get.delete<LocalImagePickerInteractor>(tag: composerId);
     Get.delete<UploadAttachmentInteractor>(tag: composerId);
     Get.delete<GetEmailContentInteractor>(tag: composerId);
-    Get.delete<RemoveComposerCacheByIdOnWebInteractor>(tag: composerId);
-    Get.delete<SaveComposerCacheOnWebInteractor>(tag: composerId);
+    Get.delete<SaveComposerCacheInteractor>(tag: composerId);
     Get.delete<DownloadImageAsBase64Interactor>(tag: composerId);
     Get.delete<TransformHtmlEmailContentInteractor>(tag: composerId);
     Get.delete<CreateNewAndSendEmailInteractor>(tag: composerId);
     Get.delete<CreateNewAndSaveEmailToDraftsInteractor>(tag: composerId);
     Get.delete<RestoreEmailInlineImagesInteractor>(tag: composerId);
+    Get.delete<HtmlEmailTransformer>(tag: composerId);
+    Get.delete<HtmlEmailTransformerAdapter>(tag: composerId);
     Get.delete<PrintEmailInteractor>(tag: composerId);
     Get.delete<SaveTemplateEmailInteractor>(tag: composerId);
 

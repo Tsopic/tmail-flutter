@@ -49,6 +49,8 @@
 			<string>mailto</string>
 			<string>sms</string>
 			<string>tel</string>
+			<string>webcal</string>
+			<string>geo</string>
 			<string>linshare.mobile</string>
 			<string>twake.chat</string>
 		</array>
@@ -94,5 +96,26 @@
 		<true/>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>UIApplicationSceneManifest</key>
+		<dict>
+			<key>UIApplicationSupportsMultipleScenes</key>
+			<false/>
+			<key>UISceneConfigurations</key>
+			<dict>
+				<key>UIWindowSceneSessionRoleApplication</key>
+				<array>
+					<dict>
+						<key>UISceneClassName</key>
+						<string>UIWindowScene</string>
+						<key>UISceneDelegateClassName</key>
+						<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+						<key>UISceneConfigurationName</key>
+						<string>flutter</string>
+						<key>UISceneStoryboardFile</key>
+						<string>Main</string>
+					</dict>
+				</array>
+			</dict>
+		</dict>
 	</dict>
 </plist>

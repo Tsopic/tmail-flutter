@@ -8,8 +8,8 @@ import 'package:server_settings/server_settings/server_settings_id.dart';
 part 'tmail_server_settings.g.dart';
 
 @JsonSerializable(
-  explicitToJson: true, 
-  includeIfNull: false, 
+  explicitToJson: true,
+  includeIfNull: false,
   converters: [ServerSettingsIdNullableConverter()])
 class TMailServerSettings extends ServerSettings {
   final ServerSettingsId? id;
@@ -26,7 +26,7 @@ class TMailServerSettings extends ServerSettings {
 }
 
 @JsonSerializable(
-  explicitToJson: true, 
+  explicitToJson: true,
   includeIfNull: false,
   converters: [BooleanNullableConverter()]
 )
@@ -40,14 +40,21 @@ class TMailServerSettingOptions with EquatableMixin {
   @JsonKey(name: 'language')
   final String? language;
 
-  @JsonKey(name: 'ai.needs-action.enabled')
-  final bool? aiNeedsActionEnabled;
+  @JsonKey(name: 'ai.label-categorization.enabled')
+  final bool? aiLabelCategorizationEnabled;
+
+  /// User opt-in for sending error reports to Sentry.
+  /// Tri-state: `null` means never chosen, so the instance-wide
+  /// `userOptInByDefault` from the Linagora ecosystem config applies.
+  @JsonKey(name: 'sentry.user-opt-in')
+  final bool? sentryUserOptIn;
 
   TMailServerSettingOptions({
     this.alwaysReadReceipts,
     this.displaySenderPriority,
     this.language,
-    this.aiNeedsActionEnabled,
+    this.aiLabelCategorizationEnabled,
+    this.sentryUserOptIn,
   });
 
   factory TMailServerSettingOptions.fromJson(Map<String, dynamic> json) =>
@@ -59,13 +66,24 @@ class TMailServerSettingOptions with EquatableMixin {
     bool? alwaysReadReceipts,
     bool? displaySenderPriority,
     String? language,
-    bool? aiNeedsActionEnabled,
+    bool? aiLabelCategorizationEnabled,
   }) {
     return TMailServerSettingOptions(
       alwaysReadReceipts: alwaysReadReceipts ?? this.alwaysReadReceipts,
       displaySenderPriority: displaySenderPriority ?? this.displaySenderPriority,
       language: language ?? this.language,
-      aiNeedsActionEnabled: aiNeedsActionEnabled ?? this.aiNeedsActionEnabled,
+      aiLabelCategorizationEnabled: aiLabelCategorizationEnabled ?? this.aiLabelCategorizationEnabled,
+      sentryUserOptIn: sentryUserOptIn,
+    );
+  }
+
+  TMailServerSettingOptions withSentryUserOptIn(bool value) {
+    return TMailServerSettingOptions(
+      alwaysReadReceipts: alwaysReadReceipts,
+      displaySenderPriority: displaySenderPriority,
+      language: language,
+      aiLabelCategorizationEnabled: aiLabelCategorizationEnabled,
+      sentryUserOptIn: value,
     );
   }
 
@@ -74,6 +92,7 @@ class TMailServerSettingOptions with EquatableMixin {
     alwaysReadReceipts,
     displaySenderPriority,
     language,
-    aiNeedsActionEnabled,
+    aiLabelCategorizationEnabled,
+    sentryUserOptIn,
   ];
 }

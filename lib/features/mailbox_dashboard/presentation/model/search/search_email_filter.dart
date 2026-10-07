@@ -8,18 +8,22 @@ import 'package:jmap_dart_client/jmap/core/filter/operator/logic_filter_operator
 import 'package:jmap_dart_client/jmap/core/utc_date.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_filter_condition.dart';
 import 'package:jmap_dart_client/jmap/mail/email/keyword_identifier.dart';
+import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
 import 'package:labels/model/label.dart';
 import 'package:model/email/prefix_email_address.dart';
 import 'package:model/extensions/email_filter_condition_extension.dart';
-import 'package:model/extensions/presentation_mailbox_extension.dart';
+import 'package:model/extensions/keyword_identifier_extension.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/extensions/presentation_mailbox_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/email_receive_time_type.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/email_sort_order_type.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_query.dart';
+import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 class SearchEmailFilter with EquatableMixin, OptionParamMixin {
   static const EmailSortOrderType defaultSortOrder =
       EmailSortOrderType.relevance;
+
   static const Set<String> _commonEmailDomainSuffixes = {
     '.com',
     '.ee',
@@ -41,10 +45,11 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
   final EmailReceiveTimeType emailReceiveTimeType;
   final bool hasAttachment;
   final bool unread;
+  final bool notIncludeEvents;
   final UTCDate? before;
+  final UTCDate? after;
   final UTCDate? startDate;
   final UTCDate? endDate;
-  final int? position;
   final EmailSortOrderType sortOrderType;
   final Label? label;
 
@@ -58,24 +63,26 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
     this.subject,
     this.mailbox,
     this.before,
+    this.after,
     this.startDate,
     this.endDate,
-    this.position,
     this.label,
     Set<String>? from,
     Set<String>? to,
     EmailReceiveTimeType? emailReceiveTimeType,
     bool? hasAttachment,
     bool? unread,
+    bool? notIncludeEvents,
     Set<String>? notKeyword,
     Set<String>? hasKeyword,
     EmailSortOrderType? sortOrderType,
-  }) : from = from ?? <String>{},
-       to = to ?? <String>{},
-       notKeyword = notKeyword ?? <String>{},
-       hasKeyword = hasKeyword ?? <String>{},
+  }) : from = Set<String>.of(from ?? const <String>{}),
+       to = Set<String>.of(to ?? const <String>{}),
+       notKeyword = Set<String>.of(notKeyword ?? const <String>{}),
+       hasKeyword = Set<String>.of(hasKeyword ?? const <String>{}),
        hasAttachment = hasAttachment ?? false,
        unread = unread ?? false,
+       notIncludeEvents = notIncludeEvents ?? false,
        emailReceiveTimeType =
            emailReceiveTimeType ?? EmailReceiveTimeType.allTime,
        sortOrderType = sortOrderType ?? defaultSortOrder;
@@ -91,10 +98,11 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
     Option<EmailReceiveTimeType>? emailReceiveTimeTypeOption,
     Option<bool>? hasAttachmentOption,
     Option<bool>? unreadOption,
+    Option<bool>? notIncludeEventsOption,
     Option<UTCDate>? beforeOption,
+    Option<UTCDate>? afterOption,
     Option<UTCDate>? startDateOption,
     Option<UTCDate>? endDateOption,
-    Option<int>? positionOption,
     Option<EmailSortOrderType>? sortOrderTypeOption,
     Option<Label>? labelOption,
   }) {
@@ -112,24 +120,44 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
       ),
       hasAttachment: getOptionParam(hasAttachmentOption, hasAttachment),
       unread: getOptionParam(unreadOption, unread),
+      notIncludeEvents: getOptionParam(
+        notIncludeEventsOption,
+        notIncludeEvents,
+      ),
       before: getOptionParam(beforeOption, before),
+      after: getOptionParam(afterOption, after),
       startDate: getOptionParam(startDateOption, startDate),
       endDate: getOptionParam(endDateOption, endDate),
-      position: getOptionParam(positionOption, position),
       sortOrderType: getOptionParam(sortOrderTypeOption, sortOrderType),
       label: getOptionParam(labelOption, label),
     );
   }
 
+  /// True when [address] is the sole sender in `from`. Backs the "from me" chip:
+  /// selected only when `from` holds just the current user, so any extra address
+  /// clears the selection.
+  bool isOnlySender(String address) =>
+      address.isNotEmpty && from.length == 1 && from.first == address;
+
+  /// Strips the load-more date cursors (`before`, `after`), keeping all user intent
+  /// (incl. `startDate`/`endDate` bounds). Notifiers run full replacements through
+  /// this so a stale cursor can never enter the SSOT (ADR-0093). Pagination `position`
+  /// no longer lives on the model — it is resolved on the transient `SearchRequestSpec`.
+  SearchEmailFilter clearPaginationCursors() =>
+      copyWith(beforeOption: const None(), afterOption: const None());
+
   Filter? mappingToEmailFilterCondition({
     EmailFilterCondition? moreFilterCondition,
+    Set<MailboxId>? trashSpamMailboxIds,
   }) {
-    final textTokens = text?.toFilterTokens() ?? [];
-    final textFilter = _generateFilterFromTextTokens(textTokens);
+    final textFilter = _generateFilterFromTextTokens(
+      text?.toFilterTokens() ?? [],
+    );
 
     final emailEmailFilterConditionShared = EmailFilterCondition(
-      inMailbox: mailbox?.mailboxId,
-      after: emailReceiveTimeType.getAfterDate(startDate),
+      inMailbox: _getInMailboxField(),
+      inMailboxOtherThan: _getInMailboxOtherThanField(trashSpamMailboxIds),
+      after: emailReceiveTimeType.getAfterDate(startDate, after),
       hasAttachment: !hasAttachment ? null : hasAttachment,
       subject: subject?.trim().isNotEmpty == true ? subject?.trim() : null,
       before: emailReceiveTimeType.getBeforeDate(endDate, before),
@@ -160,6 +188,10 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
         ),
       if (label?.keyword?.value != null)
         EmailFilterCondition(hasKeyword: label!.keyword!.value),
+      if (notIncludeEvents)
+        EmailFilterCondition(
+          notKeyword: KeyWordIdentifierExtension.eventsMail.value,
+        ),
       if (moreFilterCondition != null && moreFilterCondition.hasCondition)
         moreFilterCondition,
     };
@@ -271,6 +303,8 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
     }
   }
 
+  /// True when the filter carries at least one active search criterion that
+  /// should mark the current results as filtered/search results.
   bool get isApplied =>
       from.isNotEmpty ||
       to.isNotEmpty ||
@@ -280,11 +314,11 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
       notKeyword.isNotEmpty ||
       emailReceiveTimeType != EmailReceiveTimeType.allTime ||
       sortOrderType != SearchEmailFilter.defaultSortOrder ||
-      (mailbox != null &&
-          mailbox?.id != PresentationMailbox.unifiedMailbox.id) ||
+      (mailbox != null && mailbox?.isUnifiedMailbox != true) ||
       label != null ||
       hasAttachment ||
-      unread;
+      unread ||
+      notIncludeEvents;
 
   bool get isContainFlagged =>
       hasKeyword.contains(KeyWordIdentifier.emailFlagged.value);
@@ -298,11 +332,32 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
       notKeyword.isEmpty &&
       emailReceiveTimeType == EmailReceiveTimeType.allTime &&
       sortOrderType == SearchEmailFilter.defaultSortOrder &&
-      (mailbox == null ||
-          mailbox?.id == PresentationMailbox.unifiedMailbox.id) &&
+      (mailbox == null || mailbox?.isUnifiedMailbox == true) &&
       label == null &&
       !hasAttachment &&
-      !unread;
+      !unread &&
+      !notIncludeEvents;
+
+  String getMailboxName(AppLocalizations appLocalizations) {
+    if (mailbox == null) return appLocalizations.allEmail;
+    return mailbox!.getFolderNameForQuickSearch(appLocalizations);
+  }
+
+  MailboxId? _getInMailboxField() {
+    if (mailbox != null && mailbox?.isUnifiedMailbox != true) {
+      return mailbox?.id;
+    }
+    return null;
+  }
+
+  Set<MailboxId>? _getInMailboxOtherThanField(
+    Set<MailboxId>? trashSpamMailboxIds,
+  ) {
+    if (mailbox == null || mailbox?.isAllEmail == true) {
+      return trashSpamMailboxIds;
+    }
+    return null;
+  }
 
   @override
   List<Object?> get props => [
@@ -316,10 +371,11 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
     emailReceiveTimeType,
     hasAttachment,
     unread,
+    notIncludeEvents,
     before,
+    after,
     startDate,
     endDate,
-    position,
     sortOrderType,
     label,
   ];

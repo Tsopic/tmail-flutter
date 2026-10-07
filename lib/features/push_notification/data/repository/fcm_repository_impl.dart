@@ -21,12 +21,12 @@ import 'package:model/mailbox/presentation_mailbox.dart';
 import 'package:tmail_ui_user/features/mailbox/data/datasource/mailbox_datasource.dart';
 import 'package:tmail_ui_user/features/push_notification/data/datasource/fcm_datasource.dart';
 import 'package:tmail_ui_user/features/push_notification/domain/exceptions/fcm_exception.dart';
+import 'package:tmail_ui_user/features/push_notification/domain/model/email_changes_properties.dart';
 import 'package:tmail_ui_user/features/push_notification/domain/model/register_new_token_request.dart';
 import 'package:tmail_ui_user/features/push_notification/domain/model/update_token_expired_time_request.dart';
 import 'package:tmail_ui_user/features/push_notification/domain/repository/fcm_repository.dart';
 import 'package:tmail_ui_user/features/push_notification/domain/utils/fcm_constants.dart';
 import 'package:tmail_ui_user/features/thread/data/datasource/thread_datasource.dart';
-import 'package:tmail_ui_user/features/thread/data/model/email_change_response.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/email_response.dart';
 
 class FCMRepositoryImpl extends FCMRepository {
@@ -45,34 +45,16 @@ class FCMRepositoryImpl extends FCMRepository {
   Future<EmailsResponse> getEmailChangesToPushNotification(
     Session session,
     AccountId accountId,
-    jmap.State currentState,
-    {
-      Properties? propertiesCreated,
-      Properties? propertiesUpdated
-    }
-  ) async {
-    EmailChangeResponse? emailChangeResponse;
-    bool hasMoreChanges = true;
-    jmap.State? sinceState = currentState;
-
-    while (hasMoreChanges && sinceState != null) {
-      final changesResponse = await _threadDataSource.getChanges(
-        session,
-        accountId,
-        sinceState,
-        propertiesCreated: propertiesCreated,
-        propertiesUpdated: propertiesUpdated
-      );
-
-      hasMoreChanges = changesResponse.hasMoreChanges;
-      sinceState = changesResponse.newStateChanges;
-
-      if (emailChangeResponse != null) {
-        emailChangeResponse.union(changesResponse);
-      } else {
-        emailChangeResponse = changesResponse;
-      }
-    }
+    jmap.State currentState, {
+    EmailChangesProperties? properties,
+  }) async {
+    final emailChangeResponse = await _threadDataSource.getAllEmailChanges(
+      session,
+      accountId,
+      currentState,
+      propertiesCreated: properties?.created,
+      propertiesUpdated: properties?.updated,
+    );
 
     final listEmails = emailChangeResponse?.created ?? [];
     listEmails.sortBy(EmailComparator(EmailComparatorProperty.receivedAt)..setIsAscending(true));
@@ -125,58 +107,48 @@ class FCMRepositoryImpl extends FCMRepository {
   }
 
   @override
-  Future<List<PresentationMailbox>> getMailboxesNotPutNotifications(Session session, AccountId accountId) async {
-    final mailboxesCache = await _mapMailboxDataSource[DataSourceType.local]!.getAllMailboxCache(accountId, session.username);
-    final mailboxesCacheNotPutNotifications = mailboxesCache
-      .map((mailbox) => mailbox.toPresentationMailbox())
-      .where((presentationMailbox) => presentationMailbox.pushNotificationDeactivated)
-      .toList();
-    log('FCMRepositoryImpl::getMailboxesNotPutNotifications():mailboxesCacheNotPutNotifications: $mailboxesCacheNotPutNotifications');
-    if (mailboxesCacheNotPutNotifications.isNotEmpty) {
-      return mailboxesCacheNotPutNotifications;
-    } else {
-      final mailboxResponse = await _mapMailboxDataSource[DataSourceType.network]!.getAllMailbox(session, accountId);
-      final mailboxesNotPutNotifications = mailboxResponse.mailboxes
-        .map((mailbox) => mailbox.toPresentationMailbox())
-        .where((presentationMailbox) => presentationMailbox.pushNotificationDeactivated)
-        .toList();
-      log('FCMRepositoryImpl::getMailboxesNotPutNotifications():mailboxesNotPutNotifications: $mailboxesNotPutNotifications');
-      return mailboxesNotPutNotifications;
+  Future<List<PresentationMailbox>> getExcludedMailboxesForNotification(
+    Session session,
+    AccountId accountId,
+  ) async {
+    final mailboxesCache = await _mapMailboxDataSource[DataSourceType.local]!
+        .getAllMailboxCache(accountId, session.username);
+
+    // Use inbox presence as a cache quality signal; if inbox is cached,
+    // the full mailbox structure is reliably available locally.
+    if (mailboxesCache.any((m) => m.isInbox)) {
+      final excluded = mailboxesCache
+          .map((m) => m.toPresentationMailbox())
+          .where((m) => m.pushNotificationDeactivated)
+          .toList();
+      log('FCMRepositoryImpl::getExcludedMailboxesForNotification(): cache hit — excluded=${excluded.length}');
+      return excluded;
     }
+
+    final mailboxResponse = await _mapMailboxDataSource[DataSourceType.network]!
+        .getAllMailbox(session, accountId);
+    final excluded = mailboxResponse.mailboxes
+        .map((m) => m.toPresentationMailbox())
+        .where((m) => m.pushNotificationDeactivated)
+        .toList();
+    log('FCMRepositoryImpl::getExcludedMailboxesForNotification(): network fetch — excluded=${excluded.length}');
+    return excluded;
   }
 
   @override
   Future<List<EmailId>> getEmailChangesToRemoveNotification(
     Session session,
     AccountId accountId,
-    jmap.State currentState,
-    {
-      Properties? propertiesCreated,
-      Properties? propertiesUpdated
-    }
-  ) async {
-    EmailChangeResponse? emailChangeResponse;
-    bool hasMoreChanges = true;
-    jmap.State? sinceState = currentState;
-
-    while (hasMoreChanges && sinceState != null) {
-      final changesResponse = await _threadDataSource.getChanges(
-        session,
-        accountId,
-        sinceState,
-        propertiesCreated: propertiesCreated,
-        propertiesUpdated: propertiesUpdated
-      );
-
-      hasMoreChanges = changesResponse.hasMoreChanges;
-      sinceState = changesResponse.newStateChanges;
-
-      if (emailChangeResponse != null) {
-        emailChangeResponse.union(changesResponse);
-      } else {
-        emailChangeResponse = changesResponse;
-      }
-    }
+    jmap.State currentState, {
+    EmailChangesProperties? properties,
+  }) async {
+    final emailChangeResponse = await _threadDataSource.getAllEmailChanges(
+      session,
+      accountId,
+      currentState,
+      propertiesCreated: properties?.created,
+      propertiesUpdated: properties?.updated,
+    );
 
     if (emailChangeResponse != null) {
       final listEmailIdMarkAsRead = emailChangeResponse.updated
@@ -209,7 +181,7 @@ class FCMRepositoryImpl extends FCMRepository {
     if (changesResponse.created?.isNotEmpty == true) {
       return _validateMaximumNewEmailsRetrieved(changesResponse.created!);
     } else {
-      throw NotFoundNewReceiveEmailException();
+      throw const NotFoundNewReceiveEmailException();
     }
   }
 

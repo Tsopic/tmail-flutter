@@ -6,7 +6,7 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/domain/model/spam_repor
 abstract class SpamReportRepository {
   Future<void> storeLastTimeDismissedSpamReported(DateTime lastTimeDismissedSpamReported);
 
-  Future<DateTime> getLastTimeDismissedSpamReported();
+  Future<int> getLastTimeDismissedSpamReportedMilliseconds();
 
   Future<void> deleteLastTimeDismissedSpamReported();
 

@@ -1,5 +1,4 @@
 
-import 'package:core/presentation/constants/constants_ui.dart';
 import 'package:core/presentation/extensions/color_extension.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:core/presentation/utils/responsive_utils.dart';
@@ -10,12 +9,12 @@ import 'package:core/presentation/views/text/text_overflow_builder.dart';
 import 'package:core/utils/platform_info.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:get/get.dart';
 import 'package:model/email/email_action_type.dart';
 import 'package:model/email/presentation_email.dart';
 import 'package:model/extensions/presentation_email_extension.dart';
 import 'package:model/extensions/presentation_mailbox_extension.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/extensions/presentation_mailbox_extension.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_query.dart';
 import 'package:tmail_ui_user/features/thread/presentation/styles/item_email_tile_styles.dart';
@@ -26,15 +25,16 @@ typedef OnMoreActionClick = Future<void> Function(PresentationEmail, RelativeRec
 
 mixin BaseEmailItemTile {
 
-  final responsiveUtils = Get.find<ResponsiveUtils>();
-  final imagePaths = Get.find<ImagePaths>();
+  ResponsiveUtils get responsiveUtils;
+
+  ImagePaths get imagePaths;
 
   Widget buildMailboxContain(
     BuildContext context,
-    bool isSearchEmailRunning,
+    bool showMailboxLabel,
     PresentationEmail email
   ) {
-    if (hasMailboxLabel(isSearchEmailRunning, email)) {
+    if (hasMailboxLabel(showMailboxLabel, email)) {
       return Container(
           margin: const EdgeInsetsDirectional.only(start: 8),
           padding: const EdgeInsetsDirectional.symmetric(horizontal: 8),
@@ -45,7 +45,6 @@ mixin BaseEmailItemTile {
           child: TextOverflowBuilder(
             email.mailboxContain?.getDisplayName(context) ?? '',
             style: ThemeUtils.defaultTextStyleInterFont.copyWith(
-              fontFamily: ConstantsUI.fontApp,
               fontSize: 10,
               color: AppColor.emailMailboxContainColor,
               height: 24 / 10,
@@ -68,12 +67,12 @@ mixin BaseEmailItemTile {
   Color buildTextColorForReadEmail(PresentationEmail email) =>
       email.hasRead ? AppColor.steelGray400 : Colors.black;
 
-  bool hasMailboxLabel(bool isSearchEmailRunning, PresentationEmail email) {
-    return isSearchEmailRunning && email.mailboxContain != null;
+  bool hasMailboxLabel(bool showMailboxLabel, PresentationEmail email) {
+    return showMailboxLabel && email.mailboxContain != null;
   }
 
   String informationSender(PresentationEmail email, PresentationMailbox? mailbox) {
-    if (mailbox?.isSent == true || mailbox?.isDrafts == true || mailbox?.isOutbox == true) {
+    if (mailbox?.isOutgoingMailbox == true) {
       return email.recipientsName();
     } else {
       return email.getSenderName();
@@ -208,7 +207,7 @@ mixin BaseEmailItemTile {
 
   Widget buildIconUnreadStatus() {
     return SvgPicture.asset(
-      key: const Key('unread_status_icon'),
+      key: const Key(UiKeys.unreadStatusIcon),
       imagePaths.icUnreadStatus,
       width: 9,
       height: 9,

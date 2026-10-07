@@ -3,6 +3,7 @@ import 'package:core/data/network/config/dynamic_url_interceptors.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:core/presentation/utils/app_toast.dart';
 import 'package:core/presentation/utils/responsive_utils.dart';
+import 'package:core/utils/platform_info.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
@@ -14,8 +15,12 @@ import 'package:tmail_ui_user/features/caching/caching_manager.dart';
 import 'package:tmail_ui_user/features/home/domain/usecases/get_session_interactor.dart';
 import 'package:tmail_ui_user/features/login/data/network/interceptors/authorization_interceptors.dart';
 import 'package:tmail_ui_user/features/login/data/network/oidc_error.dart';
+import 'package:tmail_ui_user/features/login/domain/exceptions/authentication_exception.dart';
 import 'package:tmail_ui_user/features/login/domain/exceptions/login_exception.dart';
+import 'package:tmail_ui_user/features/login/domain/model/base_url_oidc_response.dart';
+import 'package:tmail_ui_user/features/login/domain/state/authenticate_oidc_on_browser_state.dart';
 import 'package:tmail_ui_user/features/login/domain/state/check_oidc_is_available_state.dart';
+import 'package:tmail_ui_user/features/login/domain/state/try_guessing_web_finger_state.dart';
 import 'package:tmail_ui_user/features/login/domain/state/get_oidc_configuration_state.dart';
 import 'package:tmail_ui_user/features/login/domain/state/get_token_oidc_state.dart';
 import 'package:tmail_ui_user/features/login/domain/usecases/authenticate_oidc_on_browser_interactor.dart';
@@ -37,7 +42,6 @@ import 'package:tmail_ui_user/features/login/domain/usecases/save_login_url_on_m
 import 'package:tmail_ui_user/features/login/domain/usecases/save_login_username_on_mobile_interactor.dart';
 import 'package:tmail_ui_user/features/login/domain/usecases/try_guessing_web_finger_interactor.dart';
 import 'package:tmail_ui_user/features/login/domain/usecases/update_account_cache_interactor.dart';
-import 'package:tmail_ui_user/features/login/presentation/extensions/handle_openid_configuration.dart';
 import 'package:tmail_ui_user/features/login/presentation/login_controller.dart';
 import 'package:tmail_ui_user/features/login/presentation/login_form_type.dart';
 import 'package:tmail_ui_user/features/manage_account/data/local/language_cache_manager.dart';
@@ -49,6 +53,11 @@ import 'package:tmail_ui_user/main/utils/twake_app_manager.dart';
 import 'package:uuid/uuid.dart';
 
 import 'login_controller_test.mocks.dart';
+
+class _MinifiedLikeException implements Exception {
+  @override
+  String toString() => "Instance of 'minified:aHb'";
+}
 
 @GenerateNiceMocks([
   MockSpec<AuthorizationInterceptors>(),
@@ -85,6 +94,8 @@ import 'login_controller_test.mocks.dart';
   MockSpec<TwakeAppManager>(),
 ])
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late MockAuthenticationInteractor mockAuthenticationInteractor;
   late MockCheckOIDCIsAvailableInteractor mockCheckOIDCIsAvailableInteractor;
   late MockGetOIDCConfigurationInteractor mockGetOIDCConfigurationInteractor;
@@ -181,7 +192,7 @@ void main() {
     Get.put<TwakeAppManager>(mockTwakeAppManager);
     Get.testMode = true;
 
-    dotenv.loadFromString(envString: 'SERVER_URL=https://example.com');
+    dotenv.loadFromString(isOptional: true, envString: 'SERVER_URL=https://example.com');
 
     loginController = LoginController(
       mockAuthenticationInteractor,
@@ -251,6 +262,189 @@ void main() {
       expect(loginController.loginFormType.value,
           equals(LoginFormType.baseUrlForm));
     });
+
+    test('WHEN handleFailureViewState is called with GetTokenOIDCFailure \n'
+        'AND SSO was confirmed by webFinger (ssoConfirmed == true) \n'
+        'AND exception has a visible message \n'
+        'THEN loginFormType becomes retry AND never falls back to basic auth', () {
+
+      loginController.loginFormType.value = LoginFormType.dnsLookupForm;
+      final failure = GetTokenOIDCFailure(
+        CanNotFoundBaseUrl(),
+        ssoConfirmed: true,
+      );
+      loginController.handleFailureViewState(failure);
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.retry));
+      expect(
+        loginController.loginFormType.value,
+        isNot(anyOf(
+          LoginFormType.passwordForm,
+          LoginFormType.credentialForm,
+        )),
+      );
+    });
+
+    test('WHEN handleFailureViewState is called with GetTokenOIDCFailure \n'
+        'AND the provider was only guessed from the base URL (ssoConfirmed == false) \n'
+        'THEN it falls back to basic auth and does NOT stay on the retry form', () {
+
+      loginController.loginFormType.value = LoginFormType.dnsLookupForm;
+      final failure = GetTokenOIDCFailure(
+        NotFoundUrlException(),
+        ssoConfirmed: false,
+      );
+      loginController.handleFailureViewState(failure);
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.passwordForm));
+      expect(loginController.loginFormType.value, isNot(LoginFormType.retry));
+    });
+  });
+
+  group('Test handleFailureViewState with AuthenticateOidcOnBrowserFailure', () {
+    test('WHEN handleFailureViewState is called with AuthenticateOidcOnBrowserFailure \n'
+        'AND SSO was confirmed by webFinger (ssoConfirmed == true) \n'
+        'AND exception has a visible message \n'
+        'THEN loginFormType becomes retry AND never falls back to basic auth', () {
+
+      loginController.loginFormType.value = LoginFormType.dnsLookupForm;
+      final failure = AuthenticateOidcOnBrowserFailure(
+        CanNotFoundBaseUrl(),
+        ssoConfirmed: true,
+      );
+      loginController.handleFailureViewState(failure);
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.retry));
+      expect(
+        loginController.loginFormType.value,
+        isNot(anyOf(
+          LoginFormType.passwordForm,
+          LoginFormType.credentialForm,
+        )),
+      );
+    });
+
+    test('WHEN AuthenticateOidcOnBrowserFailure has no visible message outside web \n'
+        'THEN loginFormType becomes retry so mobile can recover', () {
+      PlatformInfo.isTestingForWeb = false;
+      loginController.loginFormType.value = LoginFormType.retry;
+      final failure = AuthenticateOidcOnBrowserFailure(
+        _MinifiedLikeException(),
+        ssoConfirmed: true,
+      );
+      loginController.handleFailureViewState(failure);
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.retry));
+    });
+
+    test('WHEN the OIDC provider was only guessed from the base URL \n'
+        '(ssoConfirmed == false) AND AuthenticateOidcOnBrowserFailure occurs \n'
+        'THEN it falls back to basic auth and does NOT stay on the retry form', () {
+
+      loginController.loginFormType.value = LoginFormType.dnsLookupForm;
+      loginController.handleFailureViewState(
+        AuthenticateOidcOnBrowserFailure(Exception(), ssoConfirmed: false),
+      );
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.passwordForm));
+      expect(loginController.loginFormType.value, isNot(LoginFormType.retry));
+    });
+
+    test('WHEN AuthenticateOidcOnBrowserFailure(ssoConfirmed == false) occurs \n'
+        'AND featureFailure is null (previously guarded by featureFailure != null) \n'
+        'THEN it still falls back to basic auth instead of the generic handler', () {
+
+      // Guards the removal of the old `featureFailure != null` condition: the
+      // fallback decision must depend on ssoConfirmed only, not on whether a
+      // prior discovery failure was recorded.
+      loginController.featureFailure = null;
+      loginController.loginFormType.value = LoginFormType.dnsLookupForm;
+      loginController.handleFailureViewState(
+        AuthenticateOidcOnBrowserFailure(Exception(), ssoConfirmed: false),
+      );
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.passwordForm));
+    });
+  });
+
+  group('Test handleUrgentException with AuthenticateOidcOnBrowserFailure', () {
+    test('WHEN handleUrgentException is called with AuthenticateOidcOnBrowserFailure \n'
+        'AND SSO was confirmed by webFinger (ssoConfirmed == true) \n'
+        'AND exception has a visible message \n'
+        'THEN loginFormType becomes retry AND never falls back to basic auth', () {
+
+      loginController.loginFormType.value = LoginFormType.dnsLookupForm;
+      final failure = AuthenticateOidcOnBrowserFailure(
+        CanNotFoundBaseUrl(),
+        ssoConfirmed: true,
+      );
+      loginController.handleUrgentException(failure: failure);
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.retry));
+      expect(
+        loginController.loginFormType.value,
+        isNot(anyOf(
+          LoginFormType.passwordForm,
+          LoginFormType.credentialForm,
+        )),
+      );
+    });
+
+    test('WHEN handleUrgentException gets AuthenticateOidcOnBrowserFailure with no visible message outside web \n'
+        'THEN loginFormType becomes retry so mobile can recover', () {
+      PlatformInfo.isTestingForWeb = false;
+      loginController.loginFormType.value = LoginFormType.retry;
+      final failure = AuthenticateOidcOnBrowserFailure(
+        _MinifiedLikeException(),
+        ssoConfirmed: true,
+      );
+      loginController.handleUrgentException(failure: failure);
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.retry));
+    });
+
+    test('WHEN the OIDC provider was only guessed from the base URL \n'
+        '(ssoConfirmed == false) AND handleUrgentException gets AuthenticateOidcOnBrowserFailure \n'
+        'THEN it falls back to basic auth and does NOT stay on the retry form', () {
+
+      loginController.loginFormType.value = LoginFormType.dnsLookupForm;
+      loginController.handleUrgentException(
+        failure: AuthenticateOidcOnBrowserFailure(Exception(), ssoConfirmed: false),
+      );
+
+      expect(loginController.loginFormType.value, equals(LoginFormType.passwordForm));
+      expect(loginController.loginFormType.value, isNot(LoginFormType.retry));
+    });
+  });
+
+  group('Test TryGuessingWebFingerSuccess is treated as confirmed SSO', () {
+    test('WHEN webFinger-URL guessing succeeds (mobile DNS-lookup fallback) \n'
+        'THEN getOIDCConfiguration runs with a NON-speculative response \n'
+        'so the config is classified as SSO-confirmed, not a base-URL guess', () {
+
+      when(mockGetOIDCConfigurationInteractor.execute(
+        any,
+        loginHint: anyNamed('loginHint'),
+      )).thenAnswer((_) => const Stream.empty());
+
+      final oidcResponse = OIDCResponse('https://example.com', [
+        OIDCLinkDto(
+          Uri.parse('https://sso.example.com'),
+          Uri.parse('https://sso.example.com'),
+        ),
+      ]);
+
+      loginController.handleSuccessViewState(
+        TryGuessingWebFingerSuccess(oidcResponse),
+      );
+
+      final captured = verify(mockGetOIDCConfigurationInteractor.execute(
+        captureAny,
+        loginHint: anyNamed('loginHint'),
+      )).captured.single;
+      expect(captured, same(oidcResponse));
+      expect(captured, isNot(isA<BaseUrlOidcResponse>()));
+    });
   });
 
   group('LoginController::handleFailureViewState::', () {
@@ -302,7 +496,7 @@ void main() {
   });
 
   group('LoginController::handleSuccessViewState::', () {
-    test('should not call _getOIDCConfigurationInteractor when success is CheckOIDCIsAvailableSuccess', () {
+    test('should call _getOIDCConfigurationInteractor with oidc response when success is CheckOIDCIsAvailableSuccess', () {
       // Arrange
       const baseUrl = 'https://example.com';
       final oidcResponse = OIDCResponse(
@@ -321,8 +515,12 @@ void main() {
       loginController.handleSuccessViewState(success);
 
       // Assert
-      verifyNever(loginController.tryGetOIDCConfigurationFromBaseUrl(Uri.parse(baseUrl)));
-      verify(loginController.getOIDCConfiguration(oidcResponse)).called(1);
+      final captured = verify(mockGetOIDCConfigurationInteractor.execute(
+        captureAny,
+        loginHint: anyNamed('loginHint'),
+      )).captured.single;
+      expect(captured, same(oidcResponse));
+      expect(captured, isNot(isA<BaseUrlOidcResponse>()));
     });
   });
 }

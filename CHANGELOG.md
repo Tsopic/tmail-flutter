@@ -1,3 +1,398 @@
+## [0.39.1] - 2026-10-06
+### Added
+- #4809 Add Sentry error reporting preference and consent handling
+- Add a twake-qa compatible QA environment
+
+### Fixed
+- Fix grammar in Profiles settings subtitle and permanent-delete toasts
+- Fix 'has invited you in to a meeting' typo in English strings
+- Use plural form for permanent-delete toast on a single message
+- 2509 Restrict which links open externally from email content
+- 2509 Allow sms, webcal and geo links and warn when a link is refused
+- 2509 Restrict openApp deep links to allow-listed hosts, require https
+- 2509 Sanitize nested CSS at-rules and drop remote url() inside them
+
+### Changed
+- Translate vi, ru, fr, mn
+- Bump tmail-backend docker image to 1.0.21.2
+
+## [0.39.0] - 2026-10-02
+### Added
+- Support iOS app builds on Xcode 27.0 and macOS Golden Gate 27.0
+- #4843 Handle EmailSubmission/set invalidRecipients in composer
+- #4672 Hide calendar button when ecosystem URL template is unset
+
+### Fixed
+- #4859 Validate iframe message shape in HTML viewer before handling
+- Support domainPart in URL templates
+- Gate premium CTA on being inside Cozy
+- Strip bidi and control characters from attachment names
+- Escape notification text; private lock-screen visibility
+- Never send credentials with WebFinger discovery requests
+- Escape header fields in EML preview; remove unused PDF viewer
+- Try DNS-over-HTTPS before system DNS for JMAP discovery
+- Return to app base, not host root, after logout
+- Drop redirect_uri handling from the logout callback
+- Pin pica/dotlottie at build time and serve CanvasKit locally
+
+### Changed
+- #4861 Localize file size formatter tests with Intl.defaultLocale
+- #4815 Test switched identity and signature survive web reload
+- #4837 Drop no-op selection-list reorder, add category order test
+- Translate vi, ru, fr, mn
+- Bump tmail-backend docker image to 1.0.21.1
+- Run every test in CI without registration
+
+## [0.38.0] - 2026-09-23
+### Fixed
+- #4802 Update Twake Calendar footer separator
+- #4838 Resolve Workplace FQDN from the Linagora ecosystem fallback
+- #4678 Fix sidebar header icon sizing and long-press on touch platforms
+
+### Changed
+- #4623 Integrate design system event card invitation
+- Translate vi, ru, fr, mn
+
+## [0.37.2] - 2026-09-15
+### Added
+- Allow workplace to refresh jmap token
+
+### Fixed
+- Hide the premium CTA when no paywall url is configured
+
+### Changed
+- #4817 Improve premium CTA ecosystem handling
+- Translate id, lb, de, ga, zh_Hans
+
+## [0.37.1] - 2026-09-14
+
+### Fixed
+- #4820 Change arrow size to 16
+
+## [0.37.0] - 2026-09-14
+### Added
+- Add Brazilian Portuguese localization
+- Implement fetchJson for workplace web
+
+### Fixed
+- #4790 Fix attachment upload failing to retry after a mobile 401
+- #4799 Fix HTML Mail being truncated in width
+- #4805 Clear iframes only when the SelectableRegion node itself takes focus
+- Restore legacy icons for mailbox actions
+- Hide Twake Calendar visio section when rendering ICS description
+
+### Changed
+- Translate vi, ru, fr, mn
+
+## [0.36.0] - 2026-08-28
+### Added
+- #4678 Deep sidebar tree navigation for mailboxes, no more horizontal scrolling
+- #4728 Attach files from Twake Drive in the composer
+
+### Fixed
+- #4472 Fix draft save failure dialog
+- #4678 Fix duplicate mailbox sidebar IDs, spacing, and icon behavior
+- HOTFIX Support Android API 36
+
+### Changed
+- Translate vi, ru, fr, mn
+
+## [0.35.1] - 2026-08-21
+### Fixed
+- (fix) Mobile search result not updated
+
+### Changed
+- TF-4728 Size limit for add as attachment from Drive
+
+## [0.35.0] - 2026-08-17
+### Fixed
+- Fix auth: force logout when mobile refresh rejected by token endpoint
+- Fix auth: stop double-reporting rejected mobile token refresh to Sentry
+- Fix search result/state leaks: resize, system-back, search URL labelId
+- HOTFIX Flaky search email with tag test
+
+### Changed
+- TF-4644 Apply Riverpod SSOT to advanced search and web search filter
+- TF-4645 Migrate mobile search to the central executor
+- TF-4646 Add search view-state SSOT with Riverpod (web)
+- TF-4647 Wire dashboard filter into search SSOT, remove position
+- TF-4744 Inherit typography from design system TwakeInter
+- TF-4758 Default DriveAttachmentConfig.isEnabled to true
+- TF-4726 Composable validator
+- TF-4727 Web OPFS drive file stager and strategy selection
+
+## [0.34.0] - 2026-08-10
+### Fixed
+- #4664 Fix can't set my break line in my answer where I want
+
+## [0.33.0] - 2026-07-31
+### Added
+- #4739 Enable mobile drive picker
+- Add logo drive loading
+
+### Fixed
+- #4738 Fix response view blocking drive picker while it loads
+- #4720 Fix signature is not well displayed
+- Fix Drive picker stuck 20s on readyTimeout when token_exchange/page load fails
+
+### Changed
+- #4742 Drive picker theme
+- Translate de, ga, zh_Hans
+
+## [0.32.0] - 2026-07-27
+### Added
+- TF-4660 Drive loading skeleton while the Drive intent webview is loading
+- TF-4684 Add drive card hover close button
+
+### Fixed
+- #4721 Handle yield* error inside interactor
+- #4717 InvalidStateError in IndexDatabase prevent state be updated
+
+### Changed
+- #4716 Handle add as attachment in development
+- Translate vi, ru, fr, mn
+
+## [0.31.0] - 2026-07-22
+### Added
+- #4410 ADR for attach as attachment from Drive
+
+### Fixed
+- #4674 Handle Download file without putting wrong extension
+- #4213 Align Keyboard shortcut view in Settings
+- #4709 Handle style for link card UI
+
+### Changed
+- Reduce flaky in E2E: not depend on toast in assertion 
+
+## [0.30.3] - 2026-07-15
+### Added
+- TF-4661 Drive Link attachments as a cardview in email content
+- TF-4661 Drive button pixelate
+
+## [0.30.2] - 2026-07-13
+### Fixed
+- TF-4679 Silence transient SSO session recovery errors
+- TF-4546 Fix Android selection handles overlapping composer menu
+- TF-4673 PDF preview error handling
+- Fix sharing text variety mime type
+- Urgent-exception handling for Riverpod flows
+- HOTFIX Enable mobile experimental toggle
+
+### Changed
+- Rename AiScribeConstants to AiCapabilities and move it to the model package
+
+## [0.30.1] - 2026-07-06
+### Added
+- TF-4484 Propose ADR for TWP warning banners and header cache consolidation
+- TF-4449 Propose ADR for external drive attachments via Intent webview
+
+### Fixed
+- TF-4667 Do not fall back to Basic Auth when SSO is detected
+- Fix Calendar error minified in Sentry reports
+- Fix UnsupportedError in FixedLengthListMixin.clear
+
+### Changed
+- TF-4643 Add search executor with pagination and concurrency guards
+- TF-4642 Add search filter mutation with pagination intent and spec
+- TF-4421 Update search filter ADRs for cursor model and notifier mixin
+- Remove cancel button on send
+- (e2e) Mobile test with Firebase Test Lab
+- (CI) Run web E2E tests in release build too
+
+## [0.30.0] - 2026-06-30
+### Added
+- Add Mongolian 
+- Drive integration
+
+### Fixed
+- #4538 Hide drop zone overlay after dropping files in composer
+- #4651 Search filter cursor be leak when load more in `oldest` sort
+
+## [0.29.9] - 2026-06-24
+### Fixed
+- Load more in search for oldest
+- SortOrder not retrieved well
+
+## [0.29.8] - 2026-06-17
+### Changed
+- Translation vi, ru, fr
+
+## [0.29.7] - 2026-06-16
+### Fixed
+- flaky mobile e2e test
+
+## [0.29.6] - 2026-06-13
+### Fixed
+- fix: cannot download because of no way to get token from corrupt box
+
+### Changed
+- #4429 Change UI of label search
+
+## [0.29.5] - 2026-06-12
+### Fixed
+- fix: ios build failed with `didReceiveRemoteNotification` in xcode 26
+
+## [0.29.4] - 2026-06-11
+
+### Fixed
+- TF-4540 Fix left margin of email truncated on email view
+- TF-4592 Fix EXC_BAD_ACCESS crash on iOS foreground FCM push
+- TF-4491 Fix reversed semantic in label action toast messages
+- #4582 Bound Email/changes pagination to stop request storm
+- #4578 Do not double escape text in Scribe
+- Map HttpException/HandshakeException to ConnectionError
+- Keep session on PlatformException(token_failed) network failure
+
+### Changed
+- Upgrade flutter_riverpod to ^3.3.1 with @riverpod codegen
+- Migrate ComposerAutoSaveNotifier and LocalSettingsNotifier to @riverpod
+- #4565 (e2e) Web coverage: personal folder and search tests
+
+## [0.29.3] - 2026-05-29
+
+### Fixed
+- #4529 Fix email subject not copyable on mobile
+- #4558 Calendar event HTML description rendered as plain text
+- #4520 Team mailbox folder should be sorted correctly
+- Fix auto-load-more over-trigger and infinite loop on large screens
+- #4559 Handle refresh token failure on web
+- Fix FCM token retry with exponential backoff and delivery state
+- Fix notification removal guard against PlatformException
+- #4482 Fix invitation email overflowing on narrow mobile screens
+- Fix Flutter 3.38.9 DART_DEFINES build regression
+
+### Added
+- #4535 Enable label classification in preferences
+- Cap push notifications at 20 per burst
+
+## [0.29.0] - 2026-05-22
+### Fixed
+- Sentry noisy error cleanup 
+- #4524 Blank plain-text email not render by backslash 
+- #4532 Cannot scroll to the end of advertisement email
+- #4488 Ctrl+k/Cmd+k in composer
+- #4081 Prevent network error logout user in mobile
+- #4426 warning user when creating rule to drop email
+
+### Added
+- CollapsedThread on email list
+
+### Changed
+- From mono repo into workspace 
+
+## [0.28.19] - 2026-05-15
+
+### Fixed
+- Upgrade open_file to iOS 26
+- upgrade to iOS notification in iOS26
+- Double slash in JMAP session
+- Refresh BlobId of attachment in composer when saving draft multiple times
+- Display orphaned inline image
+- Upgrade to fix Android notification
+
+## [0.28.18] - 2026-05-11
+
+### Fixed
+- TF-4473 Auto save composer to Hive Cache when app in background
+- Fix iOS 26 build
+
+### Changed
+- TF-4444 Can untag Action Required
+- Translation pt, ir, fr, vi
+
+## [0.28.12] - 2026-05-05
+
+### Changed
+- Upgrade to Xcode 26
+- Fix the fastlane for Android + iOS
+
+## [0.28.9] - 2026-05-05
+
+### Added
+- TF-4269 Integrate Sentry into iOS NSE with automated dSYM upload
+- TF-4363 [Thread] Display by collapsed thread in search
+- [ADR-0078] Unified logging pipeline with Sentry handlers and breadcrumbs
+- [ADR-0080] Patrol web integration test setup
+- [ADR-0081] Patrol web test architecture
+- [ADR-0082] Patrol web test migration guide
+- [ADR-0083] Patrol web test migration plan
+- [ADR-0084] Sentry release version strategy for mobile
+- [ADR-0086] Android composer draft loss on background
+
+### Fixed
+- TF-4475 Fix mobile misplaced inline when picked
+- [ADR-0076] Reduce Sentry noise with targeted error reporting
+
+## [0.28.3] - 2026-04-17
+
+### Added
+- TF-4308: Create new label in Choose Label
+- TF-4301: Create new label in EmailView
+- TF-4268: Initialize Sentry from Linagora Ecosystem config
+- ADR-0072: Prevent notification storm on Android
+- TF-4265: Attachment reminder — exclude/include keyword lists, custom config, Main Thread regex caching, integration test on mobile
+- Add ESC keyboard shortcut and shortcuts dictionary to close email detail view in Settings
+- TF-4356: Add filter event mail in search
+
+### Fixed
+- TF-4343: Fix load Sentry from Sentry CDN
+- TF-4301: Block barrier dismissal while label creation is in progress, dedup before appending label to list
+- Fix issue #4292
+- TF-4343: Self-host Sentry JS via DOM interceptor to bypass CDN blockers
+- TF-4284: Fix refreshing causes "virtual mailboxes" to be hidden
+- TF-4358: Remove mail in trash by default in search result
+- TF-4425: Fix load more not triggered on iOS 18 when fast scrolling to bottom
+- Fix stale `worker_manager` git ref; reduce worker_manager memory allocation
+- TF-2316: Can not delete folder when its children are hidden
+
+## [0.27.2] - 2026-04-02
+
+### Added
+- TF-4392 [Team Mailbox] Hide `Recover deleted messages` and `Archive message` actions in team mailbox
+- TF-4392 [Team Mailbox] Full trash management: delete emails, empty trash, move emails to trash from list and detail views
+- TF-4392 [Team Mailbox] Folder management according to user rights: create subfolder, rename folder, delete folder
+- TF-4392 [Team Mailbox] Edit emails in Drafts/Template folder as new in composer; auto-save drafts when editing
+- ADR-71 Collapse Thread view
+- TF-4370 Add description field to Label creation modal
+- TF-4383 Handle read-only labels
+- Label: Add "Label as" context menu for email items in list, thread, and search views
+- AI Scribe mobile: sparkle button in app bar, bottomsheet UI, inline button on tablet with correct positioning
+- AI Scribe: Fetch prompts from `scribePromptUrl` via LinagoraEcosystem; manage prompts as messages lifecycle
+- AI Scribe: Add Improve button, quick action toolbar on suggestion, toast when copying suggestion
+- AI Scribe: Display AI Scribe toggle in mobile preferences
+
+### Fixed
+- TF-4385 Fix spam banner to show only once per day
+- TF-4391 Fix last menu item inaccessible due to system navigation bar overlap
+- TF-4404 Fix missing subject when performing `Mail to attendees` action in event email
+- Translate Scribe for vi, ru
+
+## [0.26.8] - 2026-03-26
+### Fixed
+- Fix translation for Label (French)
+
+## [0.26.6] - 2026-03-24
+### Fixed
+- Download unknown name attachment
+
+## [0.26.5] - 2026-03-23
+### Fixed
+- #4394 Preview for plain text file without format bytes
+- #4384 Page not found when reload Label page
+- #4368 Cannot load more because the wrong condition in Email/query + get 
+
+## [0.26.1] - 2026-03-10
+### Fixed
+- Source code be totally minified by dart2js: concrete `toString` to every exception 
+
+## [0.26.0] - 2026-03-05
+### Added
+- TF-4303 Change order for label action
+- Implement auto sync label changes from websocket
+
+### Fixed
+- TF-4354 Activate Label by default for all users
+
 ## [0.24.14] - 2026-02-27
 ### Fixed
 - TF-4350 cannot focus in folder creator modal and create rule modal in Safari when email open

@@ -1,48 +1,57 @@
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
-import 'package:core/utils/app_logger.dart';
-import 'package:dartz/dartz.dart' hide State;
 import 'package:flutter/material.dart' hide State;
 import 'package:get/get.dart';
 import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:jmap_dart_client/jmap/core/session/session.dart';
+import 'package:jmap_dart_client/jmap/core/state.dart';
 import 'package:labels/labels.dart';
 import 'package:model/mailbox/expand_mode.dart';
 import 'package:tmail_ui_user/features/base/base_controller.dart';
-import 'package:tmail_ui_user/features/home/data/exceptions/session_exceptions.dart';
 import 'package:tmail_ui_user/features/home/domain/extensions/session_extensions.dart';
+import 'package:tmail_ui_user/features/labels/domain/model/open_edit_label_modal_params.dart';
 import 'package:tmail_ui_user/features/labels/domain/state/create_new_label_state.dart';
 import 'package:tmail_ui_user/features/labels/domain/state/delete_a_label_state.dart';
-import 'package:tmail_ui_user/features/labels/domain/state/edit_label_state.dart';
 import 'package:tmail_ui_user/features/labels/domain/state/get_all_label_state.dart';
-import 'package:tmail_ui_user/features/labels/domain/usecases/create_new_label_interactor.dart';
 import 'package:tmail_ui_user/features/labels/domain/usecases/delete_a_label_interactor.dart';
-import 'package:tmail_ui_user/features/labels/domain/usecases/edit_label_interactor.dart';
 import 'package:tmail_ui_user/features/labels/domain/usecases/get_all_label_interactor.dart';
+import 'package:tmail_ui_user/features/labels/domain/usecases/get_label_changes_interactor.dart';
 import 'package:tmail_ui_user/features/labels/presentation/extensions/handle_label_action_type_extension.dart';
+import 'package:tmail_ui_user/features/labels/presentation/models/label_action_type.dart';
+import 'package:tmail_ui_user/features/labels/presentation/extensions/handle_label_websocket_extension.dart';
 import 'package:tmail_ui_user/features/labels/presentation/label_interactor_bindings.dart';
 import 'package:tmail_ui_user/features/labels/presentation/mixin/label_context_menu_mixin.dart';
 import 'package:tmail_ui_user/features/labels/presentation/widgets/create_new_label_modal.dart';
+import 'package:tmail_ui_user/main/routes/dialog_router.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/state/get_label_setting_state.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/get_label_setting_state_interactor.dart';
+import 'package:tmail_ui_user/features/push_notification/presentation/websocket/web_socket_queue_handler.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
-import 'package:tmail_ui_user/main/exceptions/logic_exception.dart';
-import 'package:tmail_ui_user/main/routes/dialog_router.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 
 class LabelController extends BaseController with LabelContextMenuMixin {
-  final labels = <Label>[].obs;
+  final RxList<Label> labels = <Label>[].obs;
   final labelListExpandMode = Rx(ExpandMode.EXPAND);
   final isLabelSettingEnabled = RxBool(false);
   final isLabelsLoaded = RxBool(false);
   final GlobalKey labelAppBarKey = GlobalKey();
 
   GetAllLabelInteractor? _getAllLabelInteractor;
-  CreateNewLabelInteractor? _createNewLabelInteractor;
   GetLabelSettingStateInteractor? _getLabelSettingStateInteractor;
-  EditLabelInteractor? _editLabelInteractor;
   DeleteALabelInteractor? _deleteALabelInteractor;
+  GetLabelChangesInteractor? _getLabelChangesInteractor;
+
+  WebSocketQueueHandler? _webSocketQueueHandler;
+  State? _currentLabelState;
+  AccountId? _accountId;
+  Session? _session;
   LabelsCapability? _labelsCapability;
+
+  @override
+  void onInit() {
+    _initWebSocketQueueHandler();
+    super.onInit();
+  }
 
   bool isLabelCapabilitySupported(Session session, AccountId accountId) {
     return LabelsConstants.labelsCapability.isSupported(session, accountId);
@@ -56,13 +65,14 @@ class LabelController extends BaseController with LabelContextMenuMixin {
   }
 
   void checkLabelSettingState(Session session, AccountId accountId) {
-    _labelsCapability = session.getLabelsCapability(accountId);
+    _session = session;
+    _accountId = accountId;
+    _labelsCapability = _session?.getLabelsCapability(accountId);
     _getLabelSettingStateInteractor =
         getBinding<GetLabelSettingStateInteractor>();
     if (_getLabelSettingStateInteractor != null) {
       consumeState(_getLabelSettingStateInteractor!.execute(accountId));
     } else {
-      isLabelSettingEnabled.value = false;
       _clearLabelData();
       setLabelLoaded();
     }
@@ -73,6 +83,8 @@ class LabelController extends BaseController with LabelContextMenuMixin {
   }
 
   void _clearLabelData() {
+    isLabelSettingEnabled.value = false;
+    isLabelSettingEnabled.refresh();
     labels.clear();
     isLabelsLoaded.value = false;
   }
@@ -80,14 +92,31 @@ class LabelController extends BaseController with LabelContextMenuMixin {
   void injectLabelsBindings() {
     LabelInteractorBindings().dependencies();
     _getAllLabelInteractor = getBinding<GetAllLabelInteractor>();
-    _createNewLabelInteractor = getBinding<CreateNewLabelInteractor>();
-    _editLabelInteractor = getBinding<EditLabelInteractor>();
     _deleteALabelInteractor = getBinding<DeleteALabelInteractor>();
+    _getLabelChangesInteractor = getBinding<GetLabelChangesInteractor>();
   }
 
-  EditLabelInteractor? get editLabelInteractor => _editLabelInteractor;
-
   DeleteALabelInteractor? get deleteALabelInteractor => _deleteALabelInteractor;
+
+  GetLabelChangesInteractor? get getLabelChangesInteractor =>
+      _getLabelChangesInteractor;
+
+  WebSocketQueueHandler? get webSocketQueueHandler => _webSocketQueueHandler;
+
+  AccountId? get accountId => _accountId;
+
+  Session? get session => _session;
+
+  State? get currentLabelState => _currentLabelState;
+
+  void setCurrentLabelState(State? newState) => _currentLabelState = newState;
+
+  void _initWebSocketQueueHandler() {
+    _webSocketQueueHandler = WebSocketQueueHandler(
+      processMessageCallback: handleWebSocketMessage,
+      onErrorCallback: onError,
+    );
+  }
 
   void getAllLabels(AccountId accountId) {
     if (_getAllLabelInteractor == null) {
@@ -105,51 +134,95 @@ class LabelController extends BaseController with LabelContextMenuMixin {
         : ExpandMode.COLLAPSE;
   }
 
-  Future<void> openCreateNewLabelModal(AccountId? accountId) async {
-    if (accountId == null) {
-      consumeState(
-        Stream.value(Left(CreateNewLabelFailure(NotFoundAccountIdException()))),
-      );
-      return;
-    }
-
-    await DialogRouter().openDialogModal(
+  Future<dynamic> openCreateNewLabelModal({
+    required AccountId? accountId,
+  }) async {
+    return DialogRouter().openDialogModal(
       child: CreateNewLabelModal(
+        key: const Key('create_new_label_modal'),
         labels: labels,
-        onLabelActionCallback: (label) => _createNewLabel(accountId, label),
+        accountId: accountId,
+        imagePaths: imagePaths,
       ),
       dialogLabel: 'create-new-label-modal',
     );
   }
 
-  void _createNewLabel(AccountId accountId, Label label) {
-    log('LabelController::_createNewLabel:Label: $label');
-    if (_createNewLabelInteractor == null) {
-      consumeState(
-        Stream.value(Left(CreateNewLabelFailure(InteractorNotInitialized()))),
+  Future<dynamic> openEditLabelModal({
+    required OpenEditLabelModalParams params,
+  }) async {
+    return DialogRouter().openDialogModal(
+      child: CreateNewLabelModal(
+        key: const Key('edit_label_modal'),
+        labels: labels,
+        accountId: params.accountId,
+        imagePaths: imagePaths,
+        selectedLabel: params.selectedLabel,
+        actionType: LabelActionType.edit,
+      ),
+      dialogLabel: 'edit-label-modal',
+    );
+  }
+
+  Future<Label?> onCreateALabelAction({
+    required AccountId? accountId,
+    OnLabelActionCallback? onLabelActionCallback,
+    bool shouldPop = false,
+    bool hasResult = false,
+  }) async {
+    final resultState = await openCreateNewLabelModal(accountId: accountId);
+
+    if (resultState is CreateNewLabelSuccess) {
+      _addLabelToList(resultState.newLabel);
+      if (hasResult) {
+        toastManager.showMessageSuccess(resultState);
+        return resultState.newLabel;
+      }
+      _handleCreateNewLabelSuccessWithoutListUpdate(
+        success: resultState,
+        onLabelActionCallback: onLabelActionCallback,
+        shouldPop: shouldPop,
       );
-    } else {
-      consumeState(_createNewLabelInteractor!.execute(accountId, label));
+    } else if (resultState is CreateNewLabelFailure) {
+      _handleCreateNewLabelFailure(failure: resultState);
+    }
+
+    return null;
+  }
+
+  void _handleCreateNewLabelSuccessWithoutListUpdate({
+    required CreateNewLabelSuccess success,
+    OnLabelActionCallback? onLabelActionCallback,
+    bool shouldPop = false,
+  }) {
+    if (onLabelActionCallback == null && !shouldPop) {
+      toastManager.showMessageSuccess(success);
+    }
+    if (onLabelActionCallback != null) {
+      onLabelActionCallback(success.newLabel);
+    }
+    if (shouldPop) {
+      popBack(result: success.newLabel);
     }
   }
 
-  void _handleCreateNewLabelSuccess(CreateNewLabelSuccess success) {
-    toastManager.showMessageSuccess(success);
-    _addLabelToList(success.newLabel);
-  }
-
-  void _handleCreateNewLabelFailure(CreateNewLabelFailure failure) {
+  void _handleCreateNewLabelFailure({required CreateNewLabelFailure failure}) {
     toastManager.showMessageFailure(failure);
   }
 
   void _addLabelToList(Label newLabel) {
+    labels.removeWhere((label) => label.id == newLabel.id);
     labels.add(newLabel);
     labels.sortByAlphabetically();
   }
 
   void _handleGetLabelSettingStateSuccess(bool isEnabled, AccountId accountId) {
-    isLabelSettingEnabled.value = isEnabled;
+    updateLabelSettingEnabled(isEnabled, accountId);
+  }
 
+  void updateLabelSettingEnabled(bool isEnabled, AccountId accountId) {
+    isLabelSettingEnabled.value = isEnabled;
+    isLabelSettingEnabled.refresh();
     if (isEnabled) {
       injectLabelsBindings();
       getAllLabels(accountId);
@@ -163,13 +236,10 @@ class LabelController extends BaseController with LabelContextMenuMixin {
   void handleSuccessViewState(Success success) {
     if (success is GetAllLabelSuccess) {
       labels.value = success.labels..sortByAlphabetically();
+      setCurrentLabelState(success.newState);
       setLabelLoaded();
-    } else if (success is CreateNewLabelSuccess) {
-      _handleCreateNewLabelSuccess(success);
     } else if (success is GetLabelSettingStateSuccess) {
       _handleGetLabelSettingStateSuccess(success.isEnabled, success.accountId);
-    } else if (success is EditLabelSuccess) {
-      handleEditLabelSuccess(success);
     } else if (success is DeleteALabelSuccess) {
       handleDeleteLabelSuccess(success);
     } else {
@@ -182,14 +252,9 @@ class LabelController extends BaseController with LabelContextMenuMixin {
     if (failure is GetAllLabelFailure) {
       labels.value = [];
       setLabelLoaded();
-    } else if (failure is CreateNewLabelFailure) {
-      _handleCreateNewLabelFailure(failure);
     } else if (failure is GetLabelSettingStateFailure) {
-      isLabelSettingEnabled.value = false;
       _clearLabelData();
       setLabelLoaded();
-    } else if (failure is EditLabelFailure) {
-      handleEditLabelFailure(failure);
     } else if (failure is DeleteALabelFailure) {
       handleDeleteLabelFailure(failure);
     } else {
@@ -200,10 +265,13 @@ class LabelController extends BaseController with LabelContextMenuMixin {
   @override
   void onClose() {
     _getAllLabelInteractor = null;
-    _createNewLabelInteractor = null;
-    _editLabelInteractor = null;
     _deleteALabelInteractor = null;
     _getLabelSettingStateInteractor = null;
+    _webSocketQueueHandler?.dispose();
+    _webSocketQueueHandler = null;
+    _currentLabelState = null;
+    _accountId = null;
+    _session = null;
     _labelsCapability = null;
     super.onClose();
   }

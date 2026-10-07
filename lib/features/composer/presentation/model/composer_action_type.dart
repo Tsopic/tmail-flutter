@@ -1,6 +1,7 @@
 import 'package:core/presentation/extensions/color_extension.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:flutter/material.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 enum ComposerActionType {
@@ -65,11 +66,25 @@ enum ComposerActionType {
       case ComposerActionType.requestReadReceipt:
         return const Key('read_receipt_popup_item');
       case ComposerActionType.saveAsDraft:
-        return const Key('save_as_draft_popup_item');
+        return const Key(UiKeys.saveDraftPopupItem);
       case ComposerActionType.saveAsTemplate:
-        return const Key('save_as_template_popup_item');
+        return const Key(UiKeys.saveTemplatePopupItem);
       case ComposerActionType.delete:
         return const Key('delete_popup_item');
+    }
+  }
+
+  /// Whether the composer stays open after this action, so the editor
+  /// selection/focus should be restored.
+  bool get keepsComposerOpen {
+    switch (this) {
+      case ComposerActionType.markAsImportant:
+      case ComposerActionType.requestReadReceipt:
+        return true;
+      case ComposerActionType.saveAsDraft:
+      case ComposerActionType.saveAsTemplate:
+      case ComposerActionType.delete:
+        return false;
     }
   }
 }

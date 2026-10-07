@@ -189,7 +189,7 @@ class DashboardEmailContextProvider implements EmailContextProvider {
       markAsAnswered: markAsAnswered,
       markAsForwarded: markAsForwarded,
       isLabelAdded: isLabelAdded,
-      labelKeyword: labelKeyword,
+      labelKeywords: labelKeyword == null ? null : [labelKeyword],
     );
   }
 

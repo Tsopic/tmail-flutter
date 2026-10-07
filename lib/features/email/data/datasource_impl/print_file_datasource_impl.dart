@@ -1,5 +1,5 @@
 import 'package:core/data/model/print_attachment.dart';
-import 'package:core/presentation/extensions/html_extension.dart';
+import 'package:core/presentation/extensions/string_extension.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:core/presentation/utils/html_transformer/transform_configuration.dart';
 import 'package:core/utils/app_logger.dart';
@@ -12,7 +12,7 @@ import 'package:tmail_ui_user/features/email/data/datasource/print_file_datasour
 import 'package:tmail_ui_user/features/email/data/local/html_analyzer.dart';
 import 'package:tmail_ui_user/features/email/domain/model/email_print.dart';
 import 'package:tmail_ui_user/features/email/presentation/extensions/attachment_extension.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 class PrintFileDataSourceImpl extends PrintFileDataSource {
 
@@ -42,7 +42,7 @@ class PrintFileDataSourceImpl extends PrintFileDataSource {
           final iconBase64Data = await _fileUtils.convertImageAssetToBase64(attachment.getIcon(_imagePaths));
           final printAttachment = PrintAttachment(
             iconBase64Data: iconBase64Data,
-            name: attachment.name.escapeLtGtHtmlString(),
+            name: (attachment.name ?? '').sanitizedBidiForDisplay,
             size: filesize(attachment.size?.value)
           );
           listPrintAttachment.add(printAttachment);
@@ -52,9 +52,9 @@ class PrintFileDataSourceImpl extends PrintFileDataSource {
       return await _printUtils.printEmail(
         appName: emailPrint.appName,
         userName: emailPrint.userName,
-        subject: emailPrint.subject?.escapeLtGtHtmlString() ?? '',
+        subject: emailPrint.subject ?? '',
         emailContent: emailContentEscaped,
-        senderName: emailPrint.sender?.name.escapeLtGtHtmlString() ?? '',
+        senderName: emailPrint.sender?.name ?? '',
         senderEmailAddress: emailPrint.sender?.email ?? '',
         dateTime: emailPrint.receiveTime,
         fromPrefix: emailPrint.fromPrefix,

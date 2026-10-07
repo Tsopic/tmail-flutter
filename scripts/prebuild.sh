@@ -1,38 +1,36 @@
 #!/usr/bin/env bash
 # fail if any commands fails
 set -e
-# debug log
-set -x
+echo "Prebuild started..."
 
-# Sync version from git tag before building
+# Sync the fork app version before resolving workspace packages.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 "$SCRIPT_DIR/sync-version.sh" || echo "Version sync skipped"
 
-# Add additional modules to the end of this, seperated by space
-modules=("core" "model" "contact" "forward" "rule_filter" "fcm" "email_recovery" "server_settings" "scribe" "labels")
+# Single pub get resolves the entire workspace (Dart pub workspaces)
+flutter pub get > /dev/null
+echo "[workspace] pub get done."
 
-for mod in "${modules[@]}"; do
-    (
-        cd "$mod"
-        flutter pub get
-        dart run build_runner build --delete-conflicting-outputs
-    )
-done
+# Pinned browser libs for web/index.html (web/js/vendor, gitignored)
+sh "$(dirname "$0")/fetch-web-vendor.sh"
+echo "[web/vendor] done."
 
-# For Cozy
-cd cozy
-flutter pub get
-cd ../
+# Run build_runner across all workspace members in a single invocation
+dart run build_runner build --workspace > /dev/null
+echo "[workspace] build_runner done."
 
-# For the parent module
-flutter pub get
-dart run build_runner build --delete-conflicting-outputs &&
-    dart run intl_generator:extract_to_arb --output-dir=./lib/l10n lib/main/localizations/app_localizations.dart &&
-    dart run intl_generator:generate_from_arb --output-dir=lib/l10n --no-use-deferred-loading lib/main/localizations/app_localizations.dart lib/l10n/intl*.arb
+# Root module: intl localization generation
+dart run intl_generator:extract_to_arb --output-dir=./lib/l10n lib/main/localizations/app_localizations.dart
+dart run intl_generator:generate_from_arb --output-dir=lib/l10n --no-use-deferred-loading lib/main/localizations/app_localizations.dart lib/l10n/intl*.arb
+echo "[root] Done."
 
-# For scribe module localizations
+# Scribe module: intl localization generation
+echo "[scribe/l10n] Starting..."
 (
    cd scribe
-   dart run intl_generator:extract_to_arb --output-dir=./lib/scribe/ai/l10n lib/scribe/ai/localizations/scribe_localizations.dart &&
-      dart run intl_generator:generate_from_arb --output-dir=lib/scribe/ai/l10n --no-use-deferred-loading lib/scribe/ai/localizations/scribe_localizations.dart lib/scribe/ai/l10n/intl*.arb
+   dart run intl_generator:extract_to_arb --output-dir=./lib/scribe/ai/l10n lib/scribe/ai/localizations/scribe_localizations.dart
+   dart run intl_generator:generate_from_arb --output-dir=lib/scribe/ai/l10n --no-use-deferred-loading lib/scribe/ai/localizations/scribe_localizations.dart lib/scribe/ai/l10n/intl*.arb
 )
+echo "[scribe/l10n] Done."
+
+echo "Prebuild finished."

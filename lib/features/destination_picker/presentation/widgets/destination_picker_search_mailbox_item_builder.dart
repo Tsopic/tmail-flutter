@@ -88,6 +88,7 @@ class DestinationPickerSearchMailboxItemBuilder extends StatelessWidget {
       _presentationMailbox.getMailboxIcon(_imagePaths),
       width: PlatformInfo.isWeb ? 20 : 24,
       height: PlatformInfo.isWeb ? 20 : 24,
+      colorFilter: AppColor.primaryLinShare.asFilter(),
       fit: BoxFit.fill
     );
   }

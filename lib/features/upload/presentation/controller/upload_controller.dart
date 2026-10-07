@@ -7,33 +7,28 @@ import 'package:core/presentation/state/success.dart';
 import 'package:core/utils/app_logger.dart';
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
-import 'package:filesize/filesize.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_body_part.dart';
 import 'package:model/email/attachment.dart';
 import 'package:model/extensions/attachment_extension.dart';
+import 'package:model/extensions/list_attachment_extension.dart';
 import 'package:model/upload/file_info.dart';
 import 'package:tmail_ui_user/features/base/base_controller.dart';
-import 'package:tmail_ui_user/features/base/mixin/message_dialog_action_manager.dart';
 import 'package:tmail_ui_user/features/base/state/base_ui_state.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/upload_attachment_state.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/upload_attachment_interactor.dart';
-import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/mailbox_dashboard_controller.dart';
-import 'package:tmail_ui_user/features/upload/domain/extensions/list_file_info_extension.dart';
 import 'package:tmail_ui_user/features/upload/domain/model/upload_task_id.dart';
 import 'package:tmail_ui_user/features/upload/domain/state/attachment_upload_state.dart';
 import 'package:tmail_ui_user/features/upload/presentation/extensions/upload_attachment_extension.dart';
+import 'package:tmail_ui_user/features/upload/presentation/model/drive_transfer_placeholder.dart';
 import 'package:tmail_ui_user/features/upload/presentation/model/upload_file_state.dart';
 import 'package:tmail_ui_user/features/upload/presentation/model/upload_file_state_list.dart';
 import 'package:tmail_ui_user/features/upload/presentation/model/upload_file_status.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
-import 'package:tmail_ui_user/main/utils/app_config.dart';
 
 class UploadController extends BaseController {
-
-  final _mailboxDashBoardController = Get.find<MailboxDashBoardController>();
 
   final UploadAttachmentInteractor _uploadAttachmentInteractor;
 
@@ -62,8 +57,8 @@ class UploadController extends BaseController {
   @override
   void onClose() {
     listUploadAttachments.clear();
-    _uploadingStateFiles.clear();
-    _uploadingStateInlineFiles.clear();
+    _uploadingStateFiles.cancelAll();
+    _uploadingStateInlineFiles.cancelAll();
     uploadInlineViewState.value = Right(UIClosedState());
     dispatchState(Right(UIClosedState()));
     _progressUploadStateStreamGroup.close();
@@ -219,6 +214,55 @@ class UploadController extends BaseController {
     _refreshListUploadAttachmentState();
   }
 
+  /// Shows a chip for every picked drive file up front, before any transfer starts.
+  void addDownloadingPlaceholders(List<DriveTransferPlaceholder> placeholders) {
+    if (placeholders.isEmpty) return;
+    _uploadingStateFiles.addAll(placeholders.map((placeholder) => UploadFileState(
+      placeholder.taskId,
+      file: FileInfo(
+        fileName: placeholder.fileName,
+        fileSize: placeholder.fileSize,
+        type: placeholder.mimeType,
+      ),
+      uploadStatus: UploadFileStatus.waiting,
+      cancelToken: placeholder.cancelToken,
+    )));
+    _refreshListUploadAttachmentState();
+  }
+
+  /// Resolves a drive-transfer chip to succeed with its attachment.
+  void resolveDriveTransferSuccess(UploadTaskId taskId, Attachment attachment) {
+    final found = _uploadingStateFiles.updateElementByUploadTaskId(
+      taskId,
+      (state) => state?.copyWith(
+        uploadingProgress: 100,
+        uploadStatus: UploadFileStatus.succeed,
+        attachment: attachment,
+      ),
+    );
+    if (!found) {
+      logWarning(
+        'UploadController::resolveDriveTransferSuccess: taskId not found in state list',
+      );
+    }
+    _refreshListUploadAttachmentState();
+  }
+
+  /// Resolves a drive-transfer chip to failed by removing it, matching the
+  /// plain-upload failure path.
+  void resolveDriveTransferFailure(UploadTaskId taskId) {
+    final found = _uploadingStateFiles.deleteElementByUploadTaskId(taskId);
+    if (!found) {
+      logWarning(
+        'UploadController::resolveDriveTransferFailure: taskId not found in state list',
+      );
+    }
+    _refreshListUploadAttachmentState();
+    _showToastMessageWhenUploadAttachmentsFailure(
+      ErrorAttachmentUploadState(uploadId: taskId),
+    );
+  }
+
   Future<void> justUploadAttachmentsAction({
     required List<FileInfo> uploadFiles,
     required Uri uploadUri,
@@ -267,6 +311,13 @@ class UploadController extends BaseController {
       .toList();
   }
 
+  /// Bytes of every regular (non-inline) attachment, whether newly picked or
+  /// already attached (e.g. restored from a draft), unlike [attachmentsPicked]
+  /// which only sees entries that still carry a [FileInfo].
+  int get regularAttachmentsTotalBytes => listUploadAttachments
+      .fold<num>(0, (total, fileState) => total + fileState.fileSize)
+      .toInt();
+
   UploadFileState? getUploadFileId(UploadTaskId id) {
     return listUploadAttachments
         .firstWhereOrNull((fileState) => fileState.uploadTaskId == id);
@@ -288,6 +339,10 @@ class UploadController extends BaseController {
         AppLocalizations.of(currentContext!).can_not_upload_this_file_as_attachments,
         leadingSVGIconColor: Colors.white,
         leadingSVGIcon: imagePaths.icAttachment);
+    } else {
+      logWarning(
+        'UploadController::_showToastMessageWhenUploadAttachmentsFailure: no context to show failure',
+      );
     }
   }
 
@@ -299,104 +354,6 @@ class UploadController extends BaseController {
         leadingSVGIconColor: Colors.white,
         leadingSVGIcon: imagePaths.icAttachment);
     }
-  }
-
-  bool isExceededMaxSizeAttachmentsPerEmail({num totalSizePreparedFiles = 0}) {
-    final currentTotalSize = attachmentsPicked.totalSize + inlineAttachmentsPicked.totalSize + totalSizePreparedFiles;
-    final maxSizeAttachmentsPerEmail = _mailboxDashBoardController.maxSizeAttachmentsPerEmail?.value;
-    log('UploadController::isExceededMaxSizeAttachmentsPerEmail(): currentTotalSize = $currentTotalSize | maxSizeAttachmentsPerEmail = $maxSizeAttachmentsPerEmail');
-    if (maxSizeAttachmentsPerEmail != null) {
-      return currentTotalSize > maxSizeAttachmentsPerEmail;
-    } else {
-      return false;
-    }
-  }
-
-  bool isExceededWarningAttachmentFileSizeInComposer({num totalSizePreparedFiles = 0}) {
-    final currentTotalSizeAttachments = attachmentsPicked.totalSize + totalSizePreparedFiles;
-    const maximumBytesSizeFileAttachedInComposer = AppConfig.warningAttachmentFileSizeInMegabytes * 1024 * 1024;
-    log('UploadController::isExceededMaxSizeFilesAttachedInComposer(): currentTotalSizeAttachments = $currentTotalSizeAttachments | maximumBytesSizeFileAttachedInComposer = $maximumBytesSizeFileAttachedInComposer');
-    return currentTotalSizeAttachments > maximumBytesSizeFileAttachedInComposer;
-  }
-
-  void validateTotalSizeAttachmentsBeforeUpload({
-    required num totalSizePreparedFiles,
-    num? totalSizePreparedFilesWithDispositionAttachment,
-    VoidCallback? onValidationSuccess
-  }) {
-    log('UploadController::_validateTotalSizeAttachmentsBeforeUpload: totalSizePreparedFiles = $totalSizePreparedFiles');
-    if (isExceededMaxSizeAttachmentsPerEmail(totalSizePreparedFiles: totalSizePreparedFiles)) {
-      if (currentContext == null) {
-        log('UploadController::_validateTotalSizeAttachmentsBeforeUpload: CONTEXT IS NULL');
-        return;
-      }
-
-      _showConfirmDialogWhenExceededMaxSizeAttachmentsPerEmail(context: currentContext!);
-      return;
-    }
-
-    if (isExceededWarningAttachmentFileSizeInComposer(totalSizePreparedFiles: totalSizePreparedFilesWithDispositionAttachment ?? totalSizePreparedFiles)) {
-      if (currentContext == null) {
-        log('UploadController::_validateTotalSizeAttachmentsBeforeUpload: CONTEXT IS NULL');
-        return;
-      }
-
-      _showWarningDialogWhenExceededMaxSizeFilesAttachedInComposer(
-        context: currentContext!,
-        confirmAction: () async {
-          await Future.delayed(
-            const Duration(milliseconds: 100),
-            onValidationSuccess
-          );
-        }
-      );
-      return;
-    }
-
-    onValidationSuccess?.call();
-  }
-
-  void validateTotalSizeInlineAttachmentsBeforeUpload({
-    required num totalSizePreparedFiles,
-    VoidCallback? onValidationSuccess
-  }) {
-    if (isExceededMaxSizeAttachmentsPerEmail(totalSizePreparedFiles: totalSizePreparedFiles)) {
-      if (currentContext == null) {
-        log('UploadController::validateTotalSizeInlineAttachmentsBeforeUpload: CONTEXT IS NULL');
-        return;
-      }
-
-      _showConfirmDialogWhenExceededMaxSizeAttachmentsPerEmail(context: currentContext!);
-      return;
-    }
-
-    onValidationSuccess?.call();
-  }
-
-  void _showConfirmDialogWhenExceededMaxSizeAttachmentsPerEmail({required BuildContext context}) {
-    final maxSizeAttachmentsPerEmail = filesize(_mailboxDashBoardController.maxSizeAttachmentsPerEmail?.value ?? 0, 0);
-    MessageDialogActionManager().showConfirmDialogAction(
-      context,
-      AppLocalizations.of(context).message_dialog_upload_attachments_exceeds_maximum_size(maxSizeAttachmentsPerEmail),
-      AppLocalizations.of(context).got_it,
-      title: AppLocalizations.of(context).maximum_files_size,
-      hasCancelButton: false);
-  }
-
-  void _showWarningDialogWhenExceededMaxSizeFilesAttachedInComposer({
-    required BuildContext context,
-    VoidCallback? confirmAction,
-  }) {
-    final appLocalizations = AppLocalizations.of(context);
-    MessageDialogActionManager().showConfirmDialogAction(
-      context,
-      title: '',
-      appLocalizations.warningMessageWhenExceedGenerallySizeInComposer,
-      appLocalizations.continueAction,
-      cancelTitle: appLocalizations.cancel,
-      alignCenter: true,
-      onConfirmAction: confirmAction,
-    );
   }
 
   bool get allUploadAttachmentsCompleted {
@@ -448,6 +405,14 @@ class UploadController extends BaseController {
     );
   }
 
+  /// Bytes of every inline attachment, whether newly picked or already
+  /// attached, unlike [inlineAttachmentsPicked] which only sees entries that
+  /// still carry a [FileInfo].
+  int get inlineAttachmentsTotalBytes => _uploadingStateInlineFiles.uploadingStateFiles
+      .nonNulls
+      .fold<num>(0, (total, fileState) => total + fileState.fileSize)
+      .toInt();
+
   Map<String, Attachment> get mapInlineAttachments {
     if (_uploadingStateInlineFiles.uploadingStateFiles.isEmpty) {
       return {};
@@ -472,6 +437,45 @@ class UploadController extends BaseController {
     ...attachmentsUploaded,
     ...inlineAttachmentsUploaded,
   ];
+
+  void refreshAllAttachments(
+    List<Attachment> attachments,
+    List<Attachment> htmlBodyAttachments,
+  ) {
+    final regularAttachments = attachments.getListAttachmentsDisplayedOutside(htmlBodyAttachments);
+    final inlineAttachments = attachments.listAttachmentsDisplayedInContent;
+
+    // A still-running upload has no blob yet, so the server response cannot
+    // rebuild it; dropping it would strand the request and lose its chip.
+    final pendingRegularStates = _pendingStatesOf(_uploadingStateFiles);
+    final pendingInlineStates = _pendingStatesOf(_uploadingStateInlineFiles);
+
+    _uploadingStateFiles.clear();
+    _uploadingStateFiles.addAll(_toUploadFileStates(regularAttachments));
+    _uploadingStateFiles.addAll(pendingRegularStates);
+
+    _uploadingStateInlineFiles.clear();
+    _uploadingStateInlineFiles.addAll(_toUploadFileStates(inlineAttachments));
+    _uploadingStateInlineFiles.addAll(pendingInlineStates);
+
+    _refreshListUploadAttachmentState();
+    log('UploadController::refreshAllAttachments(): regular=${regularAttachments.length} | inline=${inlineAttachments.length}');
+  }
+
+  List<UploadFileState> _pendingStatesOf(UploadFileStateList stateList) =>
+    stateList.uploadingStateFiles
+      .nonNulls
+      .where((fileState) => !fileState.uploadStatus.completed)
+      .toList();
+
+  Iterable<UploadFileState> _toUploadFileStates(List<Attachment> attachments) =>
+    attachments
+      .where((a) => a.blobId != null)
+      .map((a) => UploadFileState(
+        UploadTaskId(a.blobId!.value),
+        uploadStatus: UploadFileStatus.succeed,
+        attachment: a,
+      ));
 
   void _handleUploadAttachmentFailure(UploadAttachmentFailure failure) {
     if (currentContext != null && currentOverlayContext != null) {

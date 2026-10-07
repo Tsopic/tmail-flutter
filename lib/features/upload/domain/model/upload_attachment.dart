@@ -11,7 +11,7 @@ import 'package:model/upload/file_info.dart';
 import 'package:tmail_ui_user/features/upload/data/network/file_uploader.dart';
 import 'package:tmail_ui_user/features/upload/domain/model/upload_task_id.dart';
 import 'package:tmail_ui_user/features/upload/domain/state/attachment_upload_state.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 class UploadAttachment with EquatableMixin {
 
@@ -61,10 +61,21 @@ class UploadAttachment with EquatableMixin {
 
       _updateEvent(Right(SuccessAttachmentUploadState(uploadTaskId, attachment, fileInfo)));
     } catch (error, stackTrace) {
-      logWarning('UploadAttachment::upload():ERROR: $error');
       if (error is DioException && error.type == DioExceptionType.cancel) {
         _updateEvent(Left(CancelAttachmentUploadState(uploadTaskId)));
       } else {
+        // Single logging point for attachment upload failures; the controller
+        // only shows the toast.
+        logError(
+          'UploadAttachment::upload failed',
+          exception: error,
+          stackTrace: stackTrace,
+          // File name stays out: extras reach Sentry.
+          extras: {
+            'mimeType': fileInfo.mimeType,
+            'isInline': fileInfo.isInline,
+          },
+        );
         try {
           exceptionThrower.throwException(error, stackTrace);
         } catch (e) {

@@ -1,6 +1,7 @@
 import 'package:core/core.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_portal/flutter_portal.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -9,25 +10,29 @@ import 'package:labels/model/label.dart';
 import 'package:model/model.dart';
 import 'package:tmail_ui_user/features/base/mixin/app_loader_mixin.dart';
 import 'package:tmail_ui_user/features/base/mixin/popup_menu_widget_mixin.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/base/widget/clean_messages_banner.dart';
 import 'package:tmail_ui_user/features/base/widget/compose_floating_button.dart';
 import 'package:tmail_ui_user/features/base/widget/keyboard/keyboard_handler_wrapper.dart';
-import 'package:tmail_ui_user/features/base/widget/popup_menu/popup_menu_action_group_widget.dart';
 import 'package:tmail_ui_user/features/base/widget/report_message_banner.dart';
 import 'package:tmail_ui_user/features/email/presentation/extensions/presentation_email_extension.dart';
 import 'package:tmail_ui_user/features/email/presentation/model/composer_arguments.dart';
-import 'package:tmail_ui_user/features/email/presentation/model/context_item_email_action.dart';
-import 'package:tmail_ui_user/features/email/presentation/model/popup_menu_item_email_action.dart';
+import 'package:tmail_ui_user/features/labels/presentation/extensions/handle_label_action_type_extension.dart';
+import 'package:tmail_ui_user/features/labels/presentation/mixin/label_sub_menu_mixin.dart';
+import 'package:tmail_ui_user/features/labels/presentation/models/label_action_type.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/state/clear_mailbox_state.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/state/mark_as_mailbox_read_state.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/state/move_folder_content_state.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/model/presentation_label_mailbox.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/extensions/presentation_mailbox_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/model/spam_report_state.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_ai_needs_action_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_open_context_menu_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/labels/handle_logic_label_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/open_and_close_composer_extension.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/empty_trash_banner_widget.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/recover_deleted_message_loading_banner_widget.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/notifier/search_view_state_notifier.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/notifier/search_email_presentation_notifier.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/extensions/vacation_response_extension.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/vacation/widgets/vacation_notification_message_widget.dart';
 import 'package:tmail_ui_user/features/network_connection/presentation/network_connection_banner_widget.dart';
@@ -44,7 +49,7 @@ import 'package:tmail_ui_user/features/thread/presentation/extensions/handle_pre
 import 'package:tmail_ui_user/features/thread/presentation/extensions/handle_pull_to_refresh_list_email_extension.dart';
 import 'package:tmail_ui_user/features/thread/presentation/extensions/handle_select_message_filter_extension.dart';
 import 'package:tmail_ui_user/features/thread/presentation/extensions/handle_shift_selection_email_extension.dart';
-import 'package:tmail_ui_user/features/thread/presentation/model/delete_action_type.dart';
+import 'package:tmail_ui_user/features/thread/presentation/mixin/email_more_action_context_menu_mixin.dart';
 import 'package:tmail_ui_user/features/thread/presentation/model/loading_more_status.dart';
 import 'package:tmail_ui_user/features/thread/presentation/styles/item_email_tile_styles.dart';
 import 'package:tmail_ui_user/features/thread/presentation/styles/scroll_to_top_button_widget_styles.dart';
@@ -56,11 +61,14 @@ import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_bu
 import 'package:tmail_ui_user/features/thread/presentation/widgets/empty_emails_widget.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/scroll_to_top_button_widget.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/thread_view_loading_bar_widget.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/dialogs/empty_trash_confirmation_dialog.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
-import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 
 class ThreadView extends GetWidget<ThreadController>
-  with AppLoaderMixin, PopupMenuWidgetMixin {
+  with AppLoaderMixin,
+      PopupMenuWidgetMixin,
+      LabelSubMenuMixin,
+      EmailMoreActionContextMenu {
 
   ThreadView({Key? key}) : super(key: key);
 
@@ -82,6 +90,9 @@ class ThreadView extends GetWidget<ThreadController>
                     if (!controller.responsiveUtils.isWebDesktop(context))
                       ... [
                         Obx(() {
+                          final isLabelAvailable =
+                              controller.mailboxDashBoardController.isLabelAvailable;
+
                           return MobileAppBarThreadWidget(
                             responsiveUtils: controller.responsiveUtils,
                             imagePaths: controller.imagePaths,
@@ -103,6 +114,7 @@ class ThreadView extends GetWidget<ThreadController>
                                   type,
                                   emails,
                                   controller.selectedMailbox,
+                                  isLabelAvailable,
                                 ),
                             );
                         }),
@@ -206,26 +218,8 @@ class ThreadView extends GetWidget<ThreadController>
                           selectedMailbox,
                         );
 
-                      if (showTrashBanner) {
-                        return CleanMessagesBanner(
-                          responsiveUtils: controller.responsiveUtils,
-                          key: const Key('empty_trash_banner'),
-                          message: AppLocalizations
-                            .of(context)
-                            .message_delete_all_email_in_trash_button,
-                          positiveAction: AppLocalizations
-                            .of(context)
-                            .empty_trash_now,
-                          onPositiveAction: () =>
-                            controller.deleteSelectionEmailsPermanently(
-                              context,
-                              DeleteActionType.all,
-                            ),
-                          margin: ThreadViewStyle.getBannerMargin(
-                            context,
-                            controller.responsiveUtils,
-                          ),
-                        );
+                      if (showTrashBanner && selectedMailbox != null) {
+                        return _buildEmptyTrashBanner(context, selectedMailbox);
                       } else if (showSpamBanner) {
                         return CleanMessagesBanner(
                           responsiveUtils: controller.responsiveUtils,
@@ -245,7 +239,7 @@ class ThreadView extends GetWidget<ThreadController>
                         );
                       } else {
                         return const SizedBox.shrink(
-                          key: Key('clean_message_banner_not_visible'),
+                          key: Key(UiKeys.cleanMessageBannerNotVisible),
                         );
                       }
                     }),
@@ -330,21 +324,24 @@ class ThreadView extends GetWidget<ThreadController>
       return const SizedBox.shrink();
     }
 
-    return Obx(() {
-      final isAdvancedSearchViewOpen = controller.searchController.isAdvancedSearchViewOpen.value;
-      final isTrashViewOpen = controller.isMailboxTrash;
-      final isSelectModeActive = controller.mailboxDashBoardController.currentSelectMode.value == SelectMode.ACTIVE;
-      if (
-        !controller.searchController.isSearchActive()
-        && !isAdvancedSearchViewOpen
-        && !isTrashViewOpen
-        && !isSelectModeActive
-      ) {
+    return Consumer(builder: (context, ref, child) {
+      final isSearchActive = ref.watch(
+        searchViewStateProvider.select((state) => state.isSearchActive),
+      );
+      final isAdvancedSearchViewOpen = ref.watch(
+        searchViewStateProvider.select((state) => state.isAdvancedSearchViewOpen),
+      );
+      return Obx(() {
+      if (_canShowComposeButton(
+        isSearchActive: isSearchActive,
+        isAdvancedSearchViewOpen: isAdvancedSearchViewOpen,
+      )) {
         return Container(
           padding: PlatformInfo.isMobile && controller.listEmailSelected.isNotEmpty
             ? EdgeInsets.only(bottom: controller.responsiveUtils.isTabletLarge(context) ? 85 : 70)
             : EdgeInsets.zero,
           child: ComposeFloatingButton(
+            key: const ValueKey(UiKeys.composeEmailButton),
             scrollController: controller.listEmailController,
             onTap: () => controller.mailboxDashBoardController.openComposer(ComposerArguments())
           ),
@@ -352,7 +349,19 @@ class ThreadView extends GetWidget<ThreadController>
       } else {
         return const SizedBox.shrink();
       }
+      });
     });
+  }
+
+  bool _canShowComposeButton({
+    required bool isSearchActive,
+    required bool isAdvancedSearchViewOpen,
+  }) {
+    if (isSearchActive) return false;
+    if (isAdvancedSearchViewOpen) return false;
+    if (controller.isMailboxTrash) return false;
+    return controller.mailboxDashBoardController.currentSelectMode.value !=
+        SelectMode.ACTIVE;
   }
 
   Widget _buildResultListEmail(BuildContext context, List<PresentationEmail> listPresentationEmail) {
@@ -451,25 +460,45 @@ class ThreadView extends GetWidget<ThreadController>
   }
 
   Widget _buildLoadMoreButton(BuildContext context, LoadingMoreStatus loadingMoreStatus) {
-    if (((controller.canLoadMore && !controller.isSearchActive) ||
-        (controller.canSearchMore && controller.isSearchActive)) &&
-        !loadingMoreStatus.isRunning) {
-      return Center(
-        child: OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          ),
-          onPressed: controller.handleLoadMoreEmailsRequest,
-          child: Text(
-            AppLocalizations.of(context).loadMore,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.black
-            )
-          ),
-        ),
+    return Consumer(builder: (context, ref, child) {
+      final isSearchEmailRunning = ref.watch(
+        searchViewStateProvider.select((state) => state.isSearchEmailRunning),
       );
-    }
-    return const SizedBox.shrink();
+      final canSearchMore = ref.watch(
+        searchEmailPresentationProvider.select((state) => state.canSearchMore),
+      );
+      if (_canShowLoadMoreButton(
+        isSearchEmailRunning: isSearchEmailRunning,
+        canSearchMore: canSearchMore,
+        loadingMoreStatus: loadingMoreStatus,
+      )) {
+        return Center(
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            ),
+            onPressed: controller.handleLoadMoreEmailsRequest,
+            child: Text(
+              AppLocalizations.of(context).loadMore,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.black
+              )
+            ),
+          ),
+        );
+      }
+      return const SizedBox.shrink();
+    });
+  }
+
+  bool _canShowLoadMoreButton({
+    required bool isSearchEmailRunning,
+    required bool canSearchMore,
+    required LoadingMoreStatus loadingMoreStatus,
+  }) {
+    if (loadingMoreStatus.isRunning) return false;
+    if (isSearchEmailRunning) return canSearchMore;
+    return controller.canLoadMore;
   }
 
   Widget _buildLoadMoreProgressBar(LoadingMoreStatus loadingMoreStatus) {
@@ -511,7 +540,11 @@ class ThreadView extends GetWidget<ThreadController>
   Widget _buildEmailItemWhenDragging(BuildContext context, PresentationEmail presentationEmail) {
     final dashboardController = controller.mailboxDashBoardController;
 
-    return Obx(() {
+    return Consumer(builder: (context, ref, child) {
+      final isSearchEmailRunning = ref.watch(
+        searchViewStateProvider.select((state) => state.isSearchEmailRunning),
+      );
+      return Obx(() {
       final selectAllMode = dashboardController.currentSelectMode.value;
 
       final isSenderImportantFlagEnabled =
@@ -520,10 +553,10 @@ class ThreadView extends GetWidget<ThreadController>
       final isShowingEmailContent =
           dashboardController.selectedEmail.value?.id == presentationEmail.id;
 
-      final isSearchEmailRunning =
-          controller.searchController.isSearchEmailRunning;
-
       final isAINeedsActionEnabled = dashboardController.isAINeedsActionEnabled;
+
+      final isLabelMailboxOpened =
+          dashboardController.selectedMailbox.value?.isLabelMailbox == true;
 
       return EmailTileBuilder(
         key: Key('email_tile_builder_${presentationEmail.id?.asString}'),
@@ -533,15 +566,135 @@ class ThreadView extends GetWidget<ThreadController>
         searchQuery: controller.searchQuery,
         mailboxContain: presentationEmail.mailboxContain,
         isSearchEmailRunning: isSearchEmailRunning,
+        isLabelMailboxOpened: isLabelMailboxOpened,
         isDrag: true,
         isSenderImportantFlagEnabled: isSenderImportantFlagEnabled,
         isAINeedsActionEnabled: isAINeedsActionEnabled,
       );
+      });
     });
   }
 
   Widget _buildEmailItemNotDraggable(BuildContext context, PresentationEmail presentationEmail) {
-    final backgroundWidget = Container(
+    final dashboardController = controller.mailboxDashBoardController;
+
+    return Consumer(builder: (context, ref, child) {
+      final isSearchEmailRunning = ref.watch(
+        searchViewStateProvider.select((state) => state.isSearchEmailRunning),
+      );
+      return Obx(() {
+      final selectModeAll = dashboardController.currentSelectMode.value;
+
+      final isSenderImportantFlagEnabled =
+          dashboardController.isSenderImportantFlagEnabled.value;
+
+      final isShowingEmailContent =
+          dashboardController.selectedEmail.value?.id == presentationEmail.id;
+
+      final isAINeedsActionEnabled = dashboardController.isAINeedsActionEnabled;
+
+      final isLabelAvailable = controller
+          .mailboxDashBoardController.isLabelAvailable;
+
+      final listLabels =
+          controller.mailboxDashBoardController.labelController.labels;
+
+      final isLabelMailboxOpened =
+          controller.selectedMailbox?.isLabelMailbox == true;
+
+      List<Label>? emailLabels;
+
+      if (isLabelAvailable) {
+        emailLabels = presentationEmail.getLabelList(listLabels);
+      }
+
+      return Dismissible(
+        key: ValueKey<EmailId?>(presentationEmail.id),
+        direction: controller.getSwipeDirection(
+            controller.responsiveUtils.isWebDesktop(context),
+            selectModeAll,
+            presentationEmail
+        ),
+        background: _buildEmailSwipeBackground(context, presentationEmail),
+        secondaryBackground: controller.isInArchiveMailbox(presentationEmail)
+            ? null
+            : buildEmailSwipeSecondaryBackground(context, controller.imagePaths),
+        confirmDismiss: (direction) => controller.swipeEmailAction(
+          presentationEmail,
+          direction,
+        ),
+        child: EmailTileBuilder(
+          key: Key('email_tile_builder_${presentationEmail.id?.asString}'),
+          presentationEmail: presentationEmail,
+          selectAllMode: selectModeAll,
+          isShowingEmailContent: isShowingEmailContent,
+          isSenderImportantFlagEnabled: isSenderImportantFlagEnabled,
+          searchQuery: controller.searchQuery,
+          mailboxContain: presentationEmail.mailboxContain,
+          isSearchEmailRunning: isSearchEmailRunning,
+          isAINeedsActionEnabled: isAINeedsActionEnabled,
+          isLabelMailboxOpened: isLabelMailboxOpened,
+          labels: emailLabels,
+          emailActionClick: _handleEmailActionClicked,
+          onMoreActionClick: (email, position) => _openMoreActionForEmail(
+            context: context,
+            email: email,
+            position: position,
+            isLabelAvailable: isLabelAvailable,
+            listLabels: listLabels,
+          ),
+        ),
+      );
+      });
+    });
+  }
+
+  Future<void> _openMoreActionForEmail({
+    required BuildContext context,
+    required PresentationEmail email,
+    required RelativeRect? position,
+    required bool isLabelAvailable,
+    required List<Label> listLabels,
+  }) async {
+    final dashboardController = controller.mailboxDashBoardController;
+    await openMoreActionContextMenu(
+      EmailContextMenuParams(
+        context: context,
+        email: email,
+        imagePaths: controller.imagePaths,
+        isLabelAvailable: isLabelAvailable,
+        labels: listLabels,
+        position: position,
+        openBottomSheetContextMenu: dashboardController.openBottomSheetContextMenu,
+        openPopupMenu: dashboardController.openPopupMenuActionGroup,
+        onHandleEmailByActionType: controller.handleEmailActionType,
+        onSelectLabelAction: (label, isSelected) {
+          final emailId = email.id;
+          if (emailId == null) {
+            logWarning('ThreadView::onSelectLabelAction: Email id is null');
+            return;
+          }
+          dashboardController.toggleLabelToEmail(emailId, label, isSelected);
+        },
+        onCreateANewLabelAction: () {
+          final emailId = email.id;
+          if (emailId == null) {
+            logWarning('ThreadView::onCreateANewLabelAction: Email id is null');
+            return;
+          }
+          dashboardController.labelController.handleLabelActionType(
+            actionType: LabelActionType.create,
+            accountId: dashboardController.accountId.value,
+            onLabelActionCallback: (label) =>
+                dashboardController.toggleLabelToEmail(emailId, label, true),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmailSwipeBackground(BuildContext context, PresentationEmail presentationEmail) {
+    return Container(
       color: AppColor.colorItemRecipientSelected,
       padding: const EdgeInsetsDirectional.only(start: 16),
       alignment: AlignmentDirectional.centerStart,
@@ -551,10 +704,7 @@ class ThreadView extends GetWidget<ThreadController>
             backgroundColor: AppColor.colorSpamReportBannerBackground,
             radius: 24,
             child: !presentationEmail.hasRead
-                ? SvgPicture.asset(
-                    controller.imagePaths.icMarkAsRead,
-                    fit: BoxFit.fill,
-                  )
+                ? SvgPicture.asset(controller.imagePaths.icMarkAsRead, fit: BoxFit.fill)
                 : SvgPicture.asset(
                     controller.imagePaths.icUnreadEmail,
                     fit: BoxFit.fill,
@@ -574,95 +724,36 @@ class ThreadView extends GetWidget<ThreadController>
         ],
       ),
     );
+  }
 
-    final isInArchiveMailbox = controller.isInArchiveMailbox(presentationEmail);
-    final secondaryBackgroundWidget = !isInArchiveMailbox
-        ? Container(
-            color: AppColor.colorItemRecipientSelected,
-            padding: const EdgeInsetsDirectional.only(end: 16),
-            alignment: AlignmentDirectional.centerEnd,
-            child: Row(
-              children: [
-                const Spacer(),
-                CircleAvatar(
-                  backgroundColor: AppColor.colorSpamReportBannerBackground,
-                  radius: 24,
-                  child: SvgPicture.asset(
-                    controller.imagePaths.icMailboxArchived,
-                    fit: BoxFit.fill,
-                  ),
-                ),
-                const SizedBox(width: 11),
-                Text(
-                  AppLocalizations.of(context).archiveMessage,
-                  style: ThemeUtils.defaultTextStyleInterFont.copyWith(
-                    fontSize: 15,
-                    color: AppColor.primaryColor,
-                  ),
-                ),
-              ],
+  @visibleForTesting
+  static Widget buildEmailSwipeSecondaryBackground(
+    BuildContext context,
+    ImagePaths imagePaths,
+  ) {
+    return Container(
+      color: AppColor.colorItemRecipientSelected,
+      padding: const EdgeInsetsDirectional.only(end: 16),
+      alignment: AlignmentDirectional.centerEnd,
+      child: Row(
+        children: [
+          const Spacer(),
+          CircleAvatar(
+            backgroundColor: AppColor.colorSpamReportBannerBackground,
+            radius: 24,
+            child: SvgPicture.asset(imagePaths.icMailboxArchivedAction, colorFilter: AppColor.primaryLinShare.asFilter(), fit: BoxFit.fill),
+          ),
+          const SizedBox(width: 11),
+          Text(
+            AppLocalizations.of(context).archiveMessage,
+            style: ThemeUtils.defaultTextStyleInterFont.copyWith(
+              fontSize: 15,
+              color: AppColor.primaryColor,
             ),
-          )
-        : null;
-
-    final dashboardController = controller.mailboxDashBoardController;
-
-    return Obx(() {
-      final selectModeAll = dashboardController.currentSelectMode.value;
-
-      final isSenderImportantFlagEnabled =
-          dashboardController.isSenderImportantFlagEnabled.value;
-
-      final isShowingEmailContent =
-          dashboardController.selectedEmail.value?.id == presentationEmail.id;
-
-      final isSearchEmailRunning =
-          controller.searchController.isSearchEmailRunning;
-
-      final isAINeedsActionEnabled = dashboardController.isAINeedsActionEnabled;
-
-      final isLabelAvailable = controller
-          .mailboxDashBoardController.isLabelAvailable;
-
-        final listLabels =
-            controller.mailboxDashBoardController.labelController.labels;
-
-        List<Label>? emailLabels;
-
-        if (isLabelAvailable) {
-          emailLabels = presentationEmail.getLabelList(listLabels);
-        }
-
-      return Dismissible(
-        key: ValueKey<EmailId?>(presentationEmail.id),
-        direction: controller.getSwipeDirection(
-            controller.responsiveUtils.isWebDesktop(context),
-            selectModeAll,
-            presentationEmail
-        ),
-        background: backgroundWidget,
-        secondaryBackground: secondaryBackgroundWidget,
-        confirmDismiss: (direction) => controller.swipeEmailAction(
-          presentationEmail,
-          direction,
-        ),
-        child: EmailTileBuilder(
-          key: Key('email_tile_builder_${presentationEmail.id?.asString}'),
-          presentationEmail: presentationEmail,
-          selectAllMode: selectModeAll,
-          isShowingEmailContent: isShowingEmailContent,
-          isSenderImportantFlagEnabled: isSenderImportantFlagEnabled,
-          searchQuery: controller.searchQuery,
-          mailboxContain: presentationEmail.mailboxContain,
-          isSearchEmailRunning: isSearchEmailRunning,
-          isAINeedsActionEnabled: isAINeedsActionEnabled,
-          labels: emailLabels,
-          emailActionClick: _handleEmailActionClicked,
-          onMoreActionClick: (email, position) =>
-              _handleEmailContextMenuAction(context, email, position),
-        ),
-      );
-    });
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleEmailActionClicked(
@@ -672,87 +763,8 @@ class ThreadView extends GetWidget<ThreadController>
     controller.handleEmailActionType(
       actionType,
       presentationEmail,
-      mailboxContain: presentationEmail.mailboxContain,
+      presentationEmail.mailboxContain,
     );
-  }
-
-  Future<void> _handleEmailContextMenuAction(
-    BuildContext context,
-    PresentationEmail presentationEmail,
-    RelativeRect? position
-  ) {
-    final mailboxContain = presentationEmail.mailboxContain;
-    final isDrafts = mailboxContain?.isDrafts ?? false;
-    final isChildOfTeamMailboxes =
-        mailboxContain?.isChildOfTeamMailboxes ?? false;
-    final isSpam = mailboxContain?.isSpam ?? false;
-    final isArchive = mailboxContain?.isArchive ?? false;
-    final isTemplates = mailboxContain?.isTemplates ?? false;
-    final isRead = presentationEmail.hasRead;
-    final isTrash = mailboxContain?.isTrash ?? false;
-    final canPermanentlyDelete = isDrafts || isSpam || isTrash;
-
-    final listEmailActions = [
-      isRead ? EmailActionType.markAsUnread : EmailActionType.markAsRead,
-      EmailActionType.moveToMailbox,
-      canPermanentlyDelete ? EmailActionType.deletePermanently : EmailActionType.moveToTrash,
-      EmailActionType.openInNewTab,
-      if (!isDrafts && !isChildOfTeamMailboxes)
-        isSpam ? EmailActionType.unSpam : EmailActionType.moveToSpam,
-      if (!isArchive) EmailActionType.archiveMessage,
-      if (!isDrafts && !isTemplates) EmailActionType.editAsNewEmail,
-    ];
-
-    if (position == null) {
-      final contextMenuActions = listEmailActions
-          .map((action) => ContextItemEmailAction(
-                action,
-                AppLocalizations.of(context),
-                controller.imagePaths,
-                category: action.category,
-              ))
-          .toList();
-
-      return controller.mailboxDashBoardController.openBottomSheetContextMenu(
-        context: context,
-        itemActions: contextMenuActions,
-        onContextMenuActionClick: (menuAction) {
-          popBack();
-          controller.handleEmailActionType(
-            menuAction.action,
-            presentationEmail,
-            mailboxContain: presentationEmail.mailboxContain,
-          );
-        },
-        useGroupedActions: true,
-      );
-    } else {
-      final popupMenuItemEmailActions = listEmailActions.map((actionType) {
-        return PopupMenuItemEmailAction(
-          actionType,
-          AppLocalizations.of(context),
-          controller.imagePaths,
-          category: actionType.category,
-        );
-      }).toList();
-
-      final popupMenuWidget = PopupMenuActionGroupWidget(
-        actions: popupMenuItemEmailActions,
-        onActionSelected: (action) {
-          controller.handleEmailActionType(
-            action.action,
-            presentationEmail,
-            mailboxContain: mailboxContain,
-          );
-        },
-      );
-
-      return controller.mailboxDashBoardController.openPopupMenuActionGroup(
-        context,
-        position,
-        popupMenuWidget,
-      );
-    }
   }
 
   Widget _buildFeedBackWidget(BuildContext context) {
@@ -815,19 +827,32 @@ class ThreadView extends GetWidget<ThreadController>
             deepRefreshText: AppLocalizations.of(context).deepRefresh,
             pullHarderForText: AppLocalizations.of(context).pullHarderFor,
             child: EmptyEmailsWidget(
-              key: const Key('empty_thread_view'),
+              key: const Key(UiKeys.emptyThreadView),
               isNetworkConnectionAvailable: controller.networkConnectionController.isNetworkConnectionAvailable(),
               isSearchActive: controller.isSearchActive,
               isFilterMessageActive: controller.mailboxDashBoardController.filterMessageOption.value != FilterMessageOption.all,
               isFavoriteFolder: controller.selectedMailbox?.isFavorite == true,
               isActionRequiredFolder: controller.selectedMailbox?.isActionRequired == true,
-              isLabelMailbox:
-                controller.selectedMailbox is PresentationLabelMailbox,
+              isLabelMailbox: controller.selectedMailbox?.isLabelMailbox == true,
             ),
           );
         }
       }
     ));
+  }
+
+  Widget _buildEmptyTrashBanner(BuildContext context, PresentationMailbox mailbox) {
+    final dashboardController = controller.mailboxDashBoardController;
+    return EmptyTrashBannerWidget(
+      responsiveUtils: controller.responsiveUtils,
+      mailbox: mailbox,
+      confirmCallback: (ctx, mailbox) => EmptyTrashConfirmationDialog.show(
+        ctx,
+        responsiveUtils: controller.responsiveUtils,
+        onConfirm: () => dashboardController.emptyTrashFolderAction(trashMailbox: mailbox),
+      ),
+      margin: ThreadViewStyle.getBannerMargin(context, controller.responsiveUtils),
+    );
   }
 
   Widget _buildMailboxActionProgressBanner(BuildContext context) {

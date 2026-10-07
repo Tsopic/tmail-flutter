@@ -229,6 +229,7 @@ extension PreviewAttachmentDownloadControllerExtension on DownloadController {
             attachment: attachment,
             accountId: accountId,
             downloadUrl: downloadUrl,
+            imagePaths: imagePaths,
             downloadAction: (bytes, name) =>
                 downloadFileWeb(fileName: name, fileBytes: bytes),
             printAction: printUtils.printPDFFile,
@@ -536,7 +537,7 @@ extension PreviewAttachmentDownloadControllerExtension on DownloadController {
 
       if (!isOpen) {
         toastManager.showMessageFailure(
-          PreviewEmailFromEmlFileFailure(CannotOpenNewWindowException()),
+          PreviewEmailFromEmlFileFailure(const CannotOpenNewWindowException()),
         );
       }
     } else if (PlatformInfo.isMobile) {
@@ -594,6 +595,7 @@ extension PreviewAttachmentDownloadControllerExtension on DownloadController {
             onMailtoDelegateAction: onMailtoAction,
             onPreviewEMLDelegateAction: onPreviewAction,
             onDownloadAttachmentDelegateAction: onDownloadAction,
+            onBlockedLinkAction: (_) => showBlockedLinkToast(),
           ),
         );
       },
@@ -614,6 +616,7 @@ extension PreviewAttachmentDownloadControllerExtension on DownloadController {
         onMailtoDelegateAction: onMailtoAction,
         onPreviewEMLDelegateAction: onPreviewAction,
         onDownloadAttachmentDelegateAction: onDownloadAction,
+        onBlockedLinkAction: (_) => showBlockedLinkToast(),
       ),
       barrierColor: AppColor.colorDefaultCupertinoActionSheet,
     );
@@ -716,6 +719,7 @@ extension PreviewAttachmentDownloadControllerExtension on DownloadController {
         mailToClicked: openMailToLink,
         downloadAttachmentClicked: () => onDownloadAction(attachment),
         responsiveUtils: responsiveUtils,
+        onBlockedLinkAction: (_) => showBlockedLinkToast(),
       ),
     );
   }

@@ -18,6 +18,7 @@ class EmailPreviewerDialogView extends StatelessWidget {
   final OnMailtoDelegateAction onMailtoDelegateAction;
   final OnPreviewEMLDelegateAction onPreviewEMLDelegateAction;
   final OnDownloadAttachmentDelegateAction onDownloadAttachmentDelegateAction;
+  final OnBlockedLinkAction onBlockedLinkAction;
 
   const EmailPreviewerDialogView({
     super.key,
@@ -26,6 +27,7 @@ class EmailPreviewerDialogView extends StatelessWidget {
     required this.onMailtoDelegateAction,
     required this.onPreviewEMLDelegateAction,
     required this.onDownloadAttachmentDelegateAction,
+    required this.onBlockedLinkAction,
   });
 
   @override
@@ -75,6 +77,7 @@ class EmailPreviewerDialogView extends StatelessWidget {
                   onMailtoDelegateAction: onMailtoDelegateAction,
                   onPreviewEMLDelegateAction: onPreviewEMLDelegateAction,
                   onDownloadAttachmentDelegateAction: onDownloadAttachmentDelegateAction,
+                  onBlockedLinkAction: onBlockedLinkAction,
                 ),
               ),
             ],
@@ -86,13 +89,26 @@ class EmailPreviewerDialogView extends StatelessWidget {
         backgroundColor: Colors.white,
         body: SingleChildScrollView(
           child: HtmlContentViewer(
-            contentHtml: emlPreviewer.content,
-            initialWidth: context.width,
-            useDefaultFontStyle: true,
-            direction: AppUtils.getCurrentDirection(context),
-            onMailtoDelegateAction: onMailtoDelegateAction,
-            onPreviewEMLDelegateAction: onPreviewEMLDelegateAction,
-            onDownloadAttachmentDelegateAction: onDownloadAttachmentDelegateAction,
+            configuration: HtmlContentViewerConfiguration(
+              content: HtmlContentViewerContent(
+                html: emlPreviewer.content,
+                direction: AppUtils.getCurrentDirection(context),
+              ),
+              layout: HtmlContentViewerLayout(
+                viewport: HtmlContentViewerViewport(
+                  constraints: BoxConstraints.tightFor(width: context.width),
+                ),
+              ),
+              typography: const HtmlContentViewerTypography(
+                fontStyle: HtmlContentViewerFontStyle.defaultStyle,
+              ),
+              callbacks: HtmlContentViewerCallbacks(
+                onMailto: onMailtoDelegateAction,
+                onPreviewEML: onPreviewEMLDelegateAction,
+                onDownloadAttachment: onDownloadAttachmentDelegateAction,
+                onBlockedLink: onBlockedLinkAction,
+              ),
+            ),
           ),
         ),
       );

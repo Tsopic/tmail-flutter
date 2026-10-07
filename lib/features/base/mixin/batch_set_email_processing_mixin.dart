@@ -1,6 +1,7 @@
 import 'dart:math' hide log;
 
 import 'package:core/utils/app_logger.dart';
+import 'package:dio/dio.dart';
 import 'package:jmap_dart_client/http/http_client.dart';
 import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:jmap_dart_client/jmap/core/error/set_error.dart';
@@ -15,13 +16,16 @@ import 'package:jmap_dart_client/jmap/mail/email/set/set_email_response.dart';
 import 'package:model/extensions/list_id_extension.dart';
 import 'package:tmail_ui_user/features/base/mixin/handle_error_mixin.dart';
 import 'package:tmail_ui_user/features/base/mixin/mail_api_mixin.dart';
+import 'package:tmail_ui_user/features/base/mixin/session_mixin.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/authentication_exception.dart';
 
 typedef OnGeneratePatchObjectUpdates = Map<Id, PatchObject> Function(
   List<EmailId> batchIds,
 );
 
-mixin BatchSetEmailProcessingMixin on HandleSetErrorMixin, MailAPIMixin {
+mixin BatchSetEmailProcessingMixin
+    on HandleSetErrorMixin, SessionMixin, MailAPIMixin {
   Future<
       ({
         List<EmailId> emailIdsSuccess,
@@ -68,9 +72,11 @@ mixin BatchSetEmailProcessingMixin on HandleSetErrorMixin, MailAPIMixin {
         } else {
           throw Exception('SetEmailResponse is null');
         }
-      } catch (e) {
-        logWarning(
-          'BatchSetEmailProcessingMixin::$debugLabel: Error processing batch ${start + 1}-$end: $e',
+      } catch (e, stackTrace) {
+        _handleBatchSetEmailErrors(
+          e,
+          stackTrace,
+          '$debugLabel: batch ${start + 1}-$end',
         );
       }
     }
@@ -81,6 +87,31 @@ mixin BatchSetEmailProcessingMixin on HandleSetErrorMixin, MailAPIMixin {
     }
 
     return (emailIdsSuccess: updatedEmailIds, mapErrors: finalMapErrors);
+  }
+
+  bool _isSessionTerminatedError(Object error) {
+    return error is DioException &&
+        (error.response?.statusCode == 401 ||
+            error.error is RefreshTokenFailedException);
+  }
+
+  void _handleBatchSetEmailErrors(
+    Object error,
+    StackTrace stackTrace,
+    String batchContext,
+  ) {
+    if (_isSessionTerminatedError(error)) {
+      logError(
+        'BatchSetEmailProcessingMixin::$batchContext: session terminated: $error',
+        exception: error,
+        stackTrace: stackTrace,
+      );
+      throw error;
+    } else {
+      logWarning(
+        'BatchSetEmailProcessingMixin::$batchContext: Error processing batch: $error',
+      );
+    }
   }
 
   Future<SetEmailResponse?> _executeSetEmailBatch({

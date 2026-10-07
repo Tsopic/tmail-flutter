@@ -6,7 +6,7 @@ import '../../robots/mailbox_menu_robot.dart';
 import '../../robots/thread_robot.dart';
 
 class MailboxMoveEmailScenario extends BaseTestScenario {
-  const MailboxMoveEmailScenario(super.$);
+  const MailboxMoveEmailScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -30,20 +30,20 @@ class MailboxMoveEmailScenario extends BaseTestScenario {
         content: '',
       ),
     ]);
-    await $.pumpAndSettle(duration: const Duration(seconds: 2));
+    await $.waitUntilVisible($(templatesSubject));
 
     await threadRobot.longPressEmailWithSubject(templatesSubject);
     await threadRobot.moveEmailToMailboxWithName(appLocalizations.templatesMailboxDisplayName);
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(appLocalizations.templatesMailboxDisplayName);
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.templatesMailboxDisplayName));
     await _expectEmailWithSubjectVisible(templatesSubject);
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(appLocalizations.inboxMailboxDisplayName);
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.inboxMailboxDisplayName));
 
     await threadRobot.longPressEmailWithSubject(trashSubject);
     await threadRobot.moveEmailToTrash();
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(appLocalizations.trashMailboxDisplayName);
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.trashMailboxDisplayName));
     await _expectEmailWithSubjectVisible(trashSubject);
   }
 

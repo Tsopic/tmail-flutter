@@ -532,13 +532,83 @@ void main() {
       expect(HtmlUtils.extractPlainText(html), '<abc>a</abc><xyz>b</xyz>');
     });
 
-    test(
-      'handles encoded unknown tags that become html text after decoding',
-      () {
-        const html = '&amp;lt;weird&amp;gt;X&amp;lt;/weird&amp;gt;Y';
-        expect(HtmlUtils.extractPlainText(html), '<weird>X</weird>Y');
-      },
-    );
+    test('handles encoded unknown tags that become html text after decoding', () {
+      const html = '&amp;lt;weird&amp;gt;X&amp;lt;/weird&amp;gt;Y';
+      expect(HtmlUtils.extractPlainText(html), '<weird>X</weird>Y');
+    });
+
+    test('removes tmail-signature div by default', () {
+      const html = '''
+      <p>Hello world</p>
+      <div class="tmail-signature">
+        Sent from my iPhone
+      </div>
+    ''';
+      expect(HtmlUtils.extractPlainText(html), 'Hello world');
+    });
+
+    test('keeps tmail-signature when removeTMailSignature is false', () {
+      const html = '''
+      <p>Content</p>
+      <div class="tmail-signature">My Signature</div>
+    ''';
+      expect(
+        HtmlUtils.extractPlainText(html, removeTMailSignature: false),
+        'Content My Signature',
+      );
+    });
+
+    test('removes tmail-signature containing nested html elements', () {
+      const html = '''
+      <div>Actual message</div>
+      <div class="tmail-signature">
+        <hr>
+        <b>Sent from my Android</b>
+        <br>
+        <a href="https://example.com">Get Outlook for Android</a>
+      </div>
+    ''';
+      expect(HtmlUtils.extractPlainText(html), 'Actual message');
+    });
+
+    test('removes multiple tmail-signature divs', () {
+      const html = '''
+      <div class="tmail-signature">Old Sig</div>
+      <p>New Content</p>
+      <div class="tmail-signature">New Sig</div>
+    ''';
+      expect(HtmlUtils.extractPlainText(html), 'New Content');
+    });
+
+    test('removes tmail-signature even when combined with other classes', () {
+      const html = '''
+      <p>Main text</p>
+      <div class="tmail-signature flex-row p-4">
+        Should be removed
+      </div>
+    ''';
+      expect(HtmlUtils.extractPlainText(html), 'Main text');
+    });
+
+    test('ignores divs looking like signature but with wrong class name', () {
+      const html = '''
+      <p>Main text</p>
+      <div class="not-tmail-signature">Should keep this</div>
+      <div class="tmail-signature-fake">And this</div>
+    ''';
+      expect(HtmlUtils.extractPlainText(html), 'Main text Should keep this And this');
+    });
+
+    test('removes tmail-signature inside blockquote if both flags are true', () {
+      const html = '''
+      <p>Start</p>
+      <blockquote>
+        <div class="tmail-signature">Sig inside quote</div>
+      </blockquote>
+      <p>End</p>
+    ''';
+      expect(HtmlUtils.extractPlainText(html), 'Start End');
+    });
   });
 
   group('HtmlUtils.wrapPlainTextLinks', () {
@@ -1086,6 +1156,7 @@ void main() {
   });
 
   group('HtmlUtils.generateHtmlDocument', () {
+
     test('SHOULD include find-in-message highlight styles', () {
       final htmlDocument = HtmlUtils.generateHtmlDocument(
         content: 'Email body',
@@ -1093,6 +1164,109 @@ void main() {
 
       expect(htmlDocument, contains('.tmail-find-hit'));
       expect(htmlDocument, contains('.tmail-find-hit-active'));
+    });
+
+    test('injects html/body height override after email content', () {
+      const content = '<style>html,body{height:100%!important}</style><p>Hello</p>';
+      final doc = HtmlUtils.generateHtmlDocument(content: content);
+
+      final contentIndex = doc.indexOf(content);
+      final overrideIndex = doc.indexOf('html, body { height: auto !important; }');
+
+      expect(overrideIndex, isNot(-1), reason: 'override rule must be present');
+      expect(
+        overrideIndex,
+        greaterThan(contentIndex),
+        reason: 'override must appear after email content to win cascade',
+      );
+    });
+
+    test('override rule is present regardless of optional parameters', () {
+      final doc = HtmlUtils.generateHtmlDocument(
+        content: '<p>Simple</p>',
+        styleCSS: '.custom { color: red; }',
+        minHeight: 400,
+      );
+
+      expect(doc, contains('html, body { height: auto !important; }'));
+    });
+
+    test('override appears after styleCSS so user CSS cannot win cascade', () {
+      // Guards against refactors that move the override into <head> before
+      // styleCSS — if that happens, a competing rule in styleCSS would win.
+      const competing = 'html, body { height: 100% !important; }';
+      final doc = HtmlUtils.generateHtmlDocument(
+        content: '<p>x</p>',
+        styleCSS: competing,
+      );
+
+      final styleCssIndex = doc.indexOf(competing);
+      final overrideIndex = doc.indexOf('html, body { height: auto !important; }');
+
+      expect(styleCssIndex, isNot(-1));
+      expect(overrideIndex, greaterThan(styleCssIndex),
+          reason: 'override must come AFTER styleCSS in source order');
+    });
+  });
+
+  group('HtmlUtils::convertBase64ToImageResourceData::', () {
+    test(
+      'When base64 data needs == padding (length % 4 == 2),\n'
+      'should return a data URI with properly padded base64',
+    () {
+      // "YQ" is "a" encoded in base64 without padding — needs "==" appended
+      const unpaddedBase64 = 'YQ';
+
+      final result = HtmlUtils.convertBase64ToImageResourceData(
+        base64Data: unpaddedBase64,
+        mimeType: 'image/png',
+      );
+
+      expect(result, 'data:image/png;base64,YQ==');
+    });
+
+    test(
+      'When base64 data needs = padding (length % 4 == 3),\n'
+      'should return a data URI with one = appended',
+    () {
+      // "YWI" is "ab" encoded in base64 without padding — needs "=" appended
+      const unpaddedBase64 = 'YWI';
+
+      final result = HtmlUtils.convertBase64ToImageResourceData(
+        base64Data: unpaddedBase64,
+        mimeType: 'image/png',
+      );
+
+      expect(result, 'data:image/png;base64,YWI=');
+    });
+
+    test(
+      'When base64 data is already aligned (length % 4 == 0),\n'
+      'should return a data URI with no padding added',
+    () {
+      // "YWJj" is "abc" encoded in base64 — already 4-byte aligned
+      const paddedBase64 = 'YWJj';
+
+      final result = HtmlUtils.convertBase64ToImageResourceData(
+        base64Data: paddedBase64,
+        mimeType: 'image/png',
+      );
+
+      expect(result, 'data:image/png;base64,YWJj');
+    });
+
+    test(
+      'When base64 data is invalid (contains illegal characters),\n'
+      'should fall back to raw data URI without crashing',
+    () {
+      const invalidBase64 = '!!!not-valid-base64!!!';
+
+      final result = HtmlUtils.convertBase64ToImageResourceData(
+        base64Data: invalidBase64,
+        mimeType: 'image/png',
+      );
+
+      expect(result, 'data:image/png;base64,$invalidBase64');
     });
   });
 }

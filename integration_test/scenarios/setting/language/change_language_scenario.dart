@@ -1,6 +1,7 @@
 import 'package:duration/duration.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 import '../../../base/base_test_scenario.dart';
@@ -10,7 +11,7 @@ import '../../../robots/setting_robot.dart';
 import '../../../robots/thread_robot.dart';
 
 class ChangeLanguageScenario extends BaseTestScenario {
-  const ChangeLanguageScenario(super.$);
+  const ChangeLanguageScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -30,6 +31,10 @@ class ChangeLanguageScenario extends BaseTestScenario {
     await _expectLanguageMenuItemVisible();
     await settingRobot.openLanguageMenuItem();
     await $.pumpAndSettle(duration: seconds(1));
+
+    await languageRobot.openLanguageContextMenu();
+    await languageRobot.selectLanguage(const Locale('en'), appLocalizations);
+    await $.pumpAndSettle(duration: seconds(1));
     await _expectLanguageViewWithEnglishTitleVisible();
 
     await languageRobot.openLanguageContextMenu();
@@ -40,7 +45,8 @@ class ChangeLanguageScenario extends BaseTestScenario {
     await _expectLanguageViewWithVietnameseTitleVisible();
   }
 
-  Future<void> _expectUserAvatarVisible() => expectViewVisible($(#user_avatar));
+  Future<void> _expectUserAvatarVisible() =>
+      expectViewVisible($(const ValueKey(UiKeys.userAvatar)));
 
   Future<void> _expectSettingViewVisible(AppLocalizations appLocalizations) =>
       expectViewVisible($(find.text(appLocalizations.settings)));

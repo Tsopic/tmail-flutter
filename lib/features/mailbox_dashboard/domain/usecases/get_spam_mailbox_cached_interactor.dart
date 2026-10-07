@@ -1,15 +1,15 @@
 
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
-import 'package:core/utils/app_logger.dart';
 import 'package:dartz/dartz.dart';
 import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:jmap_dart_client/jmap/core/user_name.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/domain/exceptions/spam_report_exception.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/repository/spam_report_repository.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/state/get_spam_mailbox_cached_state.dart';
 
 class GetSpamMailboxCachedInteractor {
-  static const int spamReportBannerDisplayIntervalInHour = 12;
+  static const int spamReportBannerDisplayIntervalInHours = 24;
 
   final SpamReportRepository _spamReportRepository;
 
@@ -19,15 +19,19 @@ class GetSpamMailboxCachedInteractor {
     try {
       yield Right<Failure, Success>(GetSpamMailboxCachedLoading());
       if (await _validateIntervalToShowBanner()) {
-        final spamMailbox =  await _spamReportRepository.getSpamMailboxCached(accountId, userName);
+        final spamMailbox = await _spamReportRepository.getSpamMailboxCached(accountId, userName);
         final countUnreadSpamMailbox = spamMailbox.unreadEmails?.value.value.toInt() ?? 0;
         if (countUnreadSpamMailbox > 0) {
           yield Right<Failure, Success>(GetSpamMailboxCachedSuccess(spamMailbox));
         } else {
-          yield Left<Failure, Success>(InvalidSpamReportCondition());
+          yield Left<Failure, Success>(
+            GetSpamMailboxCachedFailure(NoUnreadSpamEmailsException()),
+          );
         }
       } else {
-        yield Left<Failure, Success>(InvalidSpamReportCondition());
+        yield Left<Failure, Success>(
+          GetSpamMailboxCachedFailure(SpamDismissCooldownActiveException()),
+        );
       }
     } catch (e) {
       yield Left<Failure, Success>(GetSpamMailboxCachedFailure(e));
@@ -35,9 +39,23 @@ class GetSpamMailboxCachedInteractor {
   }
 
   Future<bool> _validateIntervalToShowBanner() async {
-    final lastTimeDismissedSpamReported = await _spamReportRepository.getLastTimeDismissedSpamReported();
-    final currentTime = DateTime.now().difference(lastTimeDismissedSpamReported);
-    log('GetSpamMailboxCachedInteractor::_compareSpamReportTime:lastTimeDismissedSpamReported: $lastTimeDismissedSpamReported | currentTime: $currentTime');
-    return currentTime.inHours > spamReportBannerDisplayIntervalInHour;
+    final lastTimeDismissedMs = await _spamReportRepository
+        .getLastTimeDismissedSpamReportedMilliseconds();
+
+    if (lastTimeDismissedMs <= 0) {
+      return true;
+    }
+
+    final lastTime = DateTime.fromMillisecondsSinceEpoch(lastTimeDismissedMs);
+    final now = DateTime.now();
+    final elapsed = now.difference(lastTime);
+    if (elapsed.isNegative) {
+      if (elapsed.abs() < const Duration(days: 1)) return false;
+      return true;
+    }
+    final isIntervalElapsed =
+        elapsed.inHours >= spamReportBannerDisplayIntervalInHours;
+
+    return isIntervalElapsed;
   }
 }

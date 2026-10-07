@@ -26,11 +26,27 @@ class OpenAppDeepLinkData extends DeepLinkData {
     this.expiresIn,
   });
 
+  /// The deep link is reachable from any web page or email link: the servers
+  /// it points the app to must be https URLs on an allow-listed host.
   bool isValidAuthentication() =>
       accessToken.isNotEmpty &&
       username.isNotEmpty &&
-      registrationUrl.isNotEmpty &&
-      jmapUrl.isNotEmpty;
+      _isSecureAbsoluteUrl(registrationUrl) &&
+      _isSecureAbsoluteUrl(jmapUrl);
+
+  static bool _isSecureAbsoluteUrl(String url) {
+    // Dart reads `\` as `/`, Android's java.net.URL as part of the user
+    // info: `https://sign-up.twake.app\@evil.com` passes the host check here
+    // but AppAuth fetches the OIDC discovery from evil.com.
+    if (url.contains(r'\')) return false;
+    final uri = Uri.tryParse(url);
+    return uri != null &&
+        uri.isScheme('https') &&
+        uri.host.isNotEmpty &&
+        AppConfig.deepLinkAllowedHosts.contains(uri.host);
+  }
+
+  String get jmapHost => Uri.tryParse(jmapUrl)?.host ?? jmapUrl;
 
   DateTime? _getExpiredTime() {
     return expiresIn != null

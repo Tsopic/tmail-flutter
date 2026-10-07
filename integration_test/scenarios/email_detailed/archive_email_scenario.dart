@@ -10,7 +10,7 @@ import '../../robots/thread_robot.dart';
 
 class ArchiveEmailScenario extends BaseTestScenario {
 
-  const ArchiveEmailScenario(super.$);
+  const ArchiveEmailScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -47,7 +47,7 @@ class ArchiveEmailScenario extends BaseTestScenario {
     await $.pumpAndSettle();
 
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(appLocalizations.archiveMailboxDisplayName);
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.archiveMailboxDisplayName));
     await _expectEmailWithSubjectInArchiveFolderVisible(subject);
   }
 

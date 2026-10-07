@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:core/data/network/dio_client.dart';
 import 'package:core/presentation/state/failure.dart';
@@ -13,19 +14,48 @@ import 'package:dio/dio.dart';
 import 'package:model/email/attachment.dart';
 import 'package:model/upload/file_info.dart';
 import 'package:model/upload/upload_response.dart';
-import 'package:tmail_ui_user/features/base/isolate/background_isolate_binary_messenger/background_isolate_binary_messenger.dart';
-import 'package:tmail_ui_user/features/caching/config/hive_cache_config.dart';
-import 'package:tmail_ui_user/features/upload/data/model/upload_file_arguments.dart';
 import 'package:tmail_ui_user/features/upload/domain/exceptions/upload_exception.dart';
 import 'package:tmail_ui_user/features/upload/domain/model/upload_task_id.dart';
 import 'package:tmail_ui_user/features/upload/domain/state/attachment_upload_state.dart';
-import 'package:tmail_ui_user/main/exceptions/isolate_exception.dart';
-import 'package:worker_manager/worker_manager.dart';
 
 class FileUploader {
   static const String uploadAttachmentExtraKey = 'upload-attachment';
   static const String streamDataExtraKey = 'streamData';
   static const String filePathExtraKey = 'path';
+
+  /// Charset detection only needs a prefix of the file, so an attachment is
+  /// never fully materialised on the root isolate just to sniff its encoding.
+  static const int _charsetSampleMaxBytes = 256 * 1024;
+
+  static RequestOptions _sanitizeUploadRequestOptions(
+    RequestOptions requestOptions,
+  ) {
+    final scrubbedExtra = Map<String, dynamic>.from(requestOptions.extra)
+      ..remove(uploadAttachmentExtraKey);
+    return requestOptions.copyWith(data: '', extra: scrubbedExtra);
+  }
+
+  static DioException _sanitizeUploadException(DioException exception) {
+    final scrubbedRequestOptions = _sanitizeUploadRequestOptions(
+      exception.requestOptions,
+    );
+    final response = exception.response;
+    return exception.copyWith(
+      requestOptions: scrubbedRequestOptions,
+      response: response == null
+          ? null
+          : Response<dynamic>(
+              data: response.data,
+              requestOptions: scrubbedRequestOptions,
+              statusCode: response.statusCode,
+              statusMessage: response.statusMessage,
+              isRedirect: response.isRedirect,
+              redirects: response.redirects,
+              extra: response.extra,
+              headers: response.headers,
+            ),
+    );
+  }
 
   final DioClient _dioClient;
   final FileUtils _fileUtils;
@@ -39,168 +69,120 @@ class FileUploader {
     CancelToken? cancelToken,
     StreamController<Either<Failure, Success>>? onSendController,
   }) async {
-    if (PlatformInfo.isWeb) {
-      return _handleUploadAttachmentActionOnWeb(
-        uploadId,
-        fileInfo,
-        uploadUri,
-        cancelToken: cancelToken,
-        onSendController: onSendController,
-      );
-    } else {
-      final rootIsolateToken = RootIsolateToken.instance;
-      if (rootIsolateToken == null) {
-        throw CanNotGetRootIsolateToken();
-      }
+    final headerParam = _dioClient.getHeaders();
+    headerParam[HttpHeaders.contentTypeHeader] = fileInfo.mimeType;
+    headerParam[HttpHeaders.contentLengthHeader] = fileInfo.fileSize;
 
-      final args = UploadFileArguments(
-        _dioClient,
-        _fileUtils,
-        uploadId,
-        fileInfo,
-        uploadUri,
-        rootIsolateToken,
-      );
-      return await workerManager.executeWithPort<Attachment, Success>(
-        (sendPort) => _handleUploadAttachmentAction(args, sendPort),
-        onMessage: (value) {
-          log('FileUploader::uploadAttachment(): onUpdateProgress: $value');
-          onSendController?.add(Right(value));
-        },
-      );
-    }
-  }
-
-  static Future<Attachment> _handleUploadAttachmentAction(
-    UploadFileArguments argsUpload,
-    SendPort sendPort,
-  ) async {
     try {
-      final rootIsolateToken = argsUpload.isolateToken;
-      BackgroundIsolateBinaryMessenger.ensureInitialized(rootIsolateToken);
-      await HiveCacheConfig.instance.setUp();
-
-      final headerParam = argsUpload.dioClient.getHeaders();
-      headerParam[HttpHeaders.contentTypeHeader] = argsUpload.fileInfo.mimeType;
-      headerParam[HttpHeaders.contentLengthHeader] =
-          argsUpload.fileInfo.fileSize;
-
-      final mapExtra = <String, dynamic>{
-        uploadAttachmentExtraKey: {
-          if (argsUpload.fileInfo.filePath?.isNotEmpty == true)
-            filePathExtraKey: argsUpload.fileInfo.filePath,
-          if (argsUpload.fileInfo.bytes?.isNotEmpty == true)
-            streamDataExtraKey: Stream.value(argsUpload.fileInfo.bytes!),
-        },
-      };
-
-      final resultJson = await argsUpload.dioClient.post(
-        Uri.decodeFull(argsUpload.uploadUri.toString()),
-        options: Options(headers: headerParam, extra: mapExtra),
-        data: argsUpload.fileInfo.filePath?.isNotEmpty == true
-            ? File(argsUpload.fileInfo.filePath!).openRead()
-            : argsUpload.fileInfo.bytes != null
-            ? Stream.value(argsUpload.fileInfo.bytes!)
-            : null,
+      final resultJson = await _dioClient.post(
+        Uri.decodeFull(uploadUri.toString()),
+        options: Options(
+          headers: headerParam,
+          extra: _buildUploadExtra(fileInfo),
+        ),
+        data: _buildRequestBody(fileInfo),
+        cancelToken: cancelToken,
         onSendProgress: (count, total) {
-          sendPort.send(
-            UploadingAttachmentUploadState(
-              argsUpload.uploadId,
-              count,
-              argsUpload.fileInfo.fileSize,
+          log(
+            'FileUploader::uploadAttachment():onSendProgress: FILE[${uploadId.id}] : { PROGRESS = $count | TOTAL = $total}',
+          );
+          onSendController?.add(
+            Right(
+              UploadingAttachmentUploadState(
+                uploadId,
+                count,
+                fileInfo.fileSize,
+              ),
             ),
           );
         },
       );
       log(
-        'FileUploader::_handleUploadAttachmentAction(): upload completed for FILE[${argsUpload.uploadId.id}]',
+        'FileUploader::uploadAttachment(): upload completed for FILE[${uploadId.id}]',
       );
-      if (argsUpload.fileInfo.mimeType == FileUtils.TEXT_PLAIN_MIME_TYPE) {
-        final fileBytes = argsUpload.fileInfo.filePath?.isNotEmpty == true
-            ? File(argsUpload.fileInfo.filePath!).readAsBytesSync()
-            : argsUpload.fileInfo.bytes;
-
-        final fileCharset = fileBytes != null
-            ? await argsUpload.fileUtils.getCharsetFromBytes(fileBytes)
-            : null;
-        return _parsingResponse(
-          resultJson: resultJson,
-          fileName: argsUpload.fileInfo.fileName,
-          fileCharset: fileCharset?.toLowerCase(),
-        );
-      } else {
-        return _parsingResponse(
-          resultJson: resultJson,
-          fileName: argsUpload.fileInfo.fileName,
-        );
-      }
+      return _parsingResponse(
+        resultJson: resultJson,
+        fileName: fileInfo.fileName,
+        fileCharset: await _resolveCharset(fileInfo),
+      );
     } on DioException catch (exception) {
-      logWarning(
-        'FileUploader::_handleUploadAttachmentAction():DioException: $exception',
+      Error.throwWithStackTrace(
+        _sanitizeUploadException(exception),
+        exception.stackTrace,
       );
-
-      throw exception.copyWith(
-        requestOptions: exception.requestOptions.copyWith(data: ''),
-      );
-    } catch (exception) {
-      logWarning(
-        'FileUploader::_handleUploadAttachmentAction():OtherException: $exception',
-      );
-
-      rethrow;
     }
   }
 
-  Future<Attachment> _handleUploadAttachmentActionOnWeb(
-    UploadTaskId uploadId,
-    FileInfo fileInfo,
-    Uri uploadUri, {
-    CancelToken? cancelToken,
-    StreamController<Either<Failure, Success>>? onSendController,
-  }) async {
-    final headerParam = _dioClient.getHeaders();
-    headerParam[HttpHeaders.contentTypeHeader] = fileInfo.mimeType;
-    headerParam[HttpHeaders.contentLengthHeader] = fileInfo.fileSize;
+  /// Web has no `dart:io` file system, so an attachment there is always
+  /// uploaded from its bytes even if a path happens to be carried along.
+  bool _hasLocalFilePath(FileInfo fileInfo) =>
+      !PlatformInfo.isWeb && fileInfo.filePath?.isNotEmpty == true;
 
-    final mapExtra = <String, dynamic>{
+  Map<String, dynamic> _buildUploadExtra(FileInfo fileInfo) {
+    final bytes = fileInfo.bytes;
+    return <String, dynamic>{
       uploadAttachmentExtraKey: {
-        if (fileInfo.bytes?.isNotEmpty == true)
-          streamDataExtraKey: Stream.value(fileInfo.bytes!),
+        if (_hasLocalFilePath(fileInfo))
+          filePathExtraKey: fileInfo.filePath
+        else if (bytes != null)
+          streamDataExtraKey: Stream<List<int>>.value(bytes),
       },
     };
+  }
 
-    final resultJson = await _dioClient.post(
-      Uri.decodeFull(uploadUri.toString()),
-      options: Options(headers: headerParam, extra: mapExtra),
-      data: Stream.value(fileInfo.bytes!),
-      cancelToken: cancelToken,
-      onSendProgress: (count, total) {
-        onSendController?.add(
-          Right(
-            UploadingAttachmentUploadState(uploadId, count, fileInfo.fileSize),
-          ),
-        );
-      },
-    );
-    log(
-      'FileUploader::_handleUploadAttachmentActionOnWeb(): upload completed for FILE[${uploadId.id}]',
-    );
-    if (fileInfo.mimeType == FileUtils.TEXT_PLAIN_MIME_TYPE) {
-      final fileCharset = await _fileUtils.getCharsetFromBytes(fileInfo.bytes!);
-      return _parsingResponse(
-        resultJson: resultJson,
-        fileName: fileInfo.fileName,
-        fileCharset: fileCharset.toLowerCase(),
-      );
-    } else {
-      return _parsingResponse(
-        resultJson: resultJson,
-        fileName: fileInfo.fileName,
-      );
+  Stream<List<int>> _buildRequestBody(FileInfo fileInfo) {
+    if (_hasLocalFilePath(fileInfo)) {
+      return File(fileInfo.filePath!).openRead();
+    }
+    final bytes = fileInfo.bytes;
+    if (bytes == null) {
+      throw const MissingAttachmentSourceException();
+    }
+    return Stream<List<int>>.value(bytes);
+  }
+
+  /// Runs after the server already stored the blob, so a probe failure degrades
+  /// to an unknown charset instead of discarding a completed upload.
+  Future<String?> _resolveCharset(FileInfo fileInfo) async {
+    if (fileInfo.mimeType != FileUtils.TEXT_PLAIN_MIME_TYPE) {
+      return null;
+    }
+
+    try {
+      final Uint8List? charsetSample;
+      if (_hasLocalFilePath(fileInfo)) {
+        charsetSample = await _readCharsetSample(fileInfo.filePath!);
+      } else {
+        final bytes = fileInfo.bytes;
+        charsetSample = bytes != null && bytes.length > _charsetSampleMaxBytes
+            ? Uint8List.sublistView(bytes, 0, _charsetSampleMaxBytes)
+            : bytes;
+      }
+      if (charsetSample == null) {
+        return null;
+      }
+
+      return (await _fileUtils.getCharsetFromBytes(
+        charsetSample,
+      )).toLowerCase();
+    } catch (exception) {
+      // Only the type: the message of a file error carries the attachment path.
+      logWarning('FileUploader::_resolveCharset(): ${exception.runtimeType}');
+      return null;
     }
   }
 
-  static Attachment _parsingResponse({
+  Future<Uint8List> _readCharsetSample(String filePath) async {
+    final sample = BytesBuilder(copy: false);
+    await for (final chunk in File(
+      filePath,
+    ).openRead(0, _charsetSampleMaxBytes)) {
+      sample.add(chunk);
+    }
+    return sample.takeBytes();
+  }
+
+  Attachment _parsingResponse({
     dynamic resultJson,
     required String fileName,
     String? fileCharset,
@@ -210,7 +192,7 @@ class FileUploader {
           ? resultJson
           : jsonDecode(resultJson);
       final uploadResponse = UploadResponse.fromJson(decodeJson);
-      log('FileUploader::_parsingResponse(): UploadResponse = $uploadResponse');
+      log('FileUploader::_parsingResponse(): upload response parsed');
       return uploadResponse.toAttachment(
         nameFile: fileName,
         charset: fileCharset,
@@ -219,7 +201,7 @@ class FileUploader {
       logWarning(
         'FileUploader::_parsingResponse(): DataResponseIsNullException',
       );
-      throw DataResponseIsNullException();
+      throw const DataResponseIsNullException();
     }
   }
 }

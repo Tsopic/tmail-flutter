@@ -4,7 +4,6 @@ import 'package:tmail_ui_user/features/manage_account/data/datasource/manage_acc
 import 'package:tmail_ui_user/features/manage_account/data/datasource_impl/manage_account_datasource_impl.dart';
 import 'package:tmail_ui_user/features/manage_account/data/local/language_cache_manager.dart';
 import 'package:tmail_ui_user/features/manage_account/data/local/preferences_setting_manager.dart';
-import 'package:tmail_ui_user/features/manage_account/data/local/setting_cache_manager.dart';
 import 'package:tmail_ui_user/features/manage_account/data/repository/manage_account_repository_impl.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/repository/manage_account_repository.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/save_language_interactor.dart';
@@ -15,8 +14,8 @@ import 'package:tmail_ui_user/features/server_settings/data/repository/server_se
 import 'package:tmail_ui_user/features/server_settings/domain/repository/server_settings_repository.dart';
 import 'package:tmail_ui_user/features/server_settings/domain/usecases/get_server_setting_interactor.dart';
 import 'package:tmail_ui_user/features/server_settings/domain/usecases/update_server_setting_interactor.dart';
-import 'package:tmail_ui_user/main/exceptions/cache_exception_thrower.dart';
-import 'package:tmail_ui_user/main/exceptions/remote_exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/cache_exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/remote_exception_thrower.dart';
 
 class PreferencesInteractorsBindings extends InteractorsBindings {
 
@@ -45,7 +44,6 @@ class PreferencesInteractorsBindings extends InteractorsBindings {
     Get.lazyPut(() => ManageAccountDataSourceImpl(
       Get.find<LanguageCacheManager>(),
       Get.find<PreferencesSettingManager>(),
-      Get.find<SettingCacheManager>(),
       Get.find<CacheExceptionThrower>(),
     ), tag: composerId);
   }

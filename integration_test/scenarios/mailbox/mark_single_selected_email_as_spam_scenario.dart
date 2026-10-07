@@ -7,7 +7,7 @@ import '../../robots/mailbox_menu_robot.dart';
 import '../../robots/thread_robot.dart';
 
 class MarkSingleSelectedEmailAsSpamScenario extends BaseTestScenario {
-  const MarkSingleSelectedEmailAsSpamScenario(super.$);
+  const MarkSingleSelectedEmailAsSpamScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -25,8 +25,8 @@ class MarkSingleSelectedEmailAsSpamScenario extends BaseTestScenario {
     await threadRobot.longPressEmailWithSubject(spamSubject);
     await threadRobot.tapMarkAsSpamAction();
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(
-      AppLocalizations().spamMailboxDisplayName,
+    await mailboxMenuRobot.navigation.openFolder(
+      mailboxMenuRobot.mailboxItemByName(AppLocalizations().spamMailboxDisplayName),
     );
     await _expectEmailWithSubjectExist(spamSubject);
   }

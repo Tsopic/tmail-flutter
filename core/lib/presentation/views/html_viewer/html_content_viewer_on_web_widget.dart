@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:core/presentation/constants/constants_ui.dart';
 import 'package:core/presentation/extensions/color_extension.dart';
+import 'package:core/presentation/views/html_viewer/html_iframe_widget.dart';
 import 'package:core/presentation/views/shortcut/key_shortcut.dart';
 import 'package:core/presentation/views/tooltip/iframe_tooltip_overlay.dart';
 import 'package:core/utils/app_logger.dart';
@@ -85,6 +86,23 @@ class HtmlContentViewerOnWeb extends StatefulWidget {
 
   @override
   State<HtmlContentViewerOnWeb> createState() => _HtmlContentViewerOnWebState();
+
+  /// Returns true when [scrollHeightWithBuffer] should become the new iframe
+  /// height. Returns false when it already equals [currentActualHeight]
+  /// (prevents the infinite loop caused by emails that set
+  /// `html, body { height: 100% }`).
+  @visibleForTesting
+  static bool shouldUpdateHeight({
+    required double scrollHeightWithBuffer,
+    required double currentActualHeight,
+    required double minHeight,
+    required bool autoAdjust,
+  }) {
+    if (scrollHeightWithBuffer == currentActualHeight) return false;
+    return autoAdjust
+        ? scrollHeightWithBuffer >= minHeight
+        : scrollHeightWithBuffer > minHeight;
+  }
 }
 
 class _HtmlContentViewerOnWebState extends State<HtmlContentViewerOnWeb>
@@ -400,15 +418,15 @@ class _HtmlContentViewerOnWebState extends State<HtmlContentViewerOnWeb>
   void _handleContentHeightEvent(dynamic height) {
     final docHeight = height ?? _actualHeight;
     if (docHeight != null && mounted) {
-      final scrollHeightWithBuffer = docHeight + widget.offsetHtmlContentHeight;
-      log(
-        '$runtimeType::_handleContentHeightEvent: ScrollHeightWithBuffer = $scrollHeightWithBuffer',
-      );
-      bool isHeightChanged = widget.autoAdjustHeight
-          ? scrollHeightWithBuffer >= minHeight
-          : scrollHeightWithBuffer > minHeight;
+      final scrollHeightWithBuffer = (docHeight as num).toDouble() + widget.offsetHtmlContentHeight;
+      log('$runtimeType::_handleContentHeightEvent: ScrollHeightWithBuffer = $scrollHeightWithBuffer');
 
-      if (isHeightChanged) {
+      if (HtmlContentViewerOnWeb.shouldUpdateHeight(
+        scrollHeightWithBuffer: scrollHeightWithBuffer,
+        currentActualHeight: _actualHeight,
+        minHeight: minHeight,
+        autoAdjust: widget.autoAdjustHeight,
+      )) {
         setState(() {
           _actualHeight = scrollHeightWithBuffer;
           _isLoading = false;
@@ -562,12 +580,24 @@ class _HtmlContentViewerOnWebState extends State<HtmlContentViewerOnWeb>
         window.addEventListener('pagehide', (event) => {
           window.parent.removeEventListener('message', handleMessage, false);
           window.removeEventListener('load', handleOnLoad);
+          ${!widget.autoAdjustHeight ? '''
+            clearTimeout(_resizeDebounceTimer);
+            if (typeof resizeObserver !== 'undefined') resizeObserver.disconnect();
+          ''' : ''}
         });
       
         function handleMessage(e) {
-          if (e && e.data && e.data.includes("toIframe:")) {
-            var data = JSON.parse(e.data);
-            if (data["view"].includes("$_createdViewId")) {
+          if (e && e.data && typeof e.data === 'string' && e.data.includes("toIframe:")) {
+            var data;
+            try {
+              data = JSON.parse(e.data);
+            } catch (error) {
+              return;
+            }
+            if (data
+                && typeof data["view"] === 'string'
+                && data["view"].includes("$_createdViewId")
+                && typeof data["type"] === 'string') {
               if (data["type"].includes("getHeight")) {
                 var height = document.body.scrollHeight;
                 window.parent.postMessage(JSON.stringify({"view": "$_createdViewId", "type": "toDart: htmlHeight", "height": height}), "*");
@@ -588,9 +618,16 @@ class _HtmlContentViewerOnWebState extends State<HtmlContentViewerOnWeb>
         }
 
         ${!widget.autoAdjustHeight ? '''
+          var _lastResizeHeight = 0;
+          var _resizeDebounceTimer;
           const resizeObserver = new ResizeObserver((entries) => {
-            var height = document.body.scrollHeight;
-            window.parent.postMessage(JSON.stringify({"view": "$_createdViewId", "type": "toDart: htmlHeight", "height": height}), "*");
+            clearTimeout(_resizeDebounceTimer);
+            _resizeDebounceTimer = setTimeout(function() {
+              var height = document.body.scrollHeight;
+              if (height === _lastResizeHeight) return;
+              _lastResizeHeight = height;
+              window.parent.postMessage(JSON.stringify({"view": "$_createdViewId", "type": "toDart: htmlHeight", "height": height}), "*");
+            }, 50);
           });
         ''' : ''}
         
@@ -847,20 +884,12 @@ class _HtmlContentViewerOnWebState extends State<HtmlContentViewerOnWeb>
             future: _webInit,
             builder: (_, snapshot) {
               if (snapshot.hasData) {
-                final htmlView = HtmlElementView.fromTagName(
+                final htmlView = HtmlIframeWidget(
                   key: ValueKey('$_htmlData-${widget.key}'),
-                  tagName: 'iframe',
-                  onElementCreated: (element) {
-                    _iframeElement = element as html.IFrameElement;
-                    _iframeElement!
-                      ..width = _actualWidth.toString()
-                      ..height = _actualHeight.toString()
-                      ..srcdoc = _htmlData ?? ''
-                      ..style.border = 'none'
-                      ..style.overflow = 'hidden'
-                      ..style.width = '100%'
-                      ..style.height = '100%';
-                  },
+                  srcdoc: _htmlData,
+                  onIframeCreated: (iframe) => _iframeElement = iframe,
+                  width: _actualWidth.toString(),
+                  height: _actualHeight.toString(),
                 );
 
                 if (widget.viewMaxHeight != null) {

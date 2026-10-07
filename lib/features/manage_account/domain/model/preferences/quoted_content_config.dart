@@ -1,11 +1,14 @@
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/preferences_config.dart';
 
 class QuotedContentConfig extends PreferencesConfig {
+  static const keySuffix = 'QUOTED_CONTENT';
+
+  @override
+  String get configKey => keySuffix;
+
   final bool isHiddenByDefault;
 
-  QuotedContentConfig({
-    this.isHiddenByDefault = true,
-  });
+  QuotedContentConfig({this.isHiddenByDefault = true});
 
   factory QuotedContentConfig.initial() => QuotedContentConfig();
 
@@ -16,18 +19,14 @@ class QuotedContentConfig extends PreferencesConfig {
   }
 
   @override
-  Map<String, dynamic> toJson() => {
-    'isHiddenByDefault': isHiddenByDefault,
-  };
+  Map<String, dynamic> toJson() => {'isHiddenByDefault': isHiddenByDefault};
 
   @override
   List<Object> get props => [isHiddenByDefault];
 }
 
 extension QuotedContentConfigExtension on QuotedContentConfig {
-  QuotedContentConfig copyWith({
-    bool? isHiddenByDefault,
-  }) {
+  QuotedContentConfig copyWith({bool? isHiddenByDefault}) {
     return QuotedContentConfig(
       isHiddenByDefault: isHiddenByDefault ?? this.isHiddenByDefault,
     );

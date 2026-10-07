@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:core/presentation/extensions/html_extension.dart';
 import 'package:core/utils/app_logger.dart';
@@ -166,13 +167,10 @@ class LocalNotificationManager {
     String? payload,
     String? groupId,
   }) async {
-    final inboxStyleInformation = InboxStyleInformation(
-      [message?.addBlockTag('p', attribute: 'style="color:#6D7885;"') ?? ''],
-      htmlFormatLines: true,
-      contentTitle: title,
-      htmlFormatContentTitle: true,
-      summaryText: (emailAddress?.asString() ?? '').addBlockTag('b'),
-      htmlFormatSummaryText: true,
+    final inboxStyleInformation = buildInboxStyleInformation(
+      title: title,
+      message: message,
+      emailAddress: emailAddress,
     );
 
     await _localNotificationsPlugin.show(
@@ -188,8 +186,49 @@ class LocalNotificationManager {
     );
   }
 
+  /// Subject, preview and sender come from the received email: escape them
+  /// before they are rendered as HTML, and show the sender address first so
+  /// that a long or spoofed display name cannot hide it.
+  static InboxStyleInformation buildInboxStyleInformation({
+    required String title,
+    String? message,
+    EmailAddress? emailAddress,
+  }) {
+    const htmlEscape = HtmlEscape();
+    return InboxStyleInformation(
+      [
+        message != null
+            ? htmlEscape
+                  .convert(message)
+                  .addBlockTag('p', attribute: 'style="color:#6D7885;"')
+            : '',
+      ],
+      htmlFormatLines: true,
+      contentTitle: htmlEscape.convert(title),
+      htmlFormatContentTitle: true,
+      summaryText: htmlEscape
+          .convert(_senderLine(emailAddress))
+          .addBlockTag('b'),
+      htmlFormatSummaryText: true,
+    );
+  }
+
+  static String _senderLine(EmailAddress? address) {
+    final email = address?.emailAddress ?? '';
+    final name = address?.displayName ?? '';
+    if (name.isEmpty || name == email) return email;
+    if (email.isEmpty) return name;
+    return '$email ($name)';
+  }
+
   Future<void> removeNotification(String id) async {
-    return _localNotificationsPlugin.cancel(id.hashCode);
+    try {
+      await _localNotificationsPlugin.cancel(id.hashCode);
+    } catch (e) {
+      logWarning(
+        'LocalNotificationManager::removeNotification(): id = $id | ERROR: $e',
+      );
+    }
   }
 
   Future<int> getCountActiveNotificationByGroupOnAndroid({
@@ -262,7 +301,7 @@ class LocalNotificationManager {
     );
     if (listActiveNotificationByGroup.length <= 1) {
       log('LocalNotificationManager::groupPushNotification():canceled');
-      await _localNotificationsPlugin.cancel(groupId.hashCode);
+      await removeNotification(groupId);
     }
   }
 

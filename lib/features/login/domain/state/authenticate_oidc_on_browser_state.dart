@@ -7,5 +7,11 @@ class AuthenticateOidcOnBrowserSuccess extends UIState {}
 
 class AuthenticateOidcOnBrowserFailure extends FeatureFailure {
 
-  AuthenticateOidcOnBrowserFailure(dynamic exception) : super(exception: exception);
+  /// Mirrors the attempted config's `OIDCConfiguration.ssoConfirmed`.
+  final bool ssoConfirmed;
+
+  AuthenticateOidcOnBrowserFailure(
+    dynamic exception, {
+    this.ssoConfirmed = false,
+  }) : super(exception: exception);
 }

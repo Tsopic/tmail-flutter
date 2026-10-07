@@ -90,7 +90,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "customPromptAction": "Помогите мне написать",
+  "customPromptAction": "Помоги мне написать",
   "@customPromptAction": {
     "type": "text",
     "placeholders_order": [],
@@ -98,6 +98,12 @@
   },
   "failedToGenerate": "Не удалось сгенерировать ответ ИИ",
   "@failedToGenerate": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "improve": "Улучшить",
+  "@improve": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -122,6 +128,24 @@
   },
   "aiAssistant": "Помощник ИИ",
   "@aiAssistant": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "copy": "Копировать",
+  "@copy": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "retry": "Повторить",
+  "@retry": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "copiedToClipboard": "Результат скопирован в буфер обмена",
+  "@copiedToClipboard": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}

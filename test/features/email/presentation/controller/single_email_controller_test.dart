@@ -20,6 +20,7 @@ import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:model/email/presentation_email.dart';
 import 'package:tmail_ui_user/features/caching/caching_manager.dart';
+import 'package:tmail_ui_user/features/download/presentation/controllers/download_controller.dart';
 import 'package:tmail_ui_user/features/email/data/datasource/calendar_event_datasource.dart';
 import 'package:tmail_ui_user/features/email/data/datasource_impl/html_datasource_impl.dart';
 import 'package:tmail_ui_user/features/email/data/local/html_analyzer.dart';
@@ -27,7 +28,6 @@ import 'package:tmail_ui_user/features/email/data/repository/calendar_event_repo
 import 'package:tmail_ui_user/features/email/domain/model/event_action.dart';
 import 'package:tmail_ui_user/features/email/domain/state/get_email_content_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/parse_calendar_event_state.dart';
-import 'package:tmail_ui_user/features/email/domain/usecases/add_a_label_to_an_email_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/calendar_event_accept_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/calendar_event_reject_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/get_email_content_interactor.dart';
@@ -36,7 +36,6 @@ import 'package:tmail_ui_user/features/email/domain/usecases/mark_as_star_email_
 import 'package:tmail_ui_user/features/email/domain/usecases/maybe_calendar_event_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/parse_calendar_event_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/print_email_interactor.dart';
-import 'package:tmail_ui_user/features/email/domain/usecases/remove_a_label_from_an_email_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/store_opened_email_interactor.dart';
 import 'package:tmail_ui_user/features/email/presentation/action/email_ui_action.dart';
 import 'package:tmail_ui_user/features/email/presentation/controller/single_email_controller.dart';
@@ -54,7 +53,7 @@ import 'package:tmail_ui_user/features/manage_account/domain/usecases/get_all_id
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/log_out_oidc_interactor.dart';
 import 'package:tmail_ui_user/features/upload/data/network/file_uploader.dart';
 import 'package:tmail_ui_user/main/bindings/network/binding_tag.dart';
-import 'package:tmail_ui_user/main/exceptions/cache_exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/cache_exception_thrower.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations_delegate.dart';
 import 'package:tmail_ui_user/main/localizations/localization_service.dart';
@@ -77,8 +76,6 @@ const fallbackGenerators = {
   MockSpec<MarkAsStarEmailInteractor>(),
   MockSpec<GetAllIdentitiesInteractor>(),
   MockSpec<StoreOpenedEmailInteractor>(),
-  MockSpec<AddALabelToAnEmailInteractor>(),
-  MockSpec<RemoveALabelFromAnEmailInteractor>(),
   MockSpec<MailboxDashBoardController>(fallbackGenerators: fallbackGenerators),
   MockSpec<DownloadController>(fallbackGenerators: fallbackGenerators),
   MockSpec<DownloadManager>(fallbackGenerators: fallbackGenerators),
@@ -112,8 +109,6 @@ void main() {
   final markAsStarEmailInteractor = MockMarkAsStarEmailInteractor();
   final getAllIdentitiesInteractor = MockGetAllIdentitiesInteractor();
   final storeOpenedEmailInteractor = MockStoreOpenedEmailInteractor();
-  final addALabelToAnEmailInteractor = MockAddALabelToAnEmailInteractor();
-  final removeALabelFromAnEmailInteractor = MockRemoveALabelFromAnEmailInteractor();
   final mailboxDashboardController = MockMailboxDashBoardController();
   final downloadController = MockDownloadController();
   final downloadManager = MockDownloadManager();
@@ -182,8 +177,6 @@ void main() {
       markAsStarEmailInteractor,
       getAllIdentitiesInteractor,
       storeOpenedEmailInteractor,
-      addALabelToAnEmailInteractor,
-      removeALabelFromAnEmailInteractor,
       printEmailInteractor,
     );
   });
@@ -326,9 +319,9 @@ void main() {
       // arrange
       const eventDescription = '\nhttps://example1.com\nhttps://example2.com';
       const expectedEventDescription = '<html><head></head><body>'
-        '<a href="https://example1.com" rel="noreferrer" style="white-space: nowrap; word-break: keep-all" target="_blank">example1.com</a>'
+        '<a href="https://example1.com" target="_blank" rel="noreferrer" style="white-space: nowrap; word-break: keep-all;">example1.com</a>'
         '<br>'
-        '<a href="https://example2.com" rel="noreferrer" style="white-space: nowrap; word-break: keep-all" target="_blank">example2.com</a>'
+        '<a href="https://example2.com" target="_blank" rel="noreferrer" style="white-space: nowrap; word-break: keep-all;">example2.com</a>'
         '</body></html>';
       final blobId = Id('abc123');
       final calendarEvent = CalendarEvent(
@@ -352,7 +345,7 @@ void main() {
 
       singleEmailController.onInit();
       mailboxDashboardController.accountId.refresh();
-      
+
       // act
       singleEmailController.parseCalendarEventAction(
         accountId: AccountFixtures.aliceAccountId,
@@ -360,7 +353,7 @@ void main() {
       );
       await untilCalled(calendarEventDataSource.parse(any, any));
       await Future.delayed(Duration.zero);
-      
+
       // assert
       expect(
         singleEmailController.blobCalendarEvent.value,
@@ -382,9 +375,9 @@ void main() {
         '\n<script>alert(1)</script>'
         '\n<a href="javascript:alert(1)">href xss</a>';
       const expectedEventDescription = '<html><head></head><body>'
-        '<a href="https://example1.com" rel="noreferrer" style="white-space: nowrap; word-break: keep-all" target="_blank">example1.com</a>'
+        '<a href="https://example1.com" target="_blank" rel="noreferrer" style="white-space: nowrap; word-break: keep-all;">example1.com</a>'
         '<br>'
-        '<a href="https://example2.com" rel="noreferrer" style="white-space: nowrap; word-break: keep-all" target="_blank">example2.com</a>'
+        '<a href="https://example2.com" target="_blank" rel="noreferrer" style="white-space: nowrap; word-break: keep-all;">example2.com</a>'
         '<br>'
         '<br>'
         '<a>href xss</a>'
@@ -419,7 +412,7 @@ void main() {
       );
       await untilCalled(calendarEventDataSource.parse(any, any));
       await Future.delayed(Duration.zero);
-      
+
       // assert
       expect(
         singleEmailController.blobCalendarEvent.value,
@@ -428,6 +421,49 @@ void main() {
           calendarEventList: [CalendarEvent(description: expectedEventDescription)],
         ),
       );
+    });
+
+    test(
+      'should render HTML markup in calendar event description as formatted HTML',
+    () async {
+      // arrange
+      const eventDescription = '<p>Hello <b>world</b></p>';
+      final blobId = Id('abc123');
+      final calendarEvent = CalendarEvent(description: eventDescription);
+      final blobCalendarEvents = [
+        BlobCalendarEvent(
+          blobId: blobId,
+          calendarEventList: [calendarEvent],
+        ),
+      ];
+      when(calendarEventDataSource.parse(any, any))
+        .thenAnswer((_) async => blobCalendarEvents);
+
+      when(mailboxDashboardController.selectedEmail).thenReturn(Rxn(PresentationEmail()));
+      when(mailboxDashboardController.emailUIAction).thenReturn(Rxn(EmailUIAction()));
+      when(mailboxDashboardController.viewState).thenReturn(Rx(Right(UIState.idle)));
+      when(mailboxDashboardController.accountId).thenReturn(Rxn(AccountFixtures.aliceAccountId));
+      when(mailboxDashboardController.downloadController).thenReturn(downloadController);
+      when(downloadController.downloadUIAction).thenAnswer((_) => Rxn(DownloadUIAction.idle));
+
+      singleEmailController.onInit();
+      mailboxDashboardController.accountId.refresh();
+
+      // act
+      singleEmailController.parseCalendarEventAction(
+        accountId: AccountFixtures.aliceAccountId,
+        blobIds: {blobId},
+      );
+      await untilCalled(calendarEventDataSource.parse(any, any));
+      await Future.delayed(Duration.zero);
+
+      // assert — HTML tags must be rendered, not escaped as visible text
+      final description = singleEmailController
+          .blobCalendarEvent.value?.calendarEventList.first.description ?? '';
+      expect(description, contains('<p>'));
+      expect(description, contains('<b>world</b>'));
+      expect(description, isNot(contains('&lt;p&gt;')));
+      expect(description, isNot(contains('&lt;b&gt;')));
     });
   });
 
@@ -454,6 +490,8 @@ void main() {
       when(mailboxDashboardController.viewState).thenReturn(Rx(Right(UIState.idle)));
       when(mailboxDashboardController.downloadController).thenReturn(downloadController);
       when(downloadController.downloadUIAction).thenAnswer((_) => Rxn(DownloadUIAction.idle));
+      when(imagePaths.icUndo).thenReturn(ImagePaths().icUndo);
+      when(imagePaths.icClose).thenReturn(ImagePaths().icClose);
       Get.put(singleEmailController);
       final widget = makeTestableWidget(child: const _TestView());
       await tester.pumpWidget(widget);
@@ -466,15 +504,19 @@ void main() {
       ));
       await tester.pump();
 
-      // assert - verify the toast method was called with correct message
-      verify(appToast.showToastMessageWithMultipleActions(
+      // assert
+      final captured = verify(appToast.showToastMessageWithMultipleActions(
         any,
-        argThat(contains(AppLocalizations().unknownError)),
-        actions: anyNamed('actions'),
+        captureAny,
+        actions: captureAnyNamed('actions'),
         textColor: anyNamed('textColor'),
         backgroundColor: anyNamed('backgroundColor'),
         infinityToast: anyNamed('infinityToast'),
-      )).called(1);
+      )).captured;
+      expect(captured[0], AppLocalizations().unknownError);
+      final actions = captured[1] as List<({String? actionName, Function? onActionClick, Widget? actionIcon})>;
+      expect(actions.any((a) => a.actionName == AppLocalizations().retry), isTrue);
+      expect(actions.any((a) => a.actionName == AppLocalizations().close), isTrue);
 
       // cleanup
       Get.delete<SingleEmailController>();

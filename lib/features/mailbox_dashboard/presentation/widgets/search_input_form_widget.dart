@@ -13,6 +13,7 @@ import 'package:core/presentation/views/quick_search/quick_search_text_field_con
 import 'package:core/utils/app_logger.dart';
 import 'package:core/utils/direction_utils.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_portal/flutter_portal.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
@@ -20,6 +21,7 @@ import 'package:jmap_dart_client/jmap/mail/email/email_address.dart';
 import 'package:model/email/presentation_email.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:tmail_ui_user/features/base/mixin/app_loader_mixin.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/base/widget/keyboard/keyboard_handler_wrapper.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/model/recent_search.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/action/dashboard_action.dart';
@@ -27,6 +29,8 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/search_controller.dart' as search;
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_keyboard_shortcut_actions_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/quick_search_filter.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/search_constants.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/notifier/search_view_state_notifier.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/advanced_search/advanced_search_filter_overlay.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/advanced_search/icon_open_advanced_search_widget.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/quick_search/contact_quick_search_item.dart';
@@ -34,6 +38,8 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/qu
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/quick_search/recent_search_item_tile_widget.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/search_filters/search_filter_button.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_query.dart';
+import 'package:tmail_ui_user/features/search/email/domain/notifier/search_filter_notifier.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/notifier/search_email_presentation_notifier.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
@@ -53,7 +59,11 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
+    return Consumer(builder: (context, ref, child) {
+      final searchViewState = ref.watch(searchViewStateProvider);
+      final currentSearchText = ref.watch(searchEmailPresentationProvider.select(
+        (state) => state.currentSearchText,
+      ));
       Widget searchInputForm = QuickSearchInputForm<PresentationEmail, EmailAddress, RecentSearch>(
         maxHeight: 52,
         suggestionsBoxVerticalOffset: 0.0,
@@ -63,7 +73,7 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
           color: Colors.white,
           borderRadius: BorderRadius.all(Radius.circular(16)),
         ),
-        debounceDuration: const Duration(milliseconds: 300),
+        debounceDuration: SearchConstants.inputDebounceDuration,
         listActionButton: const [
           QuickSearchFilter.hasAttachment,
           QuickSearchFilter.last7Days,
@@ -82,7 +92,10 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
         },
         buttonActionCallback: (filterAction) {
           if (filterAction is QuickSearchFilter) {
-            _searchController.addQuickSearchFilterToSuggestionSearchView(filterAction);
+            _searchController.toggleQuickSearchFilter(
+              filterAction,
+              currentUserEmail: _dashBoardController.ownEmailAddress.value,
+            );
           }
         },
         listActionPadding: const EdgeInsets.only(left: 12, right: 12, top: 12, bottom: 6),
@@ -128,8 +141,8 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
         suggestionsCallback: _dashBoardController.quickSearchEmails,
         itemBuilder: (context, email) => EmailQuickSearchItemTileWidget(
             email,
-            _dashBoardController.selectedMailbox.value,
-            searchQuery: SearchQuery(_searchController.currentSearchText.trim())),
+            _dashBoardController.selectedMailboxForDisplay,
+            searchQuery: SearchQuery(currentSearchText.trim())),
         onSuggestionSelected: _invokeSelectSuggestionItem,
         contactItemBuilder: (context, emailAddress) => ContactQuickSearchItem(emailAddress: emailAddress),
         contactSuggestionsCallback: _dashBoardController.getContactSuggestion,
@@ -145,7 +158,7 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
       }
 
       return PortalTarget(
-        visible: _searchController.isAdvancedSearchViewOpen.isTrue,
+        visible: searchViewState.isAdvancedSearchViewOpen,
         portalFollower: PointerInterceptor(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -153,7 +166,7 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
           ),
         ),
         child: PortalTarget(
-          visible: _searchController.isAdvancedSearchViewOpen.isTrue,
+          visible: searchViewState.isAdvancedSearchViewOpen,
           anchor: const Aligned(
             follower: Alignment.topRight,
             target: Alignment.bottomRight,
@@ -180,12 +193,6 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
 
     if (trimmedQueryString.isNotEmpty) {
       _saveRecentSearch(trimmedQueryString);
-    }
-
-    if (_searchController.listFilterOnSuggestionForm.isNotEmpty) {
-      _searchController.applyFilterSuggestionToSearchFilter(
-        _dashBoardController.ownEmailAddress.value,
-      );
     }
 
     _dashBoardController.searchEmailByQueryString(trimmedQueryString);
@@ -219,9 +226,6 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
     _searchController.searchInputController.text = recent.value;
     _searchController.searchFocus.unfocus();
     _searchController.enableSearch();
-    _searchController.applyFilterSuggestionToSearchFilter(
-      _dashBoardController.ownEmailAddress.value,
-    );
     _dashBoardController.searchEmailByQueryString(recent.value);
   }
 
@@ -305,17 +309,27 @@ class SearchInputFormWidget extends StatelessWidget with AppLoaderMixin {
     QuickSearchFilter searchFilter,
     QuickSearchSuggestionListState suggestionsListState
   ) {
-    return Obx(() {
-      final isSelected = searchFilter.isApplied(_searchController.listFilterOnSuggestionForm);
+    return Consumer(builder: (context, ref, child) {
+      final searchEmailFilter = ref.watch(searchFilterProvider);
+      final isSelected = searchFilter.isSelected(
+        context,
+        searchEmailFilter,
+        _searchController.sortOrderFiltered,
+        _dashBoardController.ownEmailAddress.value,
+      );
 
       return SearchFilterButton(
+        key: Key('${UiKeys.quickSearchFilterButtonPrefix}${searchFilter.name}'),
         searchFilter: searchFilter,
         imagePaths: _imagePaths,
         responsiveUtils: _responsiveUtils,
         isSelected: isSelected,
         backgroundColor: searchFilter.getSuggestionBackgroundColor(isSelected: isSelected),
         onDeleteSearchFilterAction: (searchFilter) {
-          _searchController.deleteQuickSearchFilterFromSuggestionSearchView(searchFilter);
+          _searchController.toggleQuickSearchFilter(
+            searchFilter,
+            currentUserEmail: _dashBoardController.ownEmailAddress.value,
+          );
           suggestionsListState.invalidateSuggestions();
         },
       );

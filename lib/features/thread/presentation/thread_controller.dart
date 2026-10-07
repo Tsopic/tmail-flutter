@@ -28,20 +28,34 @@ import 'package:tmail_ui_user/features/home/data/exceptions/session_exceptions.d
 import 'package:tmail_ui_user/features/mailbox/domain/state/mark_as_mailbox_read_state.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/extensions/presentation_mailbox_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/action/dashboard_action.dart';
-import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/search_controller.dart' as search;
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/search_controller.dart'
+    as search;
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/move_emails_to_mailbox_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/open_and_close_composer_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/update_current_emails_flags_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/dashboard_routes.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/email_sort_order_type.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/search_email_filter.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/notifier/search_view_state_notifier.dart';
 import 'package:tmail_ui_user/features/network_connection/presentation/network_connection_controller.dart'
-  if (dart.library.html) 'package:tmail_ui_user/features/network_connection/presentation/web_network_connection_controller.dart';
+    if (dart.library.html) 'package:tmail_ui_user/features/network_connection/presentation/web_network_connection_controller.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/websocket/web_socket_message.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/websocket/web_socket_queue_handler.dart';
+import 'package:tmail_ui_user/features/labels/presentation/delegates/add_list_label_to_list_emails_delegate.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/labels/handle_logic_label_extension.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/preferences_setting.dart';
+import 'package:tmail_ui_user/main/providers/settings/local_settings_notifier.dart';
+import 'package:tmail_ui_user/features/thread/data/model/email_change_response.dart';
+import 'package:tmail_ui_user/main/providers/app_provider_container.dart';
 import 'package:tmail_ui_user/features/search/email/presentation/search_email_bindings.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/coordinator/get_search_email_layout_owner_registry.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/coordinator/search_email_layout_owner_registry.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/coordinator/search_layout_coordinator.dart';
+import 'package:tmail_ui_user/features/thread/data/extensions/email_change_response_extension.dart';
 import 'package:tmail_ui_user/features/thread/domain/constants/thread_constants.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/filter_message_option.dart';
+import 'package:tmail_ui_user/features/thread/presentation/extensions/filter_message_option_style_extension.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/get_email_request.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_query.dart';
 import 'package:tmail_ui_user/features/thread/domain/state/clean_and_get_all_email_state.dart';
@@ -52,24 +66,33 @@ import 'package:tmail_ui_user/features/thread/domain/state/move_multiple_email_t
 import 'package:tmail_ui_user/features/thread/domain/state/refresh_all_email_state.dart';
 import 'package:tmail_ui_user/features/thread/domain/state/refresh_changes_all_email_state.dart';
 import 'package:tmail_ui_user/features/thread/domain/state/search_email_state.dart';
-import 'package:tmail_ui_user/features/thread/domain/state/search_more_email_state.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/clean_and_get_emails_in_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/get_email_by_id_interactor.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/get_emails_in_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/load_more_emails_in_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/refresh_changes_emails_in_mailbox_interactor.dart';
-import 'package:tmail_ui_user/features/thread/domain/usecases/search_email_interactor.dart';
-import 'package:tmail_ui_user/features/thread/domain/usecases/search_more_email_interactor.dart';
+import 'package:tmail_ui_user/features/search/email/domain/execution/search_execution_intent.dart';
+import 'package:tmail_ui_user/features/search/email/domain/model/search_email_result.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/service/search_dispatch_context.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/service/search_dispatch_context_extension.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/service/search_email_failure_mapper.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/service/search_execution_observer.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/service/search_executor_service.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/providers/search_executor_provider.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/notifier/search_email_presentation_notifier.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/utils/search_email_presentation_owner_utils.dart';
 import 'package:tmail_ui_user/features/thread/presentation/extensions/handle_email_filter_extension.dart';
 import 'package:tmail_ui_user/features/thread/presentation/extensions/handle_keyboard_shortcut_actions_extension.dart';
 import 'package:tmail_ui_user/features/thread/presentation/extensions/list_presentation_email_extensions.dart';
 import 'package:tmail_ui_user/features/thread/presentation/extensions/refresh_thread_detail_extension.dart';
 import 'package:tmail_ui_user/features/thread/presentation/mixin/email_action_controller.dart';
+import 'package:tmail_ui_user/features/thread/presentation/model/auto_load_more_policy.dart';
 import 'package:tmail_ui_user/features/thread/presentation/model/delete_action_type.dart';
 import 'package:tmail_ui_user/features/thread/presentation/model/loading_more_status.dart';
 import 'package:tmail_ui_user/features/thread/presentation/model/mail_list_shortcut_action_view_event.dart';
 import 'package:tmail_ui_user/features/thread/presentation/model/search_status.dart';
-import 'package:tmail_ui_user/main/exceptions/remote_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/method_level_exception.dart';
+import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/app_routes.dart';
 import 'package:tmail_ui_user/main/routes/navigation_router.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
@@ -77,20 +100,22 @@ import 'package:tmail_ui_user/main/routes/route_utils.dart';
 import 'package:tmail_ui_user/main/utils/app_config.dart';
 import 'package:universal_html/html.dart' as html;
 
+part 'thread_search_execution_observer.dart';
+
 typedef StartRangeSelection = int;
 typedef EndRangeSelection = int;
 
 class ThreadController extends BaseController with EmailActionController {
-
   final networkConnectionController = Get.find<NetworkConnectionController>();
 
   final GetEmailsInMailboxInteractor _getEmailsInMailboxInteractor;
-  final RefreshChangesEmailsInMailboxInteractor _refreshChangesEmailsInMailboxInteractor;
+  final RefreshChangesEmailsInMailboxInteractor
+  _refreshChangesEmailsInMailboxInteractor;
   final LoadMoreEmailsInMailboxInteractor _loadMoreEmailsInMailboxInteractor;
-  final SearchEmailInteractor _searchEmailInteractor;
-  final SearchMoreEmailInteractor _searchMoreEmailInteractor;
   final GetEmailByIdInteractor _getEmailByIdInteractor;
-  final CleanAndGetEmailsInMailboxInteractor cleanAndGetEmailsInMailboxInteractor;
+  final CleanAndGetEmailsInMailboxInteractor
+  cleanAndGetEmailsInMailboxInteractor;
+  final SearchEmailLayoutOwnerRegistry _searchEmailLayoutOwnerRegistry;
 
   final listEmailDrag = <PresentationEmail>[].obs;
   bool rangeSelectionMode = false;
@@ -98,7 +123,7 @@ class ThreadController extends BaseController with EmailActionController {
   final loadingMoreStatus = Rx(LoadingMoreStatus.idle);
 
   bool canLoadMore = true;
-  bool canSearchMore = true;
+  ProviderSubscription<SearchStatus>? _searchStateSubscription;
   MailboxId? _currentMemoryMailboxId;
   int _peakEmailCount = 0;
   // Holds every Worker returned by ever() so they can be explicitly disposed
@@ -110,22 +135,41 @@ class ThreadController extends BaseController with EmailActionController {
   bool isListEmailScrollViewJumping = false;
   WebSocketQueueHandler? _webSocketQueueHandler;
   FocusNode? keyboardFocusNode;
-  StreamController<MailListShortcutActionViewEvent>? shortcutActionEventController;
-  StreamSubscription<MailListShortcutActionViewEvent>? shortcutActionEventSubscription;
+  StreamController<MailListShortcutActionViewEvent>?
+  shortcutActionEventController;
+  StreamSubscription<MailListShortcutActionViewEvent>?
+  shortcutActionEventSubscription;
 
-  StreamSubscription<html.Event>? _resizeBrowserStreamSubscription;
+  ProviderSubscription<PreferencesSetting>? _localSettingsSubscription;
+  late final SearchExecutionObserver _searchExecutionObserver =
+      ThreadSearchExecutionObserver(this);
+  @visibleForTesting
+  late final SearchLayoutCoordinator searchLayoutCoordinator =
+      _createSearchLayoutCoordinator();
 
   AccountId? get _accountId => mailboxDashBoardController.accountId.value;
 
   Session? get _session => mailboxDashBoardController.sessionCurrent;
 
-  PresentationMailbox? get selectedMailbox => mailboxDashBoardController.selectedMailbox.value;
+  PresentationMailbox? get selectedMailbox =>
+      mailboxDashBoardController.selectedMailbox.value;
 
   MailboxId? get selectedMailboxId => selectedMailbox?.id;
 
-  search.SearchController get searchController => mailboxDashBoardController.searchController;
+  search.SearchController get searchController =>
+      mailboxDashBoardController.searchController;
 
-  SearchEmailFilter get _searchEmailFilter => searchController.searchEmailFilter.value;
+  SearchEmailFilter get _searchEmailFilter =>
+      searchController.committedSearchFilter;
+
+  bool get canSearchMore =>
+      appProviderContainer.read(searchEmailPresentationProvider).canSearchMore;
+
+  bool get _isCollapseThreadsEnabled =>
+      appProviderContainer.read(localSettingsProvider).threadConfig.isEnabled;
+
+  bool get _shouldCollapseThreads =>
+      forceEmailQuery && _isCollapseThreadsEnabled;
 
   SearchQuery? get searchQuery => _searchEmailFilter.text;
 
@@ -133,20 +177,33 @@ class ThreadController extends BaseController with EmailActionController {
     this._getEmailsInMailboxInteractor,
     this._refreshChangesEmailsInMailboxInteractor,
     this._loadMoreEmailsInMailboxInteractor,
-    this._searchEmailInteractor,
-    this._searchMoreEmailInteractor,
     this._getEmailByIdInteractor,
-    this.cleanAndGetEmailsInMailboxInteractor,
-  );
+    this.cleanAndGetEmailsInMailboxInteractor, {
+    SearchEmailLayoutOwnerRegistry searchEmailLayoutOwnerRegistry =
+        const GetSearchEmailLayoutOwnerRegistry(),
+  }) : _searchEmailLayoutOwnerRegistry = searchEmailLayoutOwnerRegistry;
+
+  // Lazy so dispatch works before onInit, like the old late-final executor.
+  SearchExecutorService get _searchService =>
+      appProviderContainer.read(searchExecutorServiceProvider);
+
+  SearchDispatchContext? get _dispatchContext => mailboxDashBoardController
+      .buildSearchDispatchContext(collapseThreads: _isCollapseThreadsEnabled);
+
+  bool get _isSearchEngaged =>
+      appProviderContainer.read(searchViewStateProvider).isSearchEngaged ||
+      searchController.isSearchEmailRunning;
 
   @override
   void onInit() {
     _registerObxStreamListener();
     if (PlatformInfo.isWeb) {
-      _registerBrowserResizeListener();
+      searchLayoutCoordinator.start();
       onKeyboardShortcutInit();
     }
     _initWebSocketQueueHandler();
+    // Web shows search results in this list; mobile uses SearchEmailController.
+    if (PlatformInfo.isWeb) _searchService.register(_searchExecutionObserver);
     super.onInit();
   }
 
@@ -165,10 +222,15 @@ class ThreadController extends BaseController with EmailActionController {
     _workers.clear();
     listEmailController.dispose();
     if (PlatformInfo.isWeb) {
-      _resizeBrowserStreamSubscription?.cancel();
+      searchLayoutCoordinator.dispose();
       onKeyboardShortcutDispose();
     }
     _webSocketQueueHandler?.dispose();
+    _localSettingsSubscription?.close();
+    _searchStateSubscription?.close();
+    if (PlatformInfo.isWeb) {
+      _searchService.unregister(_searchExecutionObserver);
+    }
     super.onClose();
   }
 
@@ -179,11 +241,7 @@ class ThreadController extends BaseController with EmailActionController {
       _getAllEmailSuccess(success);
     } else if (success is LoadMoreEmailsSuccess) {
       _loadMoreEmailsSuccess(success);
-    } else if (success is SearchEmailSuccess) {
-      _searchEmailsSuccess(success);
-    } else if (success is SearchMoreEmailSuccess) {
-      _searchMoreEmailsSuccess(success);
-    } else if (success is SearchingMoreState || success is LoadingMoreEmails) {
+    } else if (success is LoadingMoreEmails) {
       loadingMoreStatus.value = LoadingMoreStatus.running;
     } else if (success is GetEmailByIdLoading) {
       openingEmail.value = true;
@@ -192,11 +250,14 @@ class ThreadController extends BaseController with EmailActionController {
       if (isSearchActive) {
         _openEmailSearchedFromLocationBar(
           email: success.email,
-          searchQuery: searchQuery
+          searchQuery: searchQuery,
         );
       } else {
         if (success.mailboxContain != null) {
-          _openEmailInsideMailboxFromLocationBar(success.email, success.mailboxContain!);
+          _openEmailInsideMailboxFromLocationBar(
+            success.email,
+            success.mailboxContain!,
+          );
         } else {
           _openEmailWithoutMailboxFromLocationBar(success.email);
         }
@@ -207,30 +268,26 @@ class ThreadController extends BaseController with EmailActionController {
   @override
   void handleFailureViewState(Failure failure) {
     super.handleFailureViewState(failure);
-    if (failure is SearchEmailFailure) {
-      mailboxDashBoardController.updateRefreshAllEmailState(Left(RefreshAllEmailFailure()));
-      canSearchMore = false;
-      loadingMoreStatus.value = LoadingMoreStatus.idle;
-      mailboxDashBoardController.emailsInCurrentMailbox.clear();
-      showRetryToast(failure);
-    } else if (failure is SearchMoreEmailFailure) {
-      loadingMoreStatus.value = LoadingMoreStatus.completed;
-      canSearchMore = true;
-    }  else if (failure is LoadMoreEmailsFailure) {
+    if (failure is LoadMoreEmailsFailure) {
       loadingMoreStatus.value = LoadingMoreStatus.completed;
       canLoadMore = true;
     } else if (failure is GetEmailByIdFailure) {
       openingEmail.value = false;
       popAndPush(AppRoutes.unknownRoutePage);
-    } else if (failure is GetAllEmailFailure || failure is CleanAndGetAllEmailFailure) {
-      mailboxDashBoardController.updateRefreshAllEmailState(Left(RefreshAllEmailFailure()));
+    } else if (failure is GetAllEmailFailure ||
+        failure is CleanAndGetAllEmailFailure) {
+      mailboxDashBoardController.updateRefreshAllEmailState(
+        Left(RefreshAllEmailFailure()),
+      );
     }
   }
 
   @override
   void handleErrorViewState(Object error, StackTrace stackTrace) {
     super.handleErrorViewState(error, stackTrace);
-    logWarning('ThreadController::handleErrorViewState(): error: $error | stackTrace: $stackTrace');
+    logWarning(
+      'ThreadController::handleErrorViewState(): error: $error | stackTrace: $stackTrace',
+    );
     _resetLoadingMore();
     _handleErrorGetAllOrRefreshChangesEmail(error, stackTrace);
   }
@@ -273,169 +330,225 @@ class ThreadController extends BaseController with EmailActionController {
   }
 
   void _registerObxStreamListener() {
-    _workers.add(ever(mailboxDashBoardController.selectedMailbox, (mailbox) {
-      log('ThreadController::_registerObxStreamListener:SelectedMailbox: ${mailbox?.id} - ${mailbox?.name} | CurrentMemoryMailboxId: $_currentMemoryMailboxId');
-      if (mailbox is PresentationMailbox
-          && mailbox.mailboxId != _currentMemoryMailboxId) {
-        _currentMemoryMailboxId = mailbox.id;
-        consumeState(Stream.value(Right(GetAllEmailLoading())));
-        resetToOriginalValue();
-        getAllEmailAction(
-          getLatestChanges: mailboxDashBoardController.isFirstSessionLoad,
-          forceEmailQuery: forceEmailQuery,
+    _workers.add(
+      ever(mailboxDashBoardController.selectedMailbox, (mailbox) {
+        log(
+          'ThreadController::_registerObxStreamListener:SelectedMailbox: ${mailbox?.id} - ${mailbox?.name} | CurrentMemoryMailboxId: $_currentMemoryMailboxId',
         );
-        mailboxDashBoardController.setIsFirstSessionLoad(false);
-      } else if (mailbox == null) { // disable current mailbox when search active
-        _currentMemoryMailboxId = null;
-        resetToOriginalValue();
-      }
-    }));
-
-    _workers.add(ever(searchController.searchState, (searchState) {
-      if (searchState.searchStatus == SearchStatus.ACTIVE) {
-        cancelSelectEmail();
-      }
-    }));
-
-    _workers.add(ever(mailboxDashBoardController.dashBoardAction, (action) {
-      if (action is SelectionAllEmailAction) {
-        setSelectAllEmailAction();
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is CancelSelectionAllEmailAction) {
-        cancelSelectEmail();
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is FilterMessageAction) {
-        filterMessagesAction(action.option);
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is HandleEmailActionTypeAction) {
-        pressEmailSelectionAction(action.emailAction, action.listEmailSelected);
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is OpenEmailDetailedFromSuggestionQuickSearchAction) {
-        final mailboxContain = action.presentationEmail.findMailboxContain(mailboxDashBoardController.mapMailboxById);
-        final newEmail = generateEmailByPlatform(action.presentationEmail);
-        handleEmailActionType(
-          EmailActionType.preview,
-          newEmail,
-          mailboxContain: mailboxContain,
-        );
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is StartSearchEmailAction
-          || action is ClearAdvancedSearchFilterEmailAction) {
-        cancelSelectEmail();
-        _replaceBrowserHistory();
-        _searchEmail();
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is EmptyTrashAction && currentContext != null) {
-        deleteSelectionEmailsPermanently(currentContext!, DeleteActionType.all);
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is OpenEmailInsideMailboxFromLocationBar) {
-        _getEmailByIdFromLocationBar(
-          action.emailId,
-          mailboxContain: action.presentationMailbox,
-        );
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is OpenEmailWithoutMailboxFromLocationBar) {
-        _getEmailByIdFromLocationBar(action.emailId);
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is OpenEmailSearchedFromLocationBar) {
-        _handleOpenEmailSearchedFromLocationBar(
-          emailId: action.emailId,
-          searchQuery: action.searchQuery
-        );
-      } else if (action is SearchEmailFromLocationBar) {
-        _handleSearchEmailFromLocationBar(action.searchQuery);
-      } else if (action is SelectDateRangeToAdvancedSearch || action is ClearDateRangeToAdvancedSearch) {
-        if (listEmailController.hasClients) {
-          listEmailController.jumpTo(0);
+        if (mailbox is PresentationMailbox &&
+            mailbox.mailboxId != _currentMemoryMailboxId) {
+          _currentMemoryMailboxId = mailbox.id;
+          consumeState(Stream.value(Right(GetAllEmailLoading())));
+          resetToOriginalValue();
+          getAllEmailAction(
+            getLatestChanges: mailboxDashBoardController.isFirstSessionLoad,
+            forceEmailQuery: forceEmailQuery,
+          );
+          mailboxDashBoardController.setIsFirstSessionLoad(false);
+        } else if (mailbox == null) {
+          // disable current mailbox when search active
+          _currentMemoryMailboxId = null;
+          resetToOriginalValue();
         }
-        canSearchMore = true;
-        mailboxDashBoardController.emailsInCurrentMailbox.clear();
-      } else if (action is ReclaimMailListKeyboardShortcutFocusAction) {
-        refocusMailShortcutFocus();
-        mailboxDashBoardController.clearDashBoardAction();
-      } else if (action is ClearMailListKeyboardShortcutFocusAction) {
-        clearMailShortcutFocus();
-        mailboxDashBoardController.clearDashBoardAction();
-      }
-    }));
+      }),
+    );
 
-    _workers.add(ever(mailboxDashBoardController.emailUIAction, (action) {
-      if (action is RefreshChangeEmailAction) {
-        _refreshEmailChanges(newState: action.newState);
-      } else if (action is RefreshAllEmailAction) {
-        refreshAllEmail(shouldClearCache: PlatformInfo.isWeb);
-        mailboxDashBoardController.clearEmailUIAction();
-      }
-    }));
+    _searchStateSubscription = appProviderContainer.listen(
+      searchViewStateProvider.select((state) => state.searchState.searchStatus),
+      (previous, next) {
+        // Only clear the selection on the transition into active search, so a
+        // later state change that stays ACTIVE cannot wipe a fresh selection.
+        if (previous != SearchStatus.ACTIVE && next == SearchStatus.ACTIVE) {
+          cancelSelectEmail();
+        }
+      },
+    );
 
-    _workers.add(ever(mailboxDashBoardController.viewState, (viewState) {
-      if (isSearchActive) return;
-      final reactionState = viewState.getOrElse(() => UIState.idle);
-      if (reactionState is MarkAsMailboxReadAllSuccess) {
-        _handleMarkEmailsAsReadByMailboxId(reactionState.mailboxId);
-      } else if (reactionState is MarkAsMailboxReadHasSomeEmailFailure) {
-        mailboxDashBoardController.updateEmailFlagByEmailIds(
-          reactionState.successEmailIds,
-          readAction: ReadActions.markAsRead,
-        );
-      } else if (reactionState is MoveToMailboxSuccess) {
-        mailboxDashBoardController.handleMoveEmailsToMailbox(
-          originalMailboxIdsWithEmailIds: reactionState.originalMailboxIdsWithEmailIds,
-          destinationMailboxId: reactionState.destinationMailboxId,
-        );
-        _checkIfCurrentMailboxCanLoadMore();
-      } else if (reactionState is MoveMultipleEmailToMailboxAllSuccess) {
-        mailboxDashBoardController.handleMoveEmailsToMailbox(
-          originalMailboxIdsWithEmailIds: reactionState.originalMailboxIdsWithEmailIds,
-          destinationMailboxId: reactionState.destinationMailboxId,
-        );
-        _checkIfCurrentMailboxCanLoadMore();
-      } else if (reactionState is MoveMultipleEmailToMailboxHasSomeEmailFailure) {
-        mailboxDashBoardController.handleMoveEmailsToMailbox(
-          originalMailboxIdsWithEmailIds: reactionState.originalMailboxIdsWithMoveSucceededEmailIds,
-          destinationMailboxId: reactionState.destinationMailboxId,
-        );
-        _checkIfCurrentMailboxCanLoadMore();
-      } else if (reactionState is DeleteEmailPermanentlySuccess) {
-        _handleDeleteEmailsPermanentlyFromMailboxId(
-          reactionState.mailboxId,
-          deletedEmailsCount: 1,
-        );
-        _checkIfCurrentMailboxCanLoadMore();
-      } else if (reactionState is DeleteMultipleEmailsPermanentlyAllSuccess) {
-        _handleDeleteEmailsPermanentlyFromMailboxId(
-          reactionState.mailboxId,
-          deletedEmailsCount: reactionState.emailIds.length,
-        );
-        _checkIfCurrentMailboxCanLoadMore();
-      } else if (reactionState is DeleteMultipleEmailsPermanentlyHasSomeEmailFailure) {
-        _handleDeleteEmailsPermanentlyFromMailboxId(
-          reactionState.mailboxId,
-          deletedEmailsCount: reactionState.emailIds.length,
-        );
-        _checkIfCurrentMailboxCanLoadMore();
-      }
-    }));
+    _workers.add(
+      ever(mailboxDashBoardController.dashBoardAction, (action) {
+        if (action is SelectionAllEmailAction) {
+          setSelectAllEmailAction();
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is CancelSelectionAllEmailAction) {
+          cancelSelectEmail();
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is FilterMessageAction) {
+          filterMessagesAction(action.option);
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is HandleEmailActionTypeAction) {
+          pressEmailSelectionAction(
+            action.emailAction,
+            action.listEmailSelected,
+          );
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is OpenEmailDetailedFromSuggestionQuickSearchAction) {
+          final mailboxContain = action.presentationEmail.findMailboxContain(
+            mailboxDashBoardController.mapMailboxById,
+          );
+          final newEmail = generateEmailByPlatform(action.presentationEmail);
+          handleEmailActionType(
+            EmailActionType.preview,
+            newEmail,
+            mailboxContain,
+          );
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is StartSearchEmailAction ||
+            action is ClearAdvancedSearchFilterEmailAction) {
+          cancelSelectEmail();
+          _replaceBrowserHistory();
+          _searchEmail();
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is EmptyTrashAction && currentContext != null) {
+          deleteSelectionEmailsPermanently(
+            currentContext!,
+            DeleteActionType.all,
+          );
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is OpenEmailInsideMailboxFromLocationBar) {
+          _getEmailByIdFromLocationBar(
+            action.emailId,
+            mailboxContain: action.presentationMailbox,
+          );
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is OpenEmailWithoutMailboxFromLocationBar) {
+          _getEmailByIdFromLocationBar(action.emailId);
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is OpenEmailSearchedFromLocationBar) {
+          _handleOpenEmailSearchedFromLocationBar(
+            emailId: action.emailId,
+            searchQuery: action.searchQuery,
+          );
+        } else if (action is SearchEmailFromLocationBar) {
+          _handleSearchEmailFromLocationBar(action.searchQuery);
+        } else if (action is SelectDateRangeToAdvancedSearch) {
+          if (listEmailController.hasClients) {
+            listEmailController.jumpTo(0);
+          }
+          appProviderContainer
+              .read(searchEmailPresentationProvider.notifier)
+              .resetSearchMore();
+          mailboxDashBoardController.emailsInCurrentMailbox.clear();
+        } else if (action is ReclaimMailListKeyboardShortcutFocusAction) {
+          refocusMailShortcutFocus();
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is ClearMailListKeyboardShortcutFocusAction) {
+          clearMailShortcutFocus();
+          mailboxDashBoardController.clearDashBoardAction();
+        } else if (action is RestoreMailboxEmailListAfterSearchAction) {
+          restoreMailboxEmailListAfterSearch(force: action.force);
+          mailboxDashBoardController.clearDashBoardAction();
+        }
+      }),
+    );
 
-    _workers.add(ever(mailboxDashBoardController.emailsInCurrentMailbox, (emails) {
-      final countEmails = emails.length;
-      logTrace(
-        'ThreadController::Ever(mailboxDashBoardController.emailsInCurrentMailbox): '
-        'Count emails is $countEmails, '
-        '_peakEmailCount is $_peakEmailCount',
-      );
-      if (emails.isEmpty) {
-        _peakEmailCount = 0;
-      } else if (countEmails > _peakEmailCount) {
-        _peakEmailCount = countEmails;
-      }
-    }));
+    _workers.add(
+      ever(mailboxDashBoardController.emailUIAction, (action) {
+        if (action is RefreshChangeEmailAction) {
+          _refreshEmailChanges(newState: action.newState);
+        } else if (action is RefreshAllEmailAction) {
+          refreshAllEmail(shouldClearCache: PlatformInfo.isWeb);
+          mailboxDashBoardController.clearEmailUIAction();
+        }
+      }),
+    );
+
+    _workers.add(
+      ever(mailboxDashBoardController.viewState, (viewState) {
+        if (isSearchActive) return;
+        final reactionState = viewState.getOrElse(() => UIState.idle);
+        if (reactionState is MarkAsMailboxReadAllSuccess) {
+          _handleMarkEmailsAsReadByMailboxId(reactionState.mailboxId);
+        } else if (reactionState is MarkAsMailboxReadHasSomeEmailFailure) {
+          mailboxDashBoardController.updateEmailFlagByEmailIds(
+            reactionState.successEmailIds,
+            readAction: ReadActions.markAsRead,
+          );
+        } else if (reactionState is MoveToMailboxSuccess) {
+          mailboxDashBoardController.handleMoveEmailsToMailbox(
+            originalMailboxIdsWithEmailIds:
+                reactionState.originalMailboxIdsWithEmailIds,
+            destinationMailboxId: reactionState.destinationMailboxId,
+          );
+          _checkIfCurrentMailboxCanLoadMore();
+        } else if (reactionState is MoveMultipleEmailToMailboxAllSuccess) {
+          mailboxDashBoardController.handleMoveEmailsToMailbox(
+            originalMailboxIdsWithEmailIds:
+                reactionState.originalMailboxIdsWithEmailIds,
+            destinationMailboxId: reactionState.destinationMailboxId,
+          );
+          _checkIfCurrentMailboxCanLoadMore();
+        } else if (reactionState
+            is MoveMultipleEmailToMailboxHasSomeEmailFailure) {
+          mailboxDashBoardController.handleMoveEmailsToMailbox(
+            originalMailboxIdsWithEmailIds:
+                reactionState.originalMailboxIdsWithMoveSucceededEmailIds,
+            destinationMailboxId: reactionState.destinationMailboxId,
+          );
+          _checkIfCurrentMailboxCanLoadMore();
+        } else if (reactionState is DeleteEmailPermanentlySuccess) {
+          _handleDeleteEmailsPermanentlyFromMailboxId(
+            reactionState.mailboxId,
+            deletedEmailsCount: 1,
+          );
+          _checkIfCurrentMailboxCanLoadMore();
+        } else if (reactionState is DeleteMultipleEmailsPermanentlyAllSuccess) {
+          _handleDeleteEmailsPermanentlyFromMailboxId(
+            reactionState.mailboxId,
+            deletedEmailsCount: reactionState.emailIds.length,
+          );
+          _checkIfCurrentMailboxCanLoadMore();
+        } else if (reactionState
+            is DeleteMultipleEmailsPermanentlyHasSomeEmailFailure) {
+          _handleDeleteEmailsPermanentlyFromMailboxId(
+            reactionState.mailboxId,
+            deletedEmailsCount: reactionState.emailIds.length,
+          );
+          _checkIfCurrentMailboxCanLoadMore();
+        }
+      }),
+    );
+
+    _workers.add(
+      ever(mailboxDashBoardController.emailsInCurrentMailbox, (emails) {
+        final countEmails = emails.length;
+        logTrace(
+          'ThreadController::Ever(mailboxDashBoardController.emailsInCurrentMailbox): '
+          'Count emails is $countEmails, '
+          '_peakEmailCount is $_peakEmailCount',
+        );
+        if (emails.isEmpty) {
+          _peakEmailCount = 0;
+        } else if (countEmails > _peakEmailCount) {
+          _peakEmailCount = countEmails;
+        }
+      }),
+    );
+
+    _registerLocalSettingsListener();
+  }
+
+  void _registerLocalSettingsListener() {
+    if (_localSettingsSubscription != null) return;
+    _localSettingsSubscription = appProviderContainer.listen(
+      localSettingsProvider,
+      (previous, next) {
+        if (previous?.threadConfig == next.threadConfig) return;
+        if (searchController.isSearchEmailRunning) {
+          _searchEmail(refresh: true);
+        } else if (forceEmailQuery) {
+          getAllEmailAction(forceEmailQuery: forceEmailQuery);
+        }
+      },
+      fireImmediately: false,
+    );
   }
 
   void _handleMarkEmailsAsReadByMailboxId(MailboxId mailboxId) {
-    if (mailboxDashBoardController.selectedMailbox.value?.id != mailboxId) return;
+    if (mailboxDashBoardController.selectedMailbox.value?.id != mailboxId)
+      return;
 
-    for (var presentationEmail in mailboxDashBoardController.emailsInCurrentMailbox) {
+    for (var presentationEmail
+        in mailboxDashBoardController.emailsInCurrentMailbox) {
       if (presentationEmail.mailboxContain?.id != mailboxId) continue;
 
       presentationEmail.keywords?[KeyWordIdentifier.emailSeen] = true;
@@ -447,15 +560,16 @@ class ThreadController extends BaseController with EmailActionController {
     MailboxId? mailboxId, {
     required int deletedEmailsCount,
   }) {
-    if (mailboxDashBoardController.selectedMailbox.value?.id != mailboxId) return;
+    if (mailboxDashBoardController.selectedMailbox.value?.id != mailboxId)
+      return;
     final currentMailbox = mailboxDashBoardController.selectedMailbox.value;
     final currentTotalEmails = currentMailbox?.totalEmails;
     if (currentMailbox != null && currentTotalEmails != null) {
-      int newTotalEmails = currentTotalEmails.value.value.toInt() - deletedEmailsCount;
+      int newTotalEmails =
+          currentTotalEmails.value.value.toInt() - deletedEmailsCount;
       if (newTotalEmails < 0) newTotalEmails = 0;
-      mailboxDashBoardController.selectedMailbox.value = currentMailbox.copyWith(
-        totalEmails: TotalEmails(UnsignedInt(newTotalEmails)),
-      );
+      mailboxDashBoardController.selectedMailbox.value = currentMailbox
+          .copyWith(totalEmails: TotalEmails(UnsignedInt(newTotalEmails)));
     }
   }
 
@@ -464,19 +578,28 @@ class ThreadController extends BaseController with EmailActionController {
     if (currentMailbox == null) return;
 
     final totalEmailsCount = currentMailbox.countTotalEmails;
-    if (totalEmailsCount == 0
-      || mailboxDashBoardController.emailsInCurrentMailbox.isNotEmpty
-    ) {
+    if (totalEmailsCount == 0 ||
+        mailboxDashBoardController.emailsInCurrentMailbox.isNotEmpty) {
       return;
     }
 
     dispatchState(Right(GetAllEmailLoading()));
   }
 
-  void _registerBrowserResizeListener() {
-    _resizeBrowserStreamSubscription = html.window.onResize.listen((_) {
-      _validateBrowserHeight();
-    });
+  SearchLayoutCoordinator _createSearchLayoutCoordinator() {
+    return SearchLayoutCoordinator(
+      responsiveUtils: responsiveUtils,
+      searchService: _searchService,
+      isSearchEngaged: () => _isSearchEngaged,
+      isEmailOpened: () => mailboxDashBoardController.isEmailOpened,
+      prepareDesktopSearchHandoff: () =>
+          _searchExecutionObserver.onNewSearchStarted(),
+      activateMobileSearch: () => searchController.activateSimpleSearch(),
+      dispatchRoute: mailboxDashBoardController.dispatchRoute,
+      isClosed: () => isClosed,
+      mobileOwnerRegistry: _searchEmailLayoutOwnerRegistry,
+      onBrowserResize: _validateBrowserHeight,
+    );
   }
 
   void _validateBrowserHeight() {
@@ -494,9 +617,12 @@ class ThreadController extends BaseController with EmailActionController {
     final totalHeightListEmails = currentListEmails.isEmpty
         ? 0
         : currentListEmails.length *
-            ThreadConstants.defaultMaxHeightEmailItemOnBrowser;
-    final isAutoLoadMore = totalHeightListEmails > 0 &&
-        totalHeightListEmails <= browserInnerHeight;
+              ThreadConstants.defaultMaxHeightEmailItemOnBrowser;
+    final isAutoLoadMore =
+        AutoLoadMorePolicy.shouldAutoLoadMoreByEstimatedHeight(
+          totalHeightListEmails,
+          browserInnerHeight,
+        );
     logTrace(
       'ThreadController::_isAutoLoadMore():'
       'BrowserInnerHeight = $browserInnerHeight, '
@@ -519,7 +645,9 @@ class ThreadController extends BaseController with EmailActionController {
 
     final maxScroll = listEmailController.position.maxScrollExtent;
     final viewport = listEmailController.position.viewportDimension;
-    final isAutoLoadMore = maxScroll <= viewport;
+    final isAutoLoadMore = AutoLoadMorePolicy.shouldAutoLoadMoreByScrollExtent(
+      maxScroll,
+    );
 
     logTrace(
       'ThreadController::_isNonWebAutoLoadMore():'
@@ -537,22 +665,47 @@ class ThreadController extends BaseController with EmailActionController {
     handleLoadMoreEmailsRequest();
   }
 
-  bool get forceEmailQuery =>
-      PlatformInfo.isWeb && AppConfig.isForceEmailQueryEnabled;
+  bool get forceEmailQuery {
+    if (!PlatformInfo.isWeb) return false;
+    try {
+      return AppConfig.isForceEmailQueryEnabled;
+    } catch (_) {
+      return false;
+    }
+  }
 
-  void _handleErrorGetAllOrRefreshChangesEmail(Object error, StackTrace stackTrace) async {
-    logWarning('ThreadController::_handleErrorGetAllOrRefreshChangesEmail():Error: $error');
+  void _handleErrorGetAllOrRefreshChangesEmail(
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    logWarning(
+      'ThreadController::_handleErrorGetAllOrRefreshChangesEmail():Error: $error',
+      webConsoleEnabled: true,
+    );
     if (error is CannotCalculateChangesMethodResponseException) {
       await cachingManager.clearAllEmailAndStateCache();
-      getAllEmailAction();
+      getAllEmailAction(forceEmailQuery: forceEmailQuery);
     } else if (error is MethodLevelErrors) {
       if (currentOverlayContext != null && error.message != null) {
         appToast.showToastErrorMessage(
           currentOverlayContext!,
-          error.message?.toString() ?? ''
+          error.message?.toString() ?? '',
         );
       }
       clearState();
+    } else {
+      logError(
+        'ThreadController::_handleErrorGetAllOrRefreshChangesEmail():Error: $error',
+        exception: error,
+        stackTrace: stackTrace,
+      );
+      clearState();
+      if (currentOverlayContext != null && currentContext != null) {
+        appToast.showToastErrorMessage(
+          currentOverlayContext!,
+          AppLocalizations.of(currentContext!).unknownError,
+        );
+      }
     }
   }
 
@@ -562,29 +715,47 @@ class ThreadController extends BaseController with EmailActionController {
     mailboxDashBoardController.listEmailSelected.clear();
     mailboxDashBoardController.currentSelectMode.value = SelectMode.INACTIVE;
     canLoadMore = true;
-    canSearchMore = true;
+    appProviderContainer
+        .read(searchEmailPresentationProvider.notifier)
+        .resetSearchMore();
     loadingMoreStatus.value = LoadingMoreStatus.idle;
+  }
+
+  @visibleForTesting
+  void restoreMailboxEmailListAfterSearch({bool force = false}) {
+    if (!searchLayoutCoordinator.takeDesktopSearchPresentation(force: force)) {
+      return;
+    }
+    resetToOriginalValue();
+    consumeState(Stream.value(Right(GetAllEmailLoading())));
+    getAllEmailAction(
+      getLatestChanges: false,
+      forceEmailQuery: forceEmailQuery,
+    );
   }
 
   void _getAllEmailSuccess(
     GetAllEmailSuccess success, {
     bool shouldJumpToFirstEmail = true,
   }) {
-    log('ThreadController::_getAllEmailSuccess: GetAllForMailboxId = ${success.currentMailboxId?.asString} | SELECTED_MAILBOX_ID = ${selectedMailboxId?.asString} | SELECTED_MAILBOX_NAME = ${selectedMailbox?.name?.name}');
-    mailboxDashBoardController.updateRefreshAllEmailState(Right(RefreshAllEmailSuccess()));
+    log(
+      'ThreadController::_getAllEmailSuccess: GetAllForMailboxId = ${success.currentMailboxId?.asString} | SELECTED_MAILBOX_ID = ${selectedMailboxId?.asString} | SELECTED_MAILBOX_NAME = ${selectedMailbox?.name?.name}',
+    );
+    mailboxDashBoardController.updateRefreshAllEmailState(
+      Right(RefreshAllEmailSuccess()),
+    );
     final currentMailboxId = success.currentMailboxId;
-    final isVirtualFolder = selectedMailbox?.isVirtualFolder == true;
 
-    if (currentMailboxId != null &&
-        (isVirtualFolder || currentMailboxId != selectedMailboxId)) {
-      return;
+    if (currentMailboxId != null) {
+      if (selectedMailbox?.isVirtualFolder == true) return;
+      if (currentMailboxId != selectedMailboxId) return;
     }
     mailboxDashBoardController.setCurrentEmailState(success.currentEmailState);
     final newListEmail = success.emailList.syncPresentationEmail(
       mapMailboxById: mailboxDashBoardController.mapMailboxById,
       selectedMailbox: selectedMailbox,
       searchQuery: searchController.searchQuery,
-      isSearchEmailRunning: searchController.isSearchEmailRunning
+      isSearchEmailRunning: searchController.isSearchEmailRunning,
     );
     logTrace(
       'ThreadController::_getAllEmailSuccess():'
@@ -608,11 +779,16 @@ class ThreadController extends BaseController with EmailActionController {
       refocusMailShortcutFocus();
     }
     final emailList = success.emailList;
-    log('ThreadController::_handleOnDoneGetAllEmailSuccess: EmailCount = ${emailList.length}');
+    log(
+      'ThreadController::_handleOnDoneGetAllEmailSuccess: EmailCount = ${emailList.length}',
+    );
+    final hasMore = emailList.length >= ThreadConstants.maxCountEmails;
+    canLoadMore = hasMore;
     if (_isAutoLoadMore && emailList.isNotEmpty) {
+      // collapseThreads can return < limit; re-enable so _loadMoreEmails guard passes.
+      // _loadMoreEmailsSuccess will reset canLoadMore from serverEmailCount afterward.
+      canLoadMore = true;
       _performAutomaticallyLoadMoreEmails();
-    } else {
-      canLoadMore = emailList.isNotEmpty;
     }
   }
 
@@ -631,37 +807,42 @@ class ThreadController extends BaseController with EmailActionController {
   }
 
   void _refreshChangesAllEmailSuccess(RefreshChangesAllEmailSuccess success) {
-    log('ThreadController::_refreshChangesAllEmailSuccess: RefreshedMailboxId = ${success.currentMailboxId?.asString} | SELECTED_MAILBOX_ID = ${selectedMailboxId?.asString} | SELECTED_MAILBOX_NAME = ${selectedMailbox?.name?.name}');
+    log(
+      'ThreadController::_refreshChangesAllEmailSuccess: RefreshedMailboxId = ${success.currentMailboxId?.asString} | SELECTED_MAILBOX_ID = ${selectedMailboxId?.asString} | SELECTED_MAILBOX_NAME = ${selectedMailbox?.name?.name}',
+    );
     final currentMailboxId = success.currentMailboxId;
-    final isVirtualFolder = selectedMailbox?.isVirtualFolder == true;
 
-    if (currentMailboxId != null &&
-        (isVirtualFolder || currentMailboxId != selectedMailboxId)) {
-      return;
+    if (currentMailboxId != null) {
+      if (selectedMailbox?.isVirtualFolder == true) return;
+      if (currentMailboxId != selectedMailboxId) return;
     }
     mailboxDashBoardController.setCurrentEmailState(success.currentEmailState);
-    log('ThreadController::_refreshChangesAllEmailSuccess: COUNT = ${success.emailList.length}');
-    final emailsBeforeChanges = mailboxDashBoardController.emailsInCurrentMailbox;
+    log(
+      'ThreadController::_refreshChangesAllEmailSuccess: COUNT = ${success.emailList.length}',
+    );
+    final emailsBeforeChanges =
+        mailboxDashBoardController.emailsInCurrentMailbox;
     final emailsAfterChanges = success.emailList;
     final newListEmail = emailsAfterChanges.combine(emailsBeforeChanges);
     final emailListSynced = newListEmail.syncPresentationEmail(
       mapMailboxById: mailboxDashBoardController.mapMailboxById,
       selectedMailbox: selectedMailbox,
       searchQuery: searchController.searchQuery,
-      isSearchEmailRunning: searchController.isSearchEmailRunning
+      isSearchEmailRunning: searchController.isSearchEmailRunning,
     );
     mailboxDashBoardController.updateEmailList(emailListSynced);
     if (mailboxDashBoardController.isSelectionEnabled()) {
       mailboxDashBoardController.listEmailSelected.value = listEmailSelected;
     }
-
+    _refreshLoadMoreState(success.emailChangeResponse);
     logTrace(
       'ThreadController::_refreshChangesAllEmailSuccess():'
       'MailboxId = ${success.currentMailboxId?.asString}, '
       'CurrentEmailCount = ${emailsBeforeChanges.length}, '
       'ServerEmailCount = ${success.emailList.length}, '
       'DisplayedEmailCount = ${emailListSynced.length}, '
-      'EmailState = ${success.currentEmailState?.value}',
+      'EmailState = ${success.currentEmailState?.value}, '
+      'canLoadMore = $canLoadMore',
     );
 
     if (_isAutoLoadMore) {
@@ -669,29 +850,45 @@ class ThreadController extends BaseController with EmailActionController {
     }
   }
 
+  void _refreshLoadMoreState(EmailChangeResponse? emailChangeResponse) {
+    if (emailChangeResponse.hasChanged && !canLoadMore) {
+      canLoadMore = true;
+    }
+  }
+
   void getAllEmailAction({
     bool getLatestChanges = true,
     bool forceEmailQuery = false,
   }) {
-    log('ThreadController::_getAllEmailAction:getLatestChanges = $getLatestChanges');
-    if (_session != null &&_accountId != null) {
-      consumeState(_getEmailsInMailboxInteractor.execute(
-        _session!,
-        _accountId!,
-        limit: ThreadConstants.defaultLimit,
-        sort: EmailSortOrderType.mostRecent.getSortOrder().toNullable(),
-        emailFilter: getEmailFilterForLoadMailbox(),
-        propertiesCreated: EmailUtils.getPropertiesForEmailGetMethod(_session!, _accountId!),
-        propertiesUpdated: EmailUtils.getPropertiesForEmailChangeMethod(
+    log(
+      'ThreadController::_getAllEmailAction:getLatestChanges = $getLatestChanges',
+    );
+    if (_session != null && _accountId != null) {
+      consumeState(
+        _getEmailsInMailboxInteractor.execute(
           _session!,
           _accountId!,
+          limit: ThreadConstants.defaultLimit,
+          sort: EmailSortOrderType.mostRecent.getSortOrder().toNullable(),
+          emailFilter: getEmailFilterForLoadMailbox(),
+          propertiesCreated: EmailUtils.getPropertiesForEmailGetMethod(
+            _session!,
+            _accountId!,
+          ),
+          propertiesUpdated: EmailUtils.getPropertiesForEmailChangeMethod(
+            _session!,
+            _accountId!,
+          ),
+          getLatestChanges: getLatestChanges,
+          useCache: selectedMailbox?.isCacheable ?? false,
+          forceEmailQuery: forceEmailQuery,
+          collapseThreads: _shouldCollapseThreads,
         ),
-        getLatestChanges: getLatestChanges,
-        useCache: selectedMailbox?.isCacheable ?? false,
-        forceEmailQuery: forceEmailQuery,
-      ));
+      );
     } else {
-      consumeState(Stream.value(Left(GetAllEmailFailure(NotFoundSessionException()))));
+      consumeState(
+        Stream.value(Left(GetAllEmailFailure(NotFoundSessionException()))),
+      );
     }
   }
 
@@ -706,20 +903,22 @@ class ThreadController extends BaseController with EmailActionController {
       consumeState(Stream.value(Right(GetAllEmailLoading())));
     }
 
-    canLoadMore = false;
+    canLoadMore = true;
     loadingMoreStatus.value = LoadingMoreStatus.idle;
     cancelSelectEmail();
 
     if (searchController.isSearchEmailRunning) {
-      _searchEmail(limit: limitEmailFetched);
+      _searchEmail(refresh: true);
     } else {
-      getAllEmailAction();
+      getAllEmailAction(forceEmailQuery: forceEmailQuery);
     }
   }
 
   UnsignedInt get limitEmailFetched {
     if (_peakEmailCount == 0) return ThreadConstants.defaultLimit;
-    return UnsignedInt(_peakEmailCount.clamp(1, ThreadConstants.maxRefreshLimit));
+    return UnsignedInt(
+      _peakEmailCount.clamp(1, ThreadConstants.maxRefreshLimit),
+    );
   }
 
   void _refreshEmailChanges({required jmap.State newState}) {
@@ -744,106 +943,56 @@ class ThreadController extends BaseController with EmailActionController {
   Future<void> _handleWebSocketMessage(WebSocketMessage message) async {
     try {
       if (searchController.isSearchEmailRunning && PlatformInfo.isWeb) {
-        await _refreshChangeSearchEmail();
+        if (mailboxDashBoardController.currentEmailState != null) {
+          await _refreshChangeListEmailCache();
+        }
       } else if (selectedMailbox?.isVirtualFolder == true) {
         await _refreshChangeListEmailsInVirtualFolder();
       } else {
         await _refreshChangeListEmail();
       }
     } catch (e, stackTrace) {
-      logWarning('ThreadController::_handleWebSocketMessage:Error processing state: $e');
+      logWarning(
+        'ThreadController::_handleWebSocketMessage:Error processing state: $e',
+      );
       onError(e, stackTrace);
     } finally {
       if (mailboxDashBoardController.currentEmailState != null) {
         _webSocketQueueHandler?.removeMessagesUpToCurrent(
-            mailboxDashBoardController.currentEmailState!.value);
+          mailboxDashBoardController.currentEmailState!.value,
+        );
       }
     }
   }
 
-  @visibleForTesting
-  Future<void> refreshChangeSearchEmail() => _refreshChangeSearchEmail();
+  Future<Either<Failure, Success>> _refreshChangeListEmailCache({
+    bool collapseThreads = false,
+  }) async {
+    final refreshState = await _refreshChangesEmailsInMailboxInteractor
+        .execute(
+          _session!,
+          _accountId!,
+          mailboxDashBoardController.currentEmailState!,
+          sort: EmailSortOrderType.mostRecent.getSortOrder().toNullable(),
+          limit: limitEmailFetched,
+          propertiesCreated: EmailUtils.getPropertiesForEmailGetMethod(
+            _session!,
+            _accountId!,
+          ),
+          propertiesUpdated: EmailUtils.getPropertiesForEmailChangeMethod(
+            _session!,
+            _accountId!,
+          ),
+          emailFilter: getEmailFilterForLoadMailbox(),
+          collapseThreads: collapseThreads,
+        )
+        .last;
 
-  Future<void> _refreshChangeSearchEmail() async {
-    if (mailboxDashBoardController.currentEmailState != null) {
-      await _refreshChangeListEmailCache();
-    } else {
-      logWarning('ThreadController::_refreshChangeSearchEmail: skip refreshChanges because currentEmailState is null');
-    }
-
-    log('ThreadController::_refreshChangeSearchEmail:');
-    canSearchMore = true;
-    loadingMoreStatus.value = LoadingMoreStatus.idle;
-    searchController.updateFilterEmail(
-      positionOption: option(
-        _searchEmailFilter.sortOrderType.isScrollByPosition(),
-        0,
-      ),
-      beforeOption: !_searchEmailFilter.sortOrderType.isScrollByPosition()
-          ? const None()
-          : null,
-    );
-    final searchViewState = await _searchEmailInteractor.execute(
-      _session!,
-      _accountId!,
-      limit: limitEmailFetched,
-      position: _searchEmailFilter.position,
-      sort: _searchEmailFilter.sortOrderType.getSortOrder().toNullable(),
-      filter: _searchEmailFilter.mappingToEmailFilterCondition(
-        moreFilterCondition: getFilterCondition(),
-      ),
-      properties: EmailUtils.getPropertiesForEmailGetMethod(
-        _session!,
-        _accountId!,
-      ),
-      needRefreshSearchState: true,
-    ).last;
-
-    dispatchState(searchViewState);
-
-    final searchState = searchViewState
-        .foldSuccessWithResult<SearchEmailSuccess>();
-
-    if (searchState is SearchEmailSuccess) {
-      _searchEmailsSuccess(searchState);
-    } else {
-      mailboxDashBoardController.updateRefreshAllEmailState(
-          Left(RefreshAllEmailFailure()));
-      canSearchMore = false;
-      loadingMoreStatus.value = LoadingMoreStatus.completed;
-      mailboxDashBoardController.emailsInCurrentMailbox.clear();
-      if (searchState != null) {
-        onDataFailureViewState(searchState);
+    refreshState.fold((failure) {}, (success) {
+      if (success is RefreshChangesAllEmailSuccess) {
+        refreshThreadDetail(success.emailChangeResponse);
       }
-    }
-  }
-
-  Future<Either<Failure, Success>> _refreshChangeListEmailCache() async {
-    final refreshState = await _refreshChangesEmailsInMailboxInteractor.execute(
-      _session!,
-      _accountId!,
-      mailboxDashBoardController.currentEmailState!,
-      sort: EmailSortOrderType.mostRecent.getSortOrder().toNullable(),
-      limit: limitEmailFetched,
-      propertiesCreated: EmailUtils.getPropertiesForEmailGetMethod(
-        _session!,
-        _accountId!,
-      ),
-      propertiesUpdated: EmailUtils.getPropertiesForEmailChangeMethod(
-        _session!,
-        _accountId!,
-      ),
-      emailFilter: getEmailFilterForLoadMailbox(),
-    ).last;
-
-    refreshState.fold(
-      (failure) {},
-      (success) {
-        if (success is RefreshChangesAllEmailSuccess) {
-          refreshThreadDetail(success.emailChangeResponse);
-        }
-      },
-    );
+    });
 
     return refreshState;
   }
@@ -851,12 +1000,16 @@ class ThreadController extends BaseController with EmailActionController {
   Future<void> _refreshChangeListEmail() async {
     log('ThreadController::_refreshChangeListEmail:');
     if (mailboxDashBoardController.currentEmailState == null) {
-      logWarning('ThreadController::_refreshChangeListEmail: currentEmailState is null, fallback to full reload');
+      logWarning(
+        'ThreadController::_refreshChangeListEmail: currentEmailState is null, fallback to full reload',
+      );
       await _reloadAllEmailsFromServer();
       return;
     }
 
-    final refreshViewState = await _refreshChangeListEmailCache();
+    final refreshViewState = await _refreshChangeListEmailCache(
+      collapseThreads: _shouldCollapseThreads,
+    );
 
     final refreshState = refreshViewState
         .foldSuccessWithResult<RefreshChangesAllEmailSuccess>();
@@ -876,7 +1029,9 @@ class ThreadController extends BaseController with EmailActionController {
     if (mailboxDashBoardController.currentEmailState != null) {
       await _refreshChangeListEmailCache();
     } else {
-      logWarning('ThreadController::_refreshChangeListEmailsInVirtualFolder: skip refreshChanges because currentEmailState is null');
+      logWarning(
+        'ThreadController::_refreshChangeListEmailsInVirtualFolder: skip refreshChanges because currentEmailState is null',
+      );
     }
 
     await _reloadAllEmailsFromServer();
@@ -900,6 +1055,7 @@ class ThreadController extends BaseController with EmailActionController {
           ),
           getLatestChanges: false,
           useCache: false,
+          collapseThreads: _shouldCollapseThreads,
         )
         .last;
 
@@ -910,20 +1066,23 @@ class ThreadController extends BaseController with EmailActionController {
 
     if (emailSuccessState is GetAllEmailSuccess) {
       _getAllEmailSuccess(emailSuccessState, shouldJumpToFirstEmail: false);
+      _handleOnDoneGetAllEmailSuccess(emailSuccessState);
     } else if (emailSuccessState != null) {
       onDataFailureViewState(emailSuccessState);
+      _handleOnDoneGetAllEmailFailure();
     }
   }
 
   void _loadMoreEmails() {
     log('ThreadController::_loadMoreEmails()::canLoadMore = $canLoadMore');
-    if (!canLoadMore) return;
+    if (!canLoadMore || loadingMoreStatus.value.isRunning) return;
 
     if (_session != null && _accountId != null) {
       final currentListEmail =
           mailboxDashBoardController.emailsInCurrentMailbox;
-      final oldestEmail =
-          currentListEmail.isNotEmpty ? currentListEmail.last : null;
+      final oldestEmail = currentListEmail.isNotEmpty
+          ? currentListEmail.last
+          : null;
       final useCache = selectedMailbox?.isCacheable ?? false;
       final filterOption = mailboxDashBoardController.filterMessageOption.value;
 
@@ -934,19 +1093,26 @@ class ThreadController extends BaseController with EmailActionController {
         'filterOption = ${filterOption.name}',
       );
 
-      consumeState(_loadMoreEmailsInMailboxInteractor.execute(
-        GetEmailRequest(
-          _session!,
-          _accountId!,
-          limit: ThreadConstants.defaultLimit,
-          sort: EmailSortOrderType.mostRecent.getSortOrder().toNullable(),
-          filterOption: mailboxDashBoardController.filterMessageOption.value,
-          filter: getFilterConditionForLoadMailbox(oldestEmail: oldestEmail),
-          properties: EmailUtils.getPropertiesForEmailGetMethod(_session!, _accountId!),
-          lastEmailId: oldestEmail?.id,
-          useCache: useCache,
-        )
-      ));
+      loadingMoreStatus.value = LoadingMoreStatus.running;
+      consumeState(
+        _loadMoreEmailsInMailboxInteractor.execute(
+          GetEmailRequest(
+            _session!,
+            _accountId!,
+            limit: ThreadConstants.defaultLimit,
+            sort: EmailSortOrderType.mostRecent.getSortOrder().toNullable(),
+            filterOption: mailboxDashBoardController.filterMessageOption.value,
+            filter: getFilterConditionForLoadMailbox(oldestEmail: oldestEmail),
+            properties: EmailUtils.getPropertiesForEmailGetMethod(
+              _session!,
+              _accountId!,
+            ),
+            lastEmailId: oldestEmail?.id,
+            useCache: useCache,
+            collapseThreads: _shouldCollapseThreads,
+          ),
+        ),
+      );
     } else {
       consumeState(
         Stream.value(Left(LoadMoreEmailsFailure(NotFoundSessionException()))),
@@ -962,13 +1128,15 @@ class ThreadController extends BaseController with EmailActionController {
   }
 
   bool _belongToCurrentMailboxId(PresentationEmail email) {
-    return email.mailboxIds != null && email.mailboxIds!.keys.contains(selectedMailboxId);
+    return email.mailboxIds != null &&
+        email.mailboxIds!.keys.contains(selectedMailboxId);
   }
 
   bool _notDuplicatedInCurrentList(PresentationEmail email) {
-    final emailsInCurrentMailbox = mailboxDashBoardController.emailsInCurrentMailbox;
+    final emailsInCurrentMailbox =
+        mailboxDashBoardController.emailsInCurrentMailbox;
     return emailsInCurrentMailbox.isEmpty ||
-      !emailsInCurrentMailbox.map((element) => element.id).contains(email.id);
+        !emailsInCurrentMailbox.map((element) => element.id).contains(email.id);
   }
 
   void _loadMoreEmailsSuccess(LoadMoreEmailsSuccess success) {
@@ -985,41 +1153,57 @@ class ThreadController extends BaseController with EmailActionController {
       mailboxDashBoardController.emailsInCurrentMailbox.addAll(appendableList);
     }
 
-    if (_isAutoLoadMore && emailList.isNotEmpty) {
+    // Without an appendable email the oldest-email cursor does not move, so
+    // another automatic request would repeat the same full page forever.
+    canLoadMore =
+        appendableList.isNotEmpty &&
+        success.serverEmailCount >= ThreadConstants.maxCountEmails;
+    loadingMoreStatus.value = LoadingMoreStatus.completed;
+    if (_isAutoLoadMore && canLoadMore) {
       _performAutomaticallyLoadMoreEmails();
-    } else {
-      canLoadMore = emailList.isNotEmpty;
-      loadingMoreStatus.value = LoadingMoreStatus.completed;
     }
   }
 
-  List<PresentationEmail> validateListEmailsLoadMore(List<PresentationEmail> emailList) {
-    log('ThreadController::validateListEmailsLoadMore: BEFORE_EMAIL_LIST = ${emailList.length}');
+  List<PresentationEmail> validateListEmailsLoadMore(
+    List<PresentationEmail> emailList,
+  ) {
+    log(
+      'ThreadController::validateListEmailsLoadMore: BEFORE_EMAIL_LIST = ${emailList.length}',
+    );
     final appendableList = emailList
-      .where(_validatePresentationEmail)
-      .toList()
-      .syncPresentationEmail(
-        mapMailboxById: mailboxDashBoardController.mapMailboxById,
-        selectedMailbox: selectedMailbox,
-        searchQuery: searchController.searchQuery,
-        isSearchEmailRunning: searchController.isSearchEmailRunning
-      );
-    log('ThreadController::validateListEmailsLoadMore: AFTER_EMAIL_LIST = ${appendableList.length}');
+        .where(_validatePresentationEmail)
+        .toList()
+        .syncPresentationEmail(
+          mapMailboxById: mailboxDashBoardController.mapMailboxById,
+          selectedMailbox: selectedMailbox,
+          searchQuery: searchController.searchQuery,
+          isSearchEmailRunning: searchController.isSearchEmailRunning,
+        );
+    log(
+      'ThreadController::validateListEmailsLoadMore: AFTER_EMAIL_LIST = ${appendableList.length}',
+    );
     return appendableList;
   }
 
-  SelectMode getSelectMode(PresentationEmail presentationEmail, PresentationEmail? selectedEmail) {
+  SelectMode getSelectMode(
+    PresentationEmail presentationEmail,
+    PresentationEmail? selectedEmail,
+  ) {
     return presentationEmail.id == selectedEmail?.id
-      ? SelectMode.ACTIVE
-      : SelectMode.INACTIVE;
+        ? SelectMode.ACTIVE
+        : SelectMode.INACTIVE;
   }
 
-  Tuple2<StartRangeSelection,EndRangeSelection> _getSelectionEmailsRange(PresentationEmail presentationEmailSelected) {
-    final emailsInCurrentMailbox = mailboxDashBoardController.emailsInCurrentMailbox;
-    final emailSelectedIndex = emailsInCurrentMailbox
-      .indexWhere((e) => e.id == presentationEmailSelected.id);
+  Tuple2<StartRangeSelection, EndRangeSelection> _getSelectionEmailsRange(
+    PresentationEmail presentationEmailSelected,
+  ) {
+    final emailsInCurrentMailbox =
+        mailboxDashBoardController.emailsInCurrentMailbox;
+    final emailSelectedIndex = emailsInCurrentMailbox.indexWhere(
+      (e) => e.id == presentationEmailSelected.id,
+    );
     final latestEmailSelectedOrUnselectedIndex = emailsInCurrentMailbox
-      .indexWhere((e) => e.id == latestEmailSelectedOrUnselected.value?.id);
+        .indexWhere((e) => e.id == latestEmailSelectedOrUnselected.value?.id);
     if (emailSelectedIndex > latestEmailSelectedOrUnselectedIndex) {
       return Tuple2(latestEmailSelectedOrUnselectedIndex, emailSelectedIndex);
     } else {
@@ -1027,27 +1211,55 @@ class ThreadController extends BaseController with EmailActionController {
     }
   }
 
-  bool _checkAllowMakeRangeEmailsSelected(Tuple2<StartRangeSelection,EndRangeSelection> selectionEmailsRange) {
-    final emailsInCurrentMailbox = mailboxDashBoardController.emailsInCurrentMailbox;
-    return latestEmailSelectedOrUnselected.value?.selectMode == SelectMode.ACTIVE &&
-      !emailsInCurrentMailbox.sublist(selectionEmailsRange.value1, selectionEmailsRange.value2).every((e) => e.selectMode == SelectMode.ACTIVE) ||
-      latestEmailSelectedOrUnselected.value?.selectMode == SelectMode.INACTIVE &&
-      emailsInCurrentMailbox.sublist(selectionEmailsRange.value1, selectionEmailsRange.value2).every((e) => e.selectMode == SelectMode.INACTIVE);
+  bool _checkAllowMakeRangeEmailsSelected(
+    Tuple2<StartRangeSelection, EndRangeSelection> selectionEmailsRange,
+  ) {
+    final emailsInCurrentMailbox =
+        mailboxDashBoardController.emailsInCurrentMailbox;
+    return latestEmailSelectedOrUnselected.value?.selectMode ==
+                SelectMode.ACTIVE &&
+            !emailsInCurrentMailbox
+                .sublist(
+                  selectionEmailsRange.value1,
+                  selectionEmailsRange.value2,
+                )
+                .every((e) => e.selectMode == SelectMode.ACTIVE) ||
+        latestEmailSelectedOrUnselected.value?.selectMode ==
+                SelectMode.INACTIVE &&
+            emailsInCurrentMailbox
+                .sublist(
+                  selectionEmailsRange.value1,
+                  selectionEmailsRange.value2,
+                )
+                .every((e) => e.selectMode == SelectMode.INACTIVE);
   }
 
-  void _applySelectModeToRangeEmails(Tuple2<StartRangeSelection,EndRangeSelection> selectionEmailsRange, SelectMode selectMode) {
+  void _applySelectModeToRangeEmails(
+    Tuple2<StartRangeSelection, EndRangeSelection> selectionEmailsRange,
+    SelectMode selectMode,
+  ) {
     final newEmailList = mailboxDashBoardController.emailsInCurrentMailbox
-      .asMap()
-      .map((index, email) {
-        return MapEntry(index, index >= selectionEmailsRange.value1 && index <= selectionEmailsRange.value2 ? email.toSelectedEmail(selectMode: selectMode) : email);
-      })
-      .values
-      .toList();
+        .asMap()
+        .map((index, email) {
+          return MapEntry(
+            index,
+            index >= selectionEmailsRange.value1 &&
+                    index <= selectionEmailsRange.value2
+                ? email.toSelectedEmail(selectMode: selectMode)
+                : email,
+          );
+        })
+        .values
+        .toList();
     mailboxDashBoardController.updateEmailList(newEmailList);
   }
 
-  void _rangeSelectionEmailsAction(PresentationEmail presentationEmailSelected) {
-    final selectionEmailsRange = _getSelectionEmailsRange(presentationEmailSelected);
+  void _rangeSelectionEmailsAction(
+    PresentationEmail presentationEmailSelected,
+  ) {
+    final selectionEmailsRange = _getSelectionEmailsRange(
+      presentationEmailSelected,
+    );
 
     if (_checkAllowMakeRangeEmailsSelected(selectionEmailsRange)) {
       _applySelectModeToRangeEmails(selectionEmailsRange, SelectMode.ACTIVE);
@@ -1057,29 +1269,44 @@ class ThreadController extends BaseController with EmailActionController {
   }
 
   void selectEmail(PresentationEmail presentationEmailSelected) {
-    final emailsInCurrentMailbox = mailboxDashBoardController.emailsInCurrentMailbox;
+    final emailsInCurrentMailbox =
+        mailboxDashBoardController.emailsInCurrentMailbox;
+    var shouldSelectEmailRange = false;
+    if (rangeSelectionMode) {
+      final latestEmail = latestEmailSelectedOrUnselected.value;
+      if (latestEmail != null) {
+        shouldSelectEmailRange = latestEmail.id != presentationEmailSelected.id;
+      }
+    }
 
-    if (rangeSelectionMode && latestEmailSelectedOrUnselected.value != null && latestEmailSelectedOrUnselected.value?.id != presentationEmailSelected.id) {
+    if (shouldSelectEmailRange) {
       _rangeSelectionEmailsAction(presentationEmailSelected);
     } else {
       final newEmailList = emailsInCurrentMailbox
-        .map((email) => email.id == presentationEmailSelected.id ? email.toggleSelect() : email)
-        .toList();
+          .map(
+            (email) => email.id == presentationEmailSelected.id
+                ? email.toggleSelect()
+                : email,
+          )
+          .toList();
       mailboxDashBoardController.updateEmailList(newEmailList);
     }
 
     latestEmailSelectedOrUnselected.value = emailsInCurrentMailbox
-      .firstWhereOrNull((e) => e.id == presentationEmailSelected.id);
+        .firstWhereOrNull((e) => e.id == presentationEmailSelected.id);
 
     if (PlatformInfo.isWeb) {
       refocusMailShortcutFocus();
     }
 
-    if (mailboxDashBoardController.emailsInCurrentMailbox.isAllSelectionInActive) {
+    if (mailboxDashBoardController
+        .emailsInCurrentMailbox
+        .isAllSelectionInActive) {
       mailboxDashBoardController.currentSelectMode.value = SelectMode.INACTIVE;
       mailboxDashBoardController.listEmailSelected.clear();
     } else {
-      if (mailboxDashBoardController.currentSelectMode.value == SelectMode.INACTIVE) {
+      if (mailboxDashBoardController.currentSelectMode.value ==
+          SelectMode.INACTIVE) {
         mailboxDashBoardController.currentSelectMode.value = SelectMode.ACTIVE;
       }
       mailboxDashBoardController.listEmailSelected.value = listEmailSelected;
@@ -1088,8 +1315,8 @@ class ThreadController extends BaseController with EmailActionController {
 
   void setSelectAllEmailAction() {
     final newEmailList = mailboxDashBoardController.emailsInCurrentMailbox
-      .map((email) => email.toSelectedEmail(selectMode: SelectMode.ACTIVE))
-      .toList();
+        .map((email) => email.toSelectedEmail(selectMode: SelectMode.ACTIVE))
+        .toList();
     mailboxDashBoardController.updateEmailList(newEmailList);
     mailboxDashBoardController.currentSelectMode.value = SelectMode.ACTIVE;
     mailboxDashBoardController.listEmailSelected.value = listEmailSelected;
@@ -1099,22 +1326,24 @@ class ThreadController extends BaseController with EmailActionController {
   }
 
   List<PresentationEmail> get listEmailSelected =>
-    mailboxDashBoardController.emailsInCurrentMailbox.listEmailSelected;
+      mailboxDashBoardController.emailsInCurrentMailbox.listEmailSelected;
 
   void cancelSelectEmail() {
-    if (mailboxDashBoardController.currentSelectMode.value == SelectMode.INACTIVE) {
+    if (mailboxDashBoardController.currentSelectMode.value ==
+        SelectMode.INACTIVE) {
       return;
     }
     final newEmailList = mailboxDashBoardController.emailsInCurrentMailbox
-      .map((email) => email.toSelectedEmail(selectMode: SelectMode.INACTIVE))
-      .toList();
+        .map((email) => email.toSelectedEmail(selectMode: SelectMode.INACTIVE))
+        .toList();
     mailboxDashBoardController.updateEmailList(newEmailList);
     mailboxDashBoardController.currentSelectMode.value = SelectMode.INACTIVE;
     mailboxDashBoardController.listEmailSelected.clear();
   }
 
   void filterMessagesAction(FilterMessageOption filterOption) {
-    final newFilterOption = mailboxDashBoardController.filterMessageOption.value == filterOption
+    final newFilterOption =
+        mailboxDashBoardController.filterMessageOption.value == filterOption
         ? FilterMessageOption.all
         : filterOption;
 
@@ -1124,7 +1353,8 @@ class ThreadController extends BaseController with EmailActionController {
       appToast.showToastMessage(
         currentOverlayContext!,
         newFilterOption.getMessageToast(currentContext!),
-        leadingSVGIcon: newFilterOption.getIconToast(imagePaths));
+        leadingSVGIcon: newFilterOption.getIconToast(imagePaths),
+      );
     }
 
     if (isSearchActive) {
@@ -1141,50 +1371,25 @@ class ThreadController extends BaseController with EmailActionController {
   }
 
   @visibleForTesting
-  void searchEmail({
-    UnsignedInt? limit,
-    bool needRefreshSearchState = false,
-  }) => _searchEmail(
-    limit: limit,
-    needRefreshSearchState: needRefreshSearchState,
-  );
+  void searchEmail() => _searchEmail();
 
-  void _searchEmail({UnsignedInt? limit, bool needRefreshSearchState = false}) {
-    if (_session != null && _accountId != null) {
-      if (!needRefreshSearchState && listEmailController.hasClients) {
-        isListEmailScrollViewJumping = true;
-        listEmailController.jumpTo(0);
-      }
-      if (!needRefreshSearchState) {
-        mailboxDashBoardController.emailsInCurrentMailbox.clear();
-      }
-      canSearchMore = true;
-      loadingMoreStatus.value = LoadingMoreStatus.idle;
-
-      searchController.updateFilterEmail(
-        positionOption: option(_searchEmailFilter.sortOrderType.isScrollByPosition(), 0),
-        beforeOption: !_searchEmailFilter.sortOrderType.isScrollByPosition()
-          ? const None()
-          : null,
+  void _searchEmail({bool refresh = false}) {
+    final context = _dispatchContext;
+    if (context == null) {
+      _searchExecutionObserver.onSearchFailure(
+        SearchEmailFailure(NotFoundSessionException()),
       );
-
-      searchController.activateSimpleSearch();
-
-      consumeState(_searchEmailInteractor.execute(
-        _session!,
-        _accountId!,
-        limit: limit ?? ThreadConstants.defaultLimit,
-        position: _searchEmailFilter.position,
-        sort: _searchEmailFilter.sortOrderType.getSortOrder().toNullable(),
-        filter: _searchEmailFilter.mappingToEmailFilterCondition(
-          moreFilterCondition: getFilterCondition()
-        ),
-        properties: EmailUtils.getPropertiesForEmailGetMethod(_session!, _accountId!),
-        needRefreshSearchState: needRefreshSearchState
-      ));
-    } else {
-      consumeState(Stream.value(Left(SearchEmailFailure(NotFoundSessionException()))));
+      return;
     }
+    _searchService.dispatch(
+      refresh
+          ? RefreshChangesIntent(
+              currentCount:
+                  mailboxDashBoardController.emailsInCurrentMailbox.length,
+            )
+          : const NewSearchIntent(),
+      context,
+    );
   }
 
   void _replaceBrowserHistory() {
@@ -1196,40 +1401,10 @@ class ThreadController extends BaseController with EmailActionController {
           router: NavigationRouter(
             mailboxId: _searchEmailFilter.mailbox?.mailboxId,
             searchQuery: searchQuery,
-            dashboardType: DashboardType.search
-          )
-        )
+            dashboardType: DashboardType.search,
+          ),
+        ),
       );
-    }
-  }
-
-  void _searchEmailsSuccess(SearchEmailSuccess success) {
-    mailboxDashBoardController.updateRefreshAllEmailState(Right(RefreshAllEmailSuccess()));
-    final emailList = success.emailList;
-    log('ThreadController::_searchEmailsSuccess: COUNT = ${emailList.length}');
-    final resultEmailSearchList = emailList
-        .map((email) => email.toSearchPresentationEmail(mailboxDashBoardController.mapMailboxById))
-        .toList();
-
-    final emailsSearchBeforeChanges = mailboxDashBoardController.emailsInCurrentMailbox;
-    final emailsSearchAfterChanges = resultEmailSearchList;
-    final newListEmailSearch = emailsSearchAfterChanges.combine(emailsSearchBeforeChanges);
-    final newEmailListSynced = newListEmailSearch.syncPresentationEmail(
-      mapMailboxById: mailboxDashBoardController.mapMailboxById,
-      selectedMailbox: selectedMailbox,
-      searchQuery: searchController.searchQuery,
-      isSearchEmailRunning: isSearchActive,
-    );
-    mailboxDashBoardController.updateEmailList(newEmailListSynced);
-    if (mailboxDashBoardController.isSelectionEnabled()) {
-      mailboxDashBoardController.listEmailSelected.value = listEmailSelected;
-    }
-
-    if (_isAutoLoadMore && emailList.isNotEmpty) {
-      _performAutomaticallyLoadMoreEmails();
-    } else {
-      canSearchMore = emailList.isNotEmpty;
-      loadingMoreStatus.value = LoadingMoreStatus.completed;
     }
   }
 
@@ -1237,141 +1412,115 @@ class ThreadController extends BaseController with EmailActionController {
   void searchMoreEmails() => _searchMoreEmails();
 
   void _searchMoreEmails() {
-    log('ThreadController::_searchMoreEmails:');
     if (!canSearchMore) return;
 
-    if (_session != null && _accountId != null) {
-      final currentEmailList =
-          mailboxDashBoardController.emailsInCurrentMailbox;
-      final lastEmail =
-          currentEmailList.isNotEmpty ? currentEmailList.last : null;
+    final currentEmailList = mailboxDashBoardController.emailsInCurrentMailbox;
+    if (currentEmailList.isEmpty) return;
 
-      if (_searchEmailFilter.sortOrderType.isScrollByPosition()) {
-        final nextPosition = currentEmailList.length;
-        log('ThreadController::_searchMoreEmails:nextPosition: $nextPosition');
-        searchController.updateFilterEmail(positionOption: Some(nextPosition));
-      } else if (_searchEmailFilter.sortOrderType == EmailSortOrderType.oldest) {
-        searchController.updateFilterEmail(startDateOption: optionOf(lastEmail?.receivedAt));
-      } else {
-        searchController.updateFilterEmail(beforeOption: optionOf(lastEmail?.receivedAt));
-      }
+    final context = _dispatchContext;
+    if (context == null) return;
 
-      consumeState(_searchMoreEmailInteractor.execute(
-        _session!,
-        _accountId!,
-        limit: ThreadConstants.defaultLimit,
-        sort: _searchEmailFilter.sortOrderType.getSortOrder().toNullable(),
-        position: _searchEmailFilter.position,
-        filter: _searchEmailFilter.mappingToEmailFilterCondition(
-          moreFilterCondition: getFilterCondition()
-        ),
-        properties: EmailUtils.getPropertiesForEmailGetMethod(_session!, _accountId!),
-        lastEmailId: lastEmail?.id
-      ));
-    } else {
-      consumeState(
-        Stream.value(Left(SearchMoreEmailFailure(NotFoundSessionException()))),
-      );
-    }
-  }
-
-  void _searchMoreEmailsSuccess(SearchMoreEmailSuccess success) {
-    final emailList = success.emailList;
-    log('ThreadController::_searchMoreEmailsSuccess: COUNT = ${emailList.length}');
-    if (emailList.isNotEmpty) {
-      final resultEmailSearchList = emailList
-          .map((email) => email.toSearchPresentationEmail(mailboxDashBoardController.mapMailboxById))
-          .where((email) => mailboxDashBoardController.emailsInCurrentMailbox.every((emailInCurrentMailbox) => emailInCurrentMailbox.id != email.id))
-          .toList()
-          .syncPresentationEmail(
-            mapMailboxById: mailboxDashBoardController.mapMailboxById,
-            selectedMailbox: selectedMailbox,
-            searchQuery: searchController.searchQuery,
-            isSearchEmailRunning: isSearchActive,
-          );
-      mailboxDashBoardController.emailsInCurrentMailbox.addAll(resultEmailSearchList);
-    }
-
-    if (_isAutoLoadMore && emailList.isNotEmpty) {
-      _performAutomaticallyLoadMoreEmails();
-    } else {
-      canSearchMore = emailList.isNotEmpty;
-      loadingMoreStatus.value = LoadingMoreStatus.completed;
-    }
+    final lastEmail = currentEmailList.last;
+    _searchService.dispatch(
+      LoadMoreIntent(
+        currentCount: currentEmailList.length,
+        lastEmailDate: lastEmail.receivedAt,
+        lastEmailId: lastEmail.id,
+      ),
+      context,
+    );
   }
 
   void pressEmailSelectionAction(
     EmailActionType actionType,
-    List<PresentationEmail> selectionEmail
+    List<PresentationEmail> selectionEmail,
   ) {
-    switch(actionType) {
-      case EmailActionType.markAsRead:
+    final handlers = <EmailActionType, void Function(List<PresentationEmail>)>{
+      EmailActionType.markAsRead: (emails) {
         cancelSelectEmail();
-        markAsReadSelectedMultipleEmail(selectionEmail, ReadActions.markAsRead);
-        break;
-      case EmailActionType.markAsUnread:
+        markAsReadSelectedMultipleEmail(emails, ReadActions.markAsRead);
+      },
+      EmailActionType.markAsUnread: (emails) {
         cancelSelectEmail();
-        markAsReadSelectedMultipleEmail(selectionEmail, ReadActions.markAsUnread);
-        break;
-      case EmailActionType.markAsStarred:
+        markAsReadSelectedMultipleEmail(emails, ReadActions.markAsUnread);
+      },
+      EmailActionType.markAsStarred: (emails) {
         cancelSelectEmail();
-        markAsStarSelectedMultipleEmail(selectionEmail, MarkStarAction.markStar);
-        break;
-      case EmailActionType.unMarkAsStarred:
+        markAsStarSelectedMultipleEmail(emails, MarkStarAction.markStar);
+      },
+      EmailActionType.unMarkAsStarred: (emails) {
         cancelSelectEmail();
-        markAsStarSelectedMultipleEmail(selectionEmail, MarkStarAction.unMarkStar);
-        break;
-      case EmailActionType.moveToMailbox:
-        moveEmailsToMailbox(selectionEmail, onCallbackAction: cancelSelectEmail);
-        break;
-      case EmailActionType.moveToTrash:
+        markAsStarSelectedMultipleEmail(emails, MarkStarAction.unMarkStar);
+      },
+      EmailActionType.moveToMailbox: (emails) =>
+          moveEmailsToMailbox(emails, onCallbackAction: cancelSelectEmail),
+      EmailActionType.moveToTrash: (emails) {
         cancelSelectEmail();
-        moveEmailsToTrash(selectionEmail);
-        break;
-      case EmailActionType.deletePermanently:
-        final mailboxContainCurrent = isSearchActive
-            ? selectionEmail.getCurrentMailboxContain(mailboxDashBoardController.mapMailboxById)
-            : selectedMailbox;
-        if (mailboxContainCurrent != null && currentContext != null) {
-          deleteSelectionEmailsPermanently(
-            currentContext!,
-            DeleteActionType.multiple,
-            listEmails: selectionEmail,
-            mailboxCurrent: mailboxContainCurrent,
-            onCancelSelectionEmail: () => cancelSelectEmail());
-        }
-        break;
-      case EmailActionType.moveToSpam:
+        moveEmailsToTrash(emails);
+      },
+      EmailActionType.deletePermanently:
+          _handleDeletePermanentlySelectionEmails,
+      EmailActionType.moveToSpam: (emails) {
         cancelSelectEmail();
-        moveEmailsToSpam(selectionEmail);
-        break;
-      case EmailActionType.unSpam:
+        moveEmailsToSpam(emails);
+      },
+      EmailActionType.unSpam: (emails) {
         cancelSelectEmail();
-        unSpamSelectedMultipleEmail(selectionEmail);
-        break;
-      case EmailActionType.archiveMessage:
+        unSpamSelectedMultipleEmail(emails);
+      },
+      EmailActionType.archiveMessage: (emails) {
         cancelSelectEmail();
-        moveEmailsToArchive(selectionEmail);
-        break;
-      case EmailActionType.compose:
-        mailboxDashBoardController.openComposer(ComposerArguments());
-        break;
-      default:
-        break;
+        moveEmailsToArchive(emails);
+      },
+      EmailActionType.compose: (_) =>
+          mailboxDashBoardController.openComposer(ComposerArguments()),
+      EmailActionType.labelAs: (emails) {
+        openChooseLabelModal(emails);
+      },
+    };
+    handlers[actionType]?.call(selectionEmail);
+  }
+
+  void _handleDeletePermanentlySelectionEmails(
+    List<PresentationEmail> selectionEmail,
+  ) {
+    final mailboxContainCurrent = isSearchActive
+        ? selectionEmail.getCurrentMailboxContain(
+            mailboxDashBoardController.mapMailboxById,
+          )
+        : selectedMailbox;
+    if (mailboxContainCurrent != null && currentContext != null) {
+      deleteSelectionEmailsPermanently(
+        currentContext!,
+        DeleteActionType.multiple,
+        listEmails: selectionEmail,
+        mailboxCurrent: mailboxContainCurrent,
+        onCancelSelectionEmail: cancelSelectEmail,
+      );
     }
+  }
+
+  void openChooseLabelModal(List<PresentationEmail> selectionEmail) {
+    Get.find<AddListLabelToListEmailsDelegate>().openChooseLabelModal(
+      selectedEmails: selectionEmail,
+      imagePaths: imagePaths,
+      onCancel: cancelSelectEmail,
+      onSync: mailboxDashBoardController.syncListLabelForListEmail,
+    );
   }
 
   void handleEmailActionType(
     EmailActionType actionType,
     PresentationEmail selectedEmail,
-    {
-      required PresentationMailbox? mailboxContain,
-    }
+    PresentationMailbox? mailboxContain,
   ) {
-    switch(actionType) {
+    switch (actionType) {
       case EmailActionType.preview:
         if (mailboxContain?.isDrafts == true) {
-          editDraftEmail(selectedEmail);
+          editDraftEmail(
+            presentationEmail: selectedEmail,
+            draftMailboxId: mailboxContain!.id,
+          );
         } else if (mailboxContain?.isTemplates == true) {
           editAsNewEmail(selectedEmail, savedEmailTemplateId: selectedEmail.id);
         } else {
@@ -1382,10 +1531,18 @@ class ThreadController extends BaseController with EmailActionController {
         selectEmail(selectedEmail);
         break;
       case EmailActionType.markAsRead:
-        markAsEmailRead(selectedEmail, ReadActions.markAsRead, MarkReadAction.tap);
+        markAsEmailRead(
+          selectedEmail,
+          ReadActions.markAsRead,
+          MarkReadAction.tap,
+        );
         break;
       case EmailActionType.markAsUnread:
-        markAsEmailRead(selectedEmail, ReadActions.markAsUnread, MarkReadAction.tap);
+        markAsEmailRead(
+          selectedEmail,
+          ReadActions.markAsUnread,
+          MarkReadAction.tap,
+        );
         break;
       case EmailActionType.markAsStarred:
         markAsStarEmail(selectedEmail, MarkStarAction.markStar);
@@ -1440,7 +1597,11 @@ class ThreadController extends BaseController with EmailActionController {
 
   void calculateDragValue(PresentationEmail? currentPresentationEmail) {
     if (currentPresentationEmail != null) {
-      if (currentPresentationEmail.id != null && mailboxDashBoardController.listEmailSelected.findEmail(currentPresentationEmail.id!) != null){
+      if (currentPresentationEmail.id != null &&
+          mailboxDashBoardController.listEmailSelected.findEmail(
+                currentPresentationEmail.id!,
+              ) !=
+              null) {
         listEmailDrag.clear();
         listEmailDrag.addAll(mailboxDashBoardController.listEmailSelected);
       } else {
@@ -1457,15 +1618,13 @@ class ThreadController extends BaseController with EmailActionController {
         router: NavigationRouter(
           emailId: currentEmail.id,
           mailboxId: isSearchActive
-            ? currentEmail.mailboxContain?.mailboxId
-            : selectedMailboxId,
-          searchQuery: isSearchActive
-            ? searchQuery
-            : null,
+              ? currentEmail.mailboxContain?.mailboxId
+              : selectedMailboxId,
+          searchQuery: isSearchActive ? searchQuery : null,
           dashboardType: isSearchActive
-            ? DashboardType.search
-            : DashboardType.normal
-        )
+              ? DashboardType.search
+              : DashboardType.normal,
+        ),
       );
       final emailOnWeb = currentEmail.withRouteWeb(route);
       return emailOnWeb;
@@ -1475,77 +1634,90 @@ class ThreadController extends BaseController with EmailActionController {
   }
 
   void _getEmailByIdFromLocationBar(
-    EmailId emailId,
-    {
-      PresentationMailbox? mailboxContain,
-    }
-  ) {
+    EmailId emailId, {
+    PresentationMailbox? mailboxContain,
+  }) {
     if (_session != null && _accountId != null) {
-      consumeState(_getEmailByIdInteractor.execute(
-        _session!,
-        _accountId!,
-        emailId,
-        properties: EmailUtils.getPropertiesForEmailGetMethod(_session!, _accountId!),
-        mailboxContain: mailboxContain,
-      ));
+      consumeState(
+        _getEmailByIdInteractor.execute(
+          _session!,
+          _accountId!,
+          emailId,
+          properties: EmailUtils.getPropertiesForEmailGetMethod(
+            _session!,
+            _accountId!,
+          ),
+          mailboxContain: mailboxContain,
+        ),
+      );
     } else {
-      logWarning('ThreadController::_getEmailByIdFromLocationBar: session & accountId is NULL');
+      logWarning(
+        'ThreadController::_getEmailByIdFromLocationBar: session & accountId is NULL',
+      );
       popAndPush(AppRoutes.unknownRoutePage);
     }
   }
 
   void _openEmailInsideMailboxFromLocationBar(
     PresentationEmail email,
-    PresentationMailbox mailboxContain
+    PresentationMailbox mailboxContain,
   ) {
-    final presentationEmailWithRouter = email.withRouteWeb(RouteUtils.createUrlWebLocationBar(
-      AppRoutes.dashboard,
-      router: NavigationRouter(
-        emailId: email.id,
-        mailboxId: mailboxContain.browserRouteMailboxId,
-        labelId: mailboxContain.labelId,
-        dashboardType: DashboardType.normal
-      )
-    ));
+    final presentationEmailWithRouter = email.withRouteWeb(
+      RouteUtils.createUrlWebLocationBar(
+        AppRoutes.dashboard,
+        router: NavigationRouter(
+          emailId: email.id,
+          mailboxId: mailboxContain.browserRouteMailboxId,
+          labelId: mailboxContain.labelId,
+          dashboardType: DashboardType.normal,
+        ),
+      ),
+    );
     handleEmailActionType(
       EmailActionType.preview,
       presentationEmailWithRouter,
-      mailboxContain: mailboxContain
+      mailboxContain,
     );
   }
 
   void _openEmailWithoutMailboxFromLocationBar(PresentationEmail email) {
-    final mailboxContain = email.findMailboxContain(mailboxDashBoardController.mapMailboxById);
+    final mailboxContain = email.findMailboxContain(
+      mailboxDashBoardController.mapMailboxById,
+    );
     if (mailboxContain != null) {
       mailboxDashBoardController.setSelectedMailbox(mailboxContain);
-      final presentationEmailWithRouter = email.withRouteWeb(RouteUtils.createUrlWebLocationBar(
-        AppRoutes.dashboard,
-        router: NavigationRouter(
-          emailId: email.id,
-          mailboxId: mailboxContain.mailboxId,
-          dashboardType: DashboardType.normal
-        )
-      ));
+      final presentationEmailWithRouter = email.withRouteWeb(
+        RouteUtils.createUrlWebLocationBar(
+          AppRoutes.dashboard,
+          router: NavigationRouter(
+            emailId: email.id,
+            mailboxId: mailboxContain.mailboxId,
+            dashboardType: DashboardType.normal,
+          ),
+        ),
+      );
       handleEmailActionType(
         EmailActionType.preview,
         presentationEmailWithRouter,
-        mailboxContain: mailboxContain
+        mailboxContain,
       );
     } else {
       searchController.enableSearch();
       _searchEmail();
 
-      final presentationEmailWithRouter = email.withRouteWeb(RouteUtils.createUrlWebLocationBar(
-        AppRoutes.dashboard,
-        router: NavigationRouter(
-          emailId: email.id,
-          dashboardType: DashboardType.search
-        )
-      ));
+      final presentationEmailWithRouter = email.withRouteWeb(
+        RouteUtils.createUrlWebLocationBar(
+          AppRoutes.dashboard,
+          router: NavigationRouter(
+            emailId: email.id,
+            dashboardType: DashboardType.search,
+          ),
+        ),
+      );
       handleEmailActionType(
         EmailActionType.preview,
         presentationEmailWithRouter,
-        mailboxContain: mailboxContain
+        mailboxContain,
       );
     }
   }
@@ -1554,18 +1726,20 @@ class ThreadController extends BaseController with EmailActionController {
     required PresentationEmail email,
     SearchQuery? searchQuery,
   }) {
-    final presentationEmailWithRouter = email.withRouteWeb(RouteUtils.createUrlWebLocationBar(
-      AppRoutes.dashboard,
-      router: NavigationRouter(
-        emailId: email.id,
-        searchQuery: searchQuery,
-        dashboardType: DashboardType.search
-      )
-    ));
+    final presentationEmailWithRouter = email.withRouteWeb(
+      RouteUtils.createUrlWebLocationBar(
+        AppRoutes.dashboard,
+        router: NavigationRouter(
+          emailId: email.id,
+          searchQuery: searchQuery,
+          dashboardType: DashboardType.search,
+        ),
+      ),
+    );
     handleEmailActionType(
       EmailActionType.preview,
       presentationEmailWithRouter,
-      mailboxContain: email.findMailboxContain(mailboxDashBoardController.mapMailboxById)
+      email.findMailboxContain(mailboxDashBoardController.mapMailboxById),
     );
   }
 
@@ -1578,7 +1752,9 @@ class ThreadController extends BaseController with EmailActionController {
     DismissDirection direction,
   ) async {
     if (direction == DismissDirection.startToEnd) {
-      ReadActions readActions = !email.hasRead ? ReadActions.markAsRead : ReadActions.markAsUnread;
+      ReadActions readActions = !email.hasRead
+          ? ReadActions.markAsRead
+          : ReadActions.markAsUnread;
       markAsEmailRead(email, readActions, MarkReadAction.swipeOnThread);
     } else if (direction == DismissDirection.endToStart) {
       archiveMessage(email);
@@ -1586,25 +1762,36 @@ class ThreadController extends BaseController with EmailActionController {
     return false;
   }
 
-  DismissDirection getSwipeDirection(bool isWebDesktop, SelectMode selectMode, PresentationEmail email) {
+  DismissDirection getSwipeDirection(
+    bool isWebDesktop,
+    SelectMode selectMode,
+    PresentationEmail email,
+  ) {
     if (isWebDesktop) {
       return DismissDirection.none;
-    } 
-    
+    }
+
     if (selectMode == SelectMode.ACTIVE) {
       return DismissDirection.none;
     }
 
-    return isInArchiveMailbox(email) || !hasArchiveMailbox()
-      ? DismissDirection.startToEnd
-      : DismissDirection.horizontal;
+    return isInArchiveMailbox(email) ||
+            !hasArchiveMailbox() ||
+            email.mailboxContain?.isChildOfTeamMailboxes == true
+        ? DismissDirection.startToEnd
+        : DismissDirection.horizontal;
   }
 
-  bool isInArchiveMailbox(PresentationEmail email) => email.mailboxContain?.isArchive == true;
+  bool isInArchiveMailbox(PresentationEmail email) =>
+      email.mailboxContain?.isArchive == true;
 
   void scrollToTop() {
     if (listEmailController.hasClients) {
-      listEmailController.animateTo(0, duration: const Duration(milliseconds: 500), curve: Curves.fastOutSlowIn);
+      listEmailController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.fastOutSlowIn,
+      );
     }
   }
 
@@ -1649,7 +1836,7 @@ class ThreadController extends BaseController with EmailActionController {
     log('ThreadController::handleLoadMoreEmailsRequest:');
     if (isSearchActive) {
       _searchMoreEmails();
-    } else  {
+    } else {
       _loadMoreEmails();
     }
   }

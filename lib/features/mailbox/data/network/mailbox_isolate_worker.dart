@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
@@ -36,7 +37,6 @@ import 'package:tmail_ui_user/main/exceptions/isolate_exception.dart';
 import 'package:worker_manager/worker_manager.dart';
 
 class MailboxIsolateWorker {
-
   final ThreadAPI _threadApi;
   final EmailAPI _emailApi;
 
@@ -47,19 +47,20 @@ class MailboxIsolateWorker {
     AccountId accountId,
     MailboxId mailboxId,
     int totalEmailUnread,
-    StreamController<Either<Failure, Success>> onProgressController
+    StreamController<Either<Failure, Success>> onProgressController,
   ) async {
-    if (PlatformInfo.isWeb) {
-      return _handleMarkAsMailboxReadActionOnWeb(
+    if (PlatformInfo.isWeb || Platform.numberOfProcessors == 1) {
+      return await _handleMarkAsMailboxReadActionOnMainIsolate(
         session,
         accountId,
         mailboxId,
         totalEmailUnread,
-        onProgressController);
+        onProgressController,
+      );
     } else {
       final rootIsolateToken = RootIsolateToken.instance;
       if (rootIsolateToken == null) {
-        throw CanNotGetRootIsolateToken();
+        throw const CanNotGetRootIsolateToken();
       }
 
       final args = MailboxMarkAsReadArguments(
@@ -68,101 +69,94 @@ class MailboxIsolateWorker {
         _emailApi,
         accountId,
         mailboxId,
-        rootIsolateToken
+        rootIsolateToken,
       );
-      final result = await workerManager.executeWithPort<List<EmailId>, List<EmailId>>(
-        (sendPort) => _handleMarkAsMailboxReadAction(args, sendPort),
-        onMessage: (value) {
-          log('MailboxIsolateWorker::markAsMailboxRead(): onUpdateProgress: PERCENT ${value.length / totalEmailUnread}');
-          onProgressController.add(Right(UpdatingMarkAsMailboxReadState(
-            mailboxId: mailboxId,
-            totalUnread: totalEmailUnread,
-            countRead: value.length)));
+      return await workerManager.executeWithPort<List<EmailId>, int>(
+        _buildMarkAsReadClosure(args),
+        onMessage: (countRead) {
+          log(
+            'MailboxIsolateWorker::markAsMailboxRead(): onUpdateProgress: PERCENT ${countRead / totalEmailUnread}',
+          );
+          onProgressController.add(
+            Right(
+              UpdatingMarkAsMailboxReadState(
+                mailboxId: mailboxId,
+                totalUnread: totalEmailUnread,
+                countRead: countRead,
+              ),
+            ),
+          );
         },
       );
-      return result;
     }
   }
 
   static Future<List<EmailId>> _handleMarkAsMailboxReadAction(
-      MailboxMarkAsReadArguments args,
-      SendPort sendPort
+    MailboxMarkAsReadArguments args,
+    SendPort sendPort,
   ) async {
     final rootIsolateToken = args.isolateToken;
     BackgroundIsolateBinaryMessenger.ensureInitialized(rootIsolateToken);
     await HiveCacheConfig.instance.setUp();
 
-    List<EmailId> emailIdsCompleted = List.empty(growable: true);
-    bool mailboxHasEmails = true;
-    UTCDate? lastReceivedDate;
-    EmailId? lastEmailId;
-
-    while (mailboxHasEmails) {
-      final emailResponse = await args.threadAPI
-          .getAllEmail(
-            args.session,
-            args.accountId,
-            limit: UnsignedInt(30),
-            filter: EmailFilterCondition(
-                  inMailbox: args.mailboxId,
-                  notKeyword: KeyWordIdentifier.emailSeen.value,
-                  before: lastReceivedDate),
-            sort: <Comparator>{}..add(
-              EmailComparator(EmailComparatorProperty.receivedAt)
-                ..setIsAscending(false)),
-            properties: Properties({
-                EmailProperty.id,
-                EmailProperty.keywords,
-                EmailProperty.receivedAt,
-              }))
-          .then((response) {
-            var listEmails = response.emailList;
-            if (listEmails != null && listEmails.isNotEmpty && lastEmailId != null) {
-              listEmails = listEmails
-                .where((email) => email.id != lastEmailId)
-                .toList();
-            }
-            return EmailsResponse(emailList: listEmails, state: response.state);
-          });
-      final listEmailUnread = emailResponse.emailList;
-
-      log('MailboxIsolateWorker::_handleMarkAsMailboxRead(): listEmailUnread: ${listEmailUnread?.length}');
-
-      if (listEmailUnread == null || listEmailUnread.isEmpty) {
-        mailboxHasEmails = false;
-      } else {
-        lastEmailId = listEmailUnread.last.id;
-        lastReceivedDate = listEmailUnread.last.receivedAt;
-
-        final result = await args.emailAPI.markAsRead(
-          args.session,
-          args.accountId,
-          listEmailUnread.listEmailIds,
-          ReadActions.markAsRead);
-
-        log('MailboxIsolateWorker::_handleMarkAsMailboxRead(): MARK_READ: ${result.emailIdsSuccess.length}');
-        emailIdsCompleted.addAll(result.emailIdsSuccess);
-        sendPort.send(emailIdsCompleted);
-      }
-    }
-    log('MailboxIsolateWorker::_handleMarkAsMailboxRead(): TOTAL_READ: ${emailIdsCompleted.length}');
+    final emailIdsCompleted = await _executeMarkAsMailboxRead(
+      threadAPI: args.threadAPI,
+      emailAPI: args.emailAPI,
+      session: args.session,
+      accountId: args.accountId,
+      mailboxId: args.mailboxId,
+      onProgress: sendPort.send,
+    );
+    log(
+      'MailboxIsolateWorker::_handleMarkAsMailboxRead(): TOTAL_READ: ${emailIdsCompleted.length}',
+    );
     return emailIdsCompleted;
   }
 
-  Future<List<EmailId>> _handleMarkAsMailboxReadActionOnWeb(
+  Future<List<EmailId>> _handleMarkAsMailboxReadActionOnMainIsolate(
     Session session,
     AccountId accountId,
     MailboxId mailboxId,
     int totalEmailUnread,
-    StreamController<Either<Failure, Success>> onProgressController
+    StreamController<Either<Failure, Success>> onProgressController,
   ) async {
+    final result = await _executeMarkAsMailboxRead(
+      threadAPI: _threadApi,
+      emailAPI: _emailApi,
+      session: session,
+      accountId: accountId,
+      mailboxId: mailboxId,
+      onProgress: (countRead) => onProgressController.add(
+        Right(
+          UpdatingMarkAsMailboxReadState(
+            mailboxId: mailboxId,
+            totalUnread: totalEmailUnread,
+            countRead: countRead,
+          ),
+        ),
+      ),
+    );
+    log(
+      'MailboxIsolateWorker::_handleMarkAsMailboxReadActionOnMainIsolate(): TOTAL_READ: ${result.length}',
+    );
+    return result;
+  }
+
+  static Future<List<EmailId>> _executeMarkAsMailboxRead({
+    required ThreadAPI threadAPI,
+    required EmailAPI emailAPI,
+    required Session session,
+    required AccountId accountId,
+    required MailboxId mailboxId,
+    required void Function(int countRead) onProgress,
+  }) async {
     List<EmailId> emailIdsCompleted = List.empty(growable: true);
     bool mailboxHasEmails = true;
     UTCDate? lastReceivedDate;
     EmailId? lastEmailId;
 
     while (mailboxHasEmails) {
-      final emailResponse = await _threadApi
+      final emailResponse = await threadAPI
           .getAllEmail(
             session,
             accountId,
@@ -170,27 +164,35 @@ class MailboxIsolateWorker {
             filter: EmailFilterCondition(
               inMailbox: mailboxId,
               notKeyword: KeyWordIdentifier.emailSeen.value,
-              before: lastReceivedDate),
-            sort: <Comparator>{}..add(
-                  EmailComparator(EmailComparatorProperty.receivedAt)
-                    ..setIsAscending(false)),
+              before: lastReceivedDate,
+            ),
+            sort: <Comparator>{}
+              ..add(
+                EmailComparator(EmailComparatorProperty.receivedAt)
+                  ..setIsAscending(false),
+              ),
             properties: Properties({
-                EmailProperty.id,
-                EmailProperty.keywords,
-                EmailProperty.receivedAt,
-            })
-          ).then((response) {
+              EmailProperty.id,
+              EmailProperty.keywords,
+              EmailProperty.receivedAt,
+            }),
+          )
+          .then((response) {
             var listEmails = response.emailList;
-            if (listEmails != null && listEmails.isNotEmpty && lastEmailId != null) {
+            if (listEmails != null &&
+                listEmails.isNotEmpty &&
+                lastEmailId != null) {
               listEmails = listEmails
-                .where((email) => email.id != lastEmailId)
-                .toList();
-          }
+                  .where((email) => email.id != lastEmailId)
+                  .toList();
+            }
             return EmailsResponse(emailList: listEmails, state: response.state);
           });
       final listEmailUnread = emailResponse.emailList;
 
-      log('MailboxIsolateWorker::_handleMarkAsMailboxReadActionOnWeb(): listEmailUnread: ${listEmailUnread?.length}');
+      log(
+        'MailboxIsolateWorker::_executeMarkAsMailboxRead(): listEmailUnread: ${listEmailUnread?.length}',
+      );
 
       if (listEmailUnread == null || listEmailUnread.isEmpty) {
         mailboxHasEmails = false;
@@ -198,22 +200,23 @@ class MailboxIsolateWorker {
         lastEmailId = listEmailUnread.last.id;
         lastReceivedDate = listEmailUnread.last.receivedAt;
 
-        final result = await _emailApi.markAsRead(
+        final result = await emailAPI.markAsRead(
           session,
           accountId,
           listEmailUnread.listEmailIds,
           ReadActions.markAsRead,
         );
-        log('MailboxIsolateWorker::_handleMarkAsMailboxReadActionOnWeb(): MARK_READ: ${result.emailIdsSuccess.length}');
+        log(
+          'MailboxIsolateWorker::_executeMarkAsMailboxRead(): MARK_READ: ${result.emailIdsSuccess.length}',
+        );
         emailIdsCompleted.addAll(result.emailIdsSuccess);
 
-        onProgressController.add(Right(UpdatingMarkAsMailboxReadState(
-            mailboxId: mailboxId,
-            totalUnread: totalEmailUnread,
-            countRead: emailIdsCompleted.length)));
+        onProgress(emailIdsCompleted.length);
       }
     }
-    log('MailboxIsolateWorker::_handleMarkAsMailboxReadActionOnWeb(): TOTAL_READ: ${emailIdsCompleted.length}');
+    log(
+      'MailboxIsolateWorker::_executeMarkAsMailboxRead(): TOTAL_READ: ${emailIdsCompleted.length}',
+    );
     return emailIdsCompleted;
   }
 
@@ -225,7 +228,7 @@ class MailboxIsolateWorker {
   }) async {
     final rootIsolateToken = RootIsolateToken.instance;
     if (rootIsolateToken == null) {
-      throw CanNotGetRootIsolateToken();
+      throw const CanNotGetRootIsolateToken();
     }
 
     final args = MoveFolderContentIsolateArguments(
@@ -239,15 +242,19 @@ class MailboxIsolateWorker {
       markAsRead: request.markAsRead,
     );
     final countEmailsCompleted = await workerManager.executeWithPort<int, int>(
-      (sendPort) => _moveFolderContentIsolateMethod(args, sendPort),
+      _buildMoveFolderClosure(args),
       onMessage: (value) {
-        log('$runtimeType::moveFolderContent(): Progress percent is ${value / request.totalEmails}');
+        log(
+          '$runtimeType::moveFolderContent(): Progress percent is ${value / request.totalEmails}',
+        );
         onProgressController?.add(
-          Right<Failure, Success>(MoveFolderContentProgressState(
-            request.mailboxId,
-            value,
-            request.totalEmails,
-          )),
+          Right<Failure, Success>(
+            MoveFolderContentProgressState(
+              request.mailboxId,
+              value,
+              request.totalEmails,
+            ),
+          ),
         );
       },
     );
@@ -258,6 +265,16 @@ class MailboxIsolateWorker {
       throw CannotMoveAllEmailException();
     }
   }
+
+  static Future<List<EmailId>> Function(SendPort) _buildMarkAsReadClosure(
+    MailboxMarkAsReadArguments args,
+  ) =>
+      (sendPort) => _handleMarkAsMailboxReadAction(args, sendPort);
+
+  static Future<int> Function(SendPort) _buildMoveFolderClosure(
+    MoveFolderContentIsolateArguments args,
+  ) =>
+      (sendPort) => _moveFolderContentIsolateMethod(args, sendPort);
 
   static Future<int> _moveFolderContentIsolateMethod(
     MoveFolderContentIsolateArguments args,
@@ -287,7 +304,9 @@ class MailboxIsolateWorker {
         mailboxId: currentMailboxId,
         lastEmail: lastEmail,
       );
-      log('MailboxIsolateWorker::_moveFolderContentIsolateMethod(): Length of emails = ${listEmails.length}');
+      log(
+        'MailboxIsolateWorker::_moveFolderContentIsolateMethod(): Length of emails = ${listEmails.length}',
+      );
       if (listEmails.isEmpty) {
         hasEmails = false;
       } else {
@@ -308,7 +327,9 @@ class MailboxIsolateWorker {
         sendPort.send(countEmailsCompleted);
       }
     }
-    log('MailboxIsolateWorker::_moveFolderContentIsolateMethod(): Total emails moved = $countEmailsCompleted');
+    log(
+      'MailboxIsolateWorker::_moveFolderContentIsolateMethod(): Total emails moved = $countEmailsCompleted',
+    );
     return countEmailsCompleted;
   }
 }

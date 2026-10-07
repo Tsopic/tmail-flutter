@@ -34,8 +34,16 @@ class AuthenticationClientWeb
       scopes,
       loginHint: loginHint,
     );
-    final authorizationTokenResponse = await _appAuthWeb
-        .authorizeAndExchangeCode(authorizationTokenRequest);
+    // Nullable at runtime: the web plugin returns null when it starts a
+    // full-page redirect, though the analysis platform interface declares it non-null.
+    // ignore: unnecessary_nullable_for_final_variable_declarations
+    final AuthorizationTokenResponse? authorizationTokenResponse =
+        await _appAuthWeb.authorizeAndExchangeCode(authorizationTokenRequest);
+    if (authorizationTokenResponse == null) {
+      // Null means an SSO redirect was just initiated, not a failure: surface a
+      // silenced exception instead of dereferencing null and flashing an error.
+      throw AutoRedirectToAppAfterStoreAuthorizeDestinationUrlException();
+    }
     log('$runtimeType::getTokenOIDC(): token received');
     final tokenOIDC = authorizationTokenResponse.toTokenOIDC();
     if (tokenOIDC.isTokenValid()) {
@@ -78,20 +86,18 @@ class AuthenticationClientWeb
     String redirectUrl,
     String discoveryUrl,
     List<String> scopes,
-    String refreshToken,
+    TokenOIDC currentToken,
   ) async {
     try {
       final tokenRequest = getRefreshTokenRequest(
         clientId,
         redirectUrl,
         discoveryUrl,
-        refreshToken,
+        currentToken.refreshToken,
         scopes,
       );
       final tokenResponse = await _appAuthWeb.token(tokenRequest);
-      final tokenOIDC = tokenResponse.toTokenOIDC(
-        maybeAvailableRefreshToken: refreshToken,
-      );
+      final tokenOIDC = tokenResponse.toTokenOIDC(currentToken: currentToken);
       if (tokenOIDC.isTokenValid()) {
         return tokenOIDC;
       } else {

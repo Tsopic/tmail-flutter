@@ -61,7 +61,6 @@ class ComposerView extends GetWidget<ComposerController> {
           MessageDialogActionManager().isDialogOpened ||
           EmailActionReactor.isDialogOpened ||
           ColorDialogPicker().isOpened.isTrue ||
-          dialogRouter.isRuleFilterDialogOpened.isTrue ||
           dialogRouter.isDialogOpened;
 
       if (isOverlayEnabled) {
@@ -134,6 +133,10 @@ class ComposerView extends GetWidget<ComposerController> {
                       saveToDraftsAction: () => controller.handleClickSaveAsDraftsButton(context),
                       saveToTemplateAction: () => controller.handleClickSaveAsTemplateButton(context),
                       deleteComposerAction: controller.handleClickDeleteComposer,
+                      onOpenAiAssistantModal: controller.isAIScribeAvailable
+                        ? controller.openAIAssistantModal
+                        : null,
+                      composerId: composerId,
                     )),
                     ConstrainedBox(
                       constraints: BoxConstraints(
@@ -162,6 +165,7 @@ class ComposerView extends GetWidget<ComposerController> {
                             if (controller.recipientsCollapsedState.value == PrefixRecipientState.enabled)
                               RecipientsCollapsedComposerWidget(
                                 listEmailAddress: controller.allListEmailAddressWithoutReplyTo,
+                                invalidRecipients: controller.invalidRecipients.value,
                                 margin: ComposerStyle.mobileRecipientMargin,
                                 onShowAllRecipientsAction: controller.showFullRecipients,
                               ),
@@ -309,7 +313,8 @@ class ComposerView extends GetWidget<ComposerController> {
                                 child: PointerInterceptor(
                                   child: AttachmentDropZoneWidget(
                                     imagePaths: controller.imagePaths,
-                                    onAttachmentDropZoneListener: controller.onAttachmentDropZoneListener,
+                                    onAttachmentDropZoneListener: (attachment) =>
+                                        controller.onAttachmentDropZoneListener(context, attachment),
                                   )
                                 ),
                               );
@@ -396,6 +401,7 @@ class ComposerView extends GetWidget<ComposerController> {
                           if (controller.recipientsCollapsedState.value == PrefixRecipientState.enabled)
                             RecipientsCollapsedComposerWidget(
                               listEmailAddress: controller.allListEmailAddressWithoutReplyTo,
+                              invalidRecipients: controller.invalidRecipients.value,
                               margin: ComposerStyle.desktopRecipientMargin,
                               onShowAllRecipientsAction: controller.showFullRecipients,
                             ),
@@ -542,6 +548,7 @@ class ComposerView extends GetWidget<ComposerController> {
                               ),
                             ),
                             Obx(() => BottomBarComposerWidget(
+                              composerId: composerId ?? '',
                               imagePaths: controller.imagePaths,
                               isCodeViewEnabled: controller.richTextWebController!.codeViewEnabled,
                               isFormattingOptionsEnabled: controller.richTextWebController!.isFormattingOptionsEnabled,
@@ -583,8 +590,8 @@ class ComposerView extends GetWidget<ComposerController> {
                               child: PointerInterceptor(
                                 child: AttachmentDropZoneWidget(
                                   imagePaths: controller.imagePaths,
-                                  onAttachmentDropZoneListener:
-                                      controller.onAttachmentDropZoneListener,
+                                  onAttachmentDropZoneListener: (attachment) =>
+                                      controller.onAttachmentDropZoneListener(context, attachment),
                                 )
                               ),
                             );
@@ -675,6 +682,7 @@ class ComposerView extends GetWidget<ComposerController> {
                           if (controller.recipientsCollapsedState.value == PrefixRecipientState.enabled)
                             RecipientsCollapsedComposerWidget(
                               listEmailAddress: controller.allListEmailAddressWithoutReplyTo,
+                              invalidRecipients: controller.invalidRecipients.value,
                               margin: ComposerStyle.desktopRecipientMargin,
                               onShowAllRecipientsAction: controller.showFullRecipients,
                             ),
@@ -819,6 +827,7 @@ class ComposerView extends GetWidget<ComposerController> {
                               ),
                             ),
                             Obx(() => BottomBarComposerWidget(
+                              composerId: composerId ?? '',
                               imagePaths: controller.imagePaths,
                               isCodeViewEnabled: controller.richTextWebController!.codeViewEnabled,
                               isFormattingOptionsEnabled: controller.richTextWebController!.isFormattingOptionsEnabled,
@@ -860,7 +869,8 @@ class ComposerView extends GetWidget<ComposerController> {
                               child: PointerInterceptor(
                                 child: AttachmentDropZoneWidget(
                                   imagePaths: controller.imagePaths,
-                                  onAttachmentDropZoneListener: controller.onAttachmentDropZoneListener,
+                                  onAttachmentDropZoneListener: (attachment) =>
+                                      controller.onAttachmentDropZoneListener(context, attachment),
                                 )
                               ),
                             );
@@ -933,6 +943,7 @@ class ComposerView extends GetWidget<ComposerController> {
       bccState: controller.bccRecipientState.value,
       replyToState: controller.replyToRecipientState.value,
       listEmailAddress: listEmailAddress,
+      invalidRecipients: controller.invalidRecipients.value,
       imagePaths: controller.imagePaths,
       maxWidth: maxWidth,
       minInputLengthAutocomplete: controller.minInputLengthAutocomplete,

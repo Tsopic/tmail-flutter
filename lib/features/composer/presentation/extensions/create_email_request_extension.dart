@@ -4,6 +4,7 @@ import 'package:jmap_dart_client/jmap/mail/email/email.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_address.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_body_part.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_body_value.dart';
+import 'package:jmap_dart_client/jmap/mail/email/email_header_value.dart';
 import 'package:jmap_dart_client/jmap/mail/email/individual_header_identifier.dart';
 import 'package:jmap_dart_client/jmap/mail/email/keyword_identifier.dart';
 import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
@@ -16,6 +17,8 @@ import 'package:tmail_ui_user/features/composer/presentation/extensions/identity
 import 'package:tmail_ui_user/features/composer/presentation/model/create_email_request.dart';
 import 'package:tmail_ui_user/features/email/domain/extensions/list_attachments_extension.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/create_new_mailbox_request.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/data/model/composer_cache.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/data/model/composer_persistent_cache.dart';
 import 'package:tmail_ui_user/features/sending_queue/domain/extensions/sending_email_extension.dart';
 import 'package:tmail_ui_user/features/sending_queue/presentation/model/sending_email_arguments.dart';
 import 'package:tmail_ui_user/main/localizations/localization_service.dart';
@@ -49,11 +52,22 @@ extension CreateEmailRequestExtension on CreateEmailRequest {
 
     if (isNotReplyTo) return null;
 
-    return identity?.replyTo?.isNotEmpty == true
-      ? identity!.replyTo!
-      : ownEmailAddress.isNotEmpty
-        ? {EmailAddress(null, ownEmailAddress)}
+    if (identity?.replyTo?.isNotEmpty == true) {
+      return identity!.replyTo!.map((address) {
+        if (address.name?.isNotEmpty == true) return address;
+        return EmailAddress(identity!.name, address.email);
+      }).toSet();
+    }
+
+    if (identity != null) {
+      return identity!.email?.isNotEmpty == true
+        ? {EmailAddress(identity!.name, identity!.email)}
         : null;
+    }
+
+    return ownEmailAddress.isNotEmpty
+      ? {EmailAddress(null, ownEmailAddress)}
+      : null;
   }
 
 
@@ -105,21 +119,22 @@ extension CreateEmailRequestExtension on CreateEmailRequest {
   }
 
   MessageIdsHeaderValue? createInReplyTo() {
-    if (emailActionType == EmailActionType.reply ||
-        emailActionType == EmailActionType.replyToList ||
-        emailActionType == EmailActionType.replyAll
-    ) {
+    if (_keepsReplyThreading) {
       return messageId;
     }
     return null;
   }
 
+  // A restored reply uses the web action type but still needs its headers.
+  bool get _keepsReplyThreading => const {
+    EmailActionType.reply,
+    EmailActionType.replyToList,
+    EmailActionType.replyAll,
+    EmailActionType.reopenComposerBrowser,
+  }.contains(emailActionType);
+
   MessageIdsHeaderValue? createReferences() {
-    if (emailActionType == EmailActionType.reply ||
-        emailActionType == EmailActionType.replyToList ||
-        emailActionType == EmailActionType.replyAll ||
-        emailActionType == EmailActionType.forward
-    ) {
+    if (_keepsReplyThreading || emailActionType == EmailActionType.forward) {
       Set<String> ids = {};
       if (messageId?.ids.isNotEmpty == true) {
         ids.addAll(messageId!.ids);
@@ -165,38 +180,33 @@ extension CreateEmailRequestExtension on CreateEmailRequest {
           value: newEmailContent,
           isEncodingProblem: false,
           isTruncated: false,
-          acceptLanguageHeader: {
-            IndividualHeaderIdentifier.acceptLanguageHeader: LocalizationService.supportedLocalesToLanguageTags()
-          },
-          contentLanguageHeader: {
-            IndividualHeaderIdentifier.contentLanguageHeader: LocalizationService.getInitialLocale().toLanguageTag()
+          individualHeaders: {
+            IndividualHeaderIdentifier.acceptLanguageHeader: TextHeaderValue(
+              LocalizationService.supportedLocalesToLanguageTags(),
+            ),
+            IndividualHeaderIdentifier.contentLanguageHeader: TextHeaderValue(
+              LocalizationService.getInitialLocale().toLanguageTag(),
+            ),
           },
         )
-      },
-      headerUserAgent: {
-        IndividualHeaderIdentifier.headerUserAgent : userAgent
       },
       attachments: newEmailAttachments.isNotEmpty
         ? newEmailAttachments
         : null,
-      headerMdn: hasRequestReadReceipt
-        ? { IndividualHeaderIdentifier.headerMdn: createMdnEmailAddress() }
-        : null,
-      headerReturnPath: hasRequestReadReceipt
-        ? { IndividualHeaderIdentifier.headerReturnPath: createMdnEmailAddress() }
-        : null,
-      identityHeader: withIdentityHeader
-        ? {IndividualHeaderIdentifier.identityHeader: identity?.id?.id.value}
-        : null,
-      xPriorityHeader: isMarkAsImportant
-        ? {IndividualHeaderIdentifier.xPriorityHeader: MailPriorityHeader.firstXPriority}
-        : null,
-      importanceHeader: isMarkAsImportant
-        ? {IndividualHeaderIdentifier.importanceHeader: MailPriorityHeader.highImportance}
-        : null,
-      priorityHeader: isMarkAsImportant
-        ? {IndividualHeaderIdentifier.priorityHeader: MailPriorityHeader.urgentPriority}
-        : null,
+      individualHeaders: {
+        IndividualHeaderIdentifier.headerUserAgent: TextHeaderValue(userAgent),
+        if (hasRequestReadReceipt) ...{
+          IndividualHeaderIdentifier.headerMdn: TextHeaderValue(createMdnEmailAddress()),
+          IndividualHeaderIdentifier.headerReturnPath: TextHeaderValue(createMdnEmailAddress()),
+        },
+        if (withIdentityHeader)
+          IndividualHeaderIdentifier.identityHeader: TextHeaderValue(identity?.id?.id.value),
+        if (isMarkAsImportant) ...{
+          IndividualHeaderIdentifier.xPriorityHeader: const TextHeaderValue(MailPriorityHeader.firstXPriority),
+          IndividualHeaderIdentifier.importanceHeader: const TextHeaderValue(MailPriorityHeader.highImportance),
+          IndividualHeaderIdentifier.priorityHeader: const TextHeaderValue(MailPriorityHeader.urgentPriority),
+        },
+      },
     );
   }
 
@@ -230,6 +240,36 @@ extension CreateEmailRequestExtension on CreateEmailRequest {
       accountId,
       createEmailRequest(emailObject: emailObject),
       createMailboxRequest()
+    );
+  }
+
+  ComposerCache generateComposerCache({
+    required Email emailCreated,
+    bool isPersistent = false,
+  }) {
+    if (isPersistent) {
+      return ComposerPersistentCache(
+        email: emailCreated,
+        hasRequestReadReceipt: hasRequestReadReceipt,
+        isMarkAsImportant: isMarkAsImportant,
+        actionType: EmailActionType.restoreComposerFromPersistentCache,
+        draftEmailId: draftsEmailId,
+        composerId: composerId,
+        isCleanClose: false,
+        timestampMs: DateTime.now().millisecondsSinceEpoch,
+      );
+    }
+    return ComposerCache(
+      email: emailCreated,
+      hasRequestReadReceipt: hasRequestReadReceipt,
+      isMarkAsImportant: isMarkAsImportant,
+      displayMode: displayMode,
+      composerIndex: composerIndex,
+      composerId: composerId,
+      draftHash: savedDraftHash,
+      actionType: savedActionType,
+      draftEmailId: draftsEmailId,
+      templateEmailId: templateEmailId,
     );
   }
 }

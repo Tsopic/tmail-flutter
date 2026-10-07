@@ -1,10 +1,11 @@
 import 'dart:convert';
 
+import 'package:core/utils/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/ai_scribe_config.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/auto_sync_config.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/default_preferences_config.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/empty_preferences_config.dart';
+import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/drive_attachment_config.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/label_config.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/preferences_config.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/preferences_setting.dart';
@@ -15,23 +16,25 @@ import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/s
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/thread_detail_config.dart';
 
 class PreferencesSettingManager {
-  static const String _preferencesSettingKey = 'PREFERENCES_SETTING';
-  static const String _preferencesSettingThreadKey =
-      '${_preferencesSettingKey}_THREAD';
-  static const String _preferencesSettingSpamReportKey =
-      '${_preferencesSettingKey}_SPAM_REPORT';
-  static const String _preferencesSettingTextFormattingMenuKey =
-      '${_preferencesSettingKey}_TEXT_FORMATTING_MENU';
-  static const String _preferencesSettingAIScribeKey =
-      '${_preferencesSettingKey}_AI_SCRIBE';
-  static const String _preferencesSettingLabelKey =
-      '${_preferencesSettingKey}_LABEL';
-  static const String _preferencesSettingAutoSyncKey =
-      '${_preferencesSettingKey}_AUTO_SYNC';
-  static const String _preferencesSettingQuotedContentKey =
-      '${_preferencesSettingKey}_QUOTED_CONTENT';
-  static const String _preferencesSettingSidebarKey =
-      '${_preferencesSettingKey}_SIDEBAR';
+  static const _storagePrefix = 'PREFERENCES_SETTING';
+
+  static String _storageKey(String suffix) => '${_storagePrefix}_$suffix';
+
+  // Add one entry here when introducing a new PreferencesConfig subclass.
+  static final Map<String, PreferencesConfig Function(Map<String, dynamic>)>
+  _configFactories = Map.unmodifiable({
+    _storageKey(ThreadDetailConfig.keySuffix): ThreadDetailConfig.fromJson,
+    _storageKey(SpamReportConfig.keySuffix): SpamReportConfig.fromJson,
+    _storageKey(TextFormattingMenuConfig.keySuffix):
+        TextFormattingMenuConfig.fromJson,
+    _storageKey(AIScribeConfig.keySuffix): AIScribeConfig.fromJson,
+    _storageKey(LabelConfig.keySuffix): LabelConfig.fromJson,
+    _storageKey(DriveAttachmentConfig.keySuffix):
+        DriveAttachmentConfig.fromJson,
+    _storageKey(AutoSyncConfig.keySuffix): AutoSyncConfig.fromJson,
+    _storageKey(QuotedContentConfig.keySuffix): QuotedContentConfig.fromJson,
+    _storageKey(SidebarConfig.keySuffix): SidebarConfig.fromJson,
+  });
 
   const PreferencesSettingManager(this._sharedPreferences);
 
@@ -40,182 +43,128 @@ class PreferencesSettingManager {
   Future<PreferencesSetting> loadPreferences() async {
     await _sharedPreferences.reload();
 
-    final keys = _sharedPreferences.getKeys();
-    final preferencesKeys =
-        keys.where((key) => key.startsWith(_preferencesSettingKey)).toList();
+    final preferenceKeys =
+        _sharedPreferences
+            .getKeys()
+            .where((key) => key.startsWith('${_storagePrefix}_'))
+            .toList()
+          ..sort();
 
-    final listConfigs = preferencesKeys.map((key) {
-      final jsonString = _sharedPreferences.getString(key);
-      if (jsonString != null) {
-        final jsonDecoded = jsonDecode(jsonString);
-
-        switch (key) {
-          case _preferencesSettingThreadKey:
-            return ThreadDetailConfig.fromJson(jsonDecoded);
-          case _preferencesSettingSpamReportKey:
-            return SpamReportConfig.fromJson(jsonDecoded);
-          case _preferencesSettingTextFormattingMenuKey:
-            return TextFormattingMenuConfig.fromJson(jsonDecoded);
-          case _preferencesSettingAIScribeKey:
-            return AIScribeConfig.fromJson(jsonDecoded);
-          case _preferencesSettingLabelKey:
-            return LabelConfig.fromJson(jsonDecoded);
-          case _preferencesSettingAutoSyncKey:
-            return AutoSyncConfig.fromJson(jsonDecoded);
-          case _preferencesSettingQuotedContentKey:
-            return QuotedContentConfig.fromJson(jsonDecoded);
-          case _preferencesSettingSidebarKey:
-            return SidebarConfig.fromJson(jsonDecoded);
-          default:
-            return DefaultPreferencesConfig.fromJson(jsonDecoded);
-        }
-      }
-      return EmptyPreferencesConfig();
-    }).toList();
-
-    if (listConfigs.isEmpty) {
+    if (preferenceKeys.isEmpty) {
       return PreferencesSetting.initial();
     }
 
-    return PreferencesSetting(listConfigs);
+    return PreferencesSetting(
+      preferenceKeys.map(_parseConfig).nonNulls.toList(),
+    );
   }
 
-  String _getPreferencesConfigKey(PreferencesConfig config) {
-    if (config is ThreadDetailConfig) {
-      return _preferencesSettingThreadKey;
-    } else if (config is SpamReportConfig) {
-      return _preferencesSettingSpamReportKey;
-    } else if (config is TextFormattingMenuConfig) {
-      return _preferencesSettingTextFormattingMenuKey;
-    } else if (config is AIScribeConfig) {
-      return _preferencesSettingAIScribeKey;
-    } else if (config is LabelConfig) {
-      return _preferencesSettingLabelKey;
-    } else if (config is AutoSyncConfig) {
-      return _preferencesSettingAutoSyncKey;
-    } else if (config is QuotedContentConfig) {
-      return _preferencesSettingQuotedContentKey;
-    } else if (config is SidebarConfig) {
-      return _preferencesSettingSidebarKey;
-    } else {
-      return _preferencesSettingKey;
-    }
-  }
-
+  // SpamReportConfig is read-merge-written to preserve lastTimeDismissedMilliseconds.
   Future<void> savePreferences(PreferencesConfig config) async {
+    if (config is SpamReportConfig) {
+      await updateSpamReport(isEnabled: config.isEnabled);
+      return;
+    }
     await _sharedPreferences.setString(
-      _getPreferencesConfigKey(config),
+      _storageKey(config.configKey),
       jsonEncode(config.toJson()),
     );
   }
 
-  Future<void> updateThread(bool isEnabled) async {
-    final currentConfig = await getThreadConfig();
-    final updatedConfig = currentConfig.copyWith(isEnabled: isEnabled);
-    await savePreferences(updatedConfig);
-  }
+  Future<SpamReportConfig> getSpamReportConfig() => _readConfig(
+    key: _storageKey(SpamReportConfig.keySuffix),
+    defaultFactory: SpamReportConfig.initial,
+    fromJson: SpamReportConfig.fromJson,
+  );
 
   Future<void> updateSpamReport({
     bool? isEnabled,
     int? lastTimeDismissedMilliseconds,
   }) async {
-    final currentConfig = await getSpamReportConfig();
-    final updatedConfig = currentConfig.copyWith(
-      isEnabled: isEnabled,
-      lastTimeDismissedMilliseconds: lastTimeDismissedMilliseconds,
+    final current = await getSpamReportConfig();
+    await _sharedPreferences.setString(
+      _storageKey(SpamReportConfig.keySuffix),
+      jsonEncode(
+        current
+            .copyWith(
+              isEnabled: isEnabled,
+              lastTimeDismissedMilliseconds: lastTimeDismissedMilliseconds,
+            )
+            .toJson(),
+      ),
     );
-    await savePreferences(updatedConfig);
   }
 
-  Future<SpamReportConfig> getSpamReportConfig() async {
+  Future<ThreadDetailConfig> getThreadConfig() => _readConfig(
+    key: _storageKey(ThreadDetailConfig.keySuffix),
+    defaultFactory: ThreadDetailConfig.initial,
+    fromJson: ThreadDetailConfig.fromJson,
+  );
+
+  Future<AIScribeConfig> getAIScribeConfig() => _readConfig(
+    key: _storageKey(AIScribeConfig.keySuffix),
+    defaultFactory: AIScribeConfig.initial,
+    fromJson: AIScribeConfig.fromJson,
+  );
+
+  Future<LabelConfig> getLabelConfig() => _readConfig(
+    key: _storageKey(LabelConfig.keySuffix),
+    defaultFactory: LabelConfig.initial,
+    fromJson: LabelConfig.fromJson,
+  );
+
+  PreferencesConfig? _parseConfig(String key) {
+    final jsonString = _sharedPreferences.getString(key);
+    if (jsonString == null) return null;
+    try {
+      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      final factory = _configFactories[key];
+      return factory != null
+          ? factory(json)
+          : DefaultPreferencesConfig.fromJson(json);
+    } catch (e) {
+      log(
+        'PreferencesSettingManager::_parseConfig(): failed to parse key=$key error=$e',
+      );
+      return null;
+    }
+  }
+
+  static const _experimentalPreferencesRevealedKey =
+      'EXPERIMENT_PREFERENCES_REVEALED';
+
+  Future<bool> getExperimentalPreferencesRevealed() async {
     await _sharedPreferences.reload();
-
-    final jsonString = _sharedPreferences.getString(
-      _preferencesSettingSpamReportKey,
+    final stored = _sharedPreferences.getBool(
+      _experimentalPreferencesRevealedKey,
     );
-
-    return jsonString == null
-        ? SpamReportConfig.initial()
-        : SpamReportConfig.fromJson(jsonDecode(jsonString));
+    return stored ?? false;
   }
 
-  Future<ThreadDetailConfig> getThreadConfig() async {
+  Future<void> saveExperimentalPreferencesRevealed() async {
+    await _sharedPreferences.setBool(_experimentalPreferencesRevealedKey, true);
+  }
+
+  Future<T> _readConfig<T extends PreferencesConfig>({
+    required String key,
+    required T Function() defaultFactory,
+    required T Function(Map<String, dynamic>) fromJson,
+  }) async {
     await _sharedPreferences.reload();
-
-    final jsonString = _sharedPreferences.getString(
-      _preferencesSettingThreadKey,
-    );
-
-    return jsonString == null
-        ? ThreadDetailConfig.initial()
-        : ThreadDetailConfig.fromJson(jsonDecode(jsonString));
+    final jsonString = _sharedPreferences.getString(key);
+    if (jsonString == null) return defaultFactory();
+    try {
+      return fromJson(jsonDecode(jsonString) as Map<String, dynamic>);
+    } catch (_) {
+      return defaultFactory();
+    }
   }
 
-  Future<TextFormattingMenuConfig> getTextFormattingMenuConfig() async {
-    await _sharedPreferences.reload();
-
-    final jsonString = _sharedPreferences.getString(
-      _preferencesSettingTextFormattingMenuKey,
-    );
-
-    return jsonString == null
-        ? TextFormattingMenuConfig.initial()
-        : TextFormattingMenuConfig.fromJson(jsonDecode(jsonString));
-  }
-
-  Future<void> updateTextFormattingMenu({required bool isDisplayed}) async {
-    final currentConfig = await getTextFormattingMenuConfig();
-    final updatedConfig = currentConfig.copyWith(isDisplayed: isDisplayed);
-    await savePreferences(updatedConfig);
-  }
-
-  Future<AIScribeConfig> getAIScribeConfig() async {
-    await _sharedPreferences.reload();
-
-    final jsonString = _sharedPreferences.getString(
-      _preferencesSettingAIScribeKey,
-    );
-
-    return jsonString == null
-        ? AIScribeConfig.initial()
-        : AIScribeConfig.fromJson(jsonDecode(jsonString));
-  }
-
-  Future<void> updateAIScribe(bool isEnabled) async {
-    final currentConfig = await getAIScribeConfig();
-    final updatedConfig = currentConfig.copyWith(isEnabled: isEnabled);
-    await savePreferences(updatedConfig);
-  }
-
-  Future<LabelConfig> getLabelConfig() async {
-    await _sharedPreferences.reload();
-
-    final jsonString = _sharedPreferences.getString(
-      _preferencesSettingLabelKey,
-    );
-
-    return jsonString == null
-        ? LabelConfig.initial()
-        : LabelConfig.fromJson(jsonDecode(jsonString));
-  }
-
-  Future<void> updateLabel(bool isEnabled) async {
-    final currentConfig = await getLabelConfig();
-    final updatedConfig = currentConfig.copyWith(isEnabled: isEnabled);
-    await savePreferences(updatedConfig);
-  }
-
-  Future<AutoSyncConfig> getAutoSyncConfig() async {
-    await _sharedPreferences.reload();
-
-    final jsonString = _sharedPreferences.getString(
-      _preferencesSettingAutoSyncKey,
-    );
-
-    return jsonString == null
-        ? AutoSyncConfig.initial()
-        : AutoSyncConfig.fromJson(jsonDecode(jsonString));
-  }
+  Future<AutoSyncConfig> getAutoSyncConfig() => _readConfig(
+    key: _storageKey(AutoSyncConfig.keySuffix),
+    defaultFactory: AutoSyncConfig.initial,
+    fromJson: AutoSyncConfig.fromJson,
+  );
 
   Future<void> updateAutoSync(bool isEnabled) async {
     final currentConfig = await getAutoSyncConfig();
@@ -223,35 +172,25 @@ class PreferencesSettingManager {
     await savePreferences(updatedConfig);
   }
 
-  Future<QuotedContentConfig> getQuotedContentConfig() async {
-    await _sharedPreferences.reload();
-
-    final jsonString = _sharedPreferences.getString(
-      _preferencesSettingQuotedContentKey,
-    );
-
-    return jsonString == null
-        ? QuotedContentConfig.initial()
-        : QuotedContentConfig.fromJson(jsonDecode(jsonString));
-  }
+  Future<QuotedContentConfig> getQuotedContentConfig() => _readConfig(
+    key: _storageKey(QuotedContentConfig.keySuffix),
+    defaultFactory: QuotedContentConfig.initial,
+    fromJson: QuotedContentConfig.fromJson,
+  );
 
   Future<void> updateQuotedContent(bool isHiddenByDefault) async {
     final currentConfig = await getQuotedContentConfig();
-    final updatedConfig = currentConfig.copyWith(isHiddenByDefault: isHiddenByDefault);
+    final updatedConfig = currentConfig.copyWith(
+      isHiddenByDefault: isHiddenByDefault,
+    );
     await savePreferences(updatedConfig);
   }
 
-  Future<SidebarConfig> getSidebarConfig() async {
-    await _sharedPreferences.reload();
-
-    final jsonString = _sharedPreferences.getString(
-      _preferencesSettingSidebarKey,
-    );
-
-    return jsonString == null
-        ? SidebarConfig.initial()
-        : SidebarConfig.fromJson(jsonDecode(jsonString));
-  }
+  Future<SidebarConfig> getSidebarConfig() => _readConfig(
+    key: _storageKey(SidebarConfig.keySuffix),
+    defaultFactory: SidebarConfig.initial,
+    fromJson: SidebarConfig.fromJson,
+  );
 
   Future<void> updateSidebar(bool isExpanded) async {
     final currentConfig = await getSidebarConfig();

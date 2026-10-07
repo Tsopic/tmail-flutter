@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:tmail_ui_user/features/base/mixin/app_loader_mixin.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/base/setting_detail_view_builder.dart';
-import 'package:tmail_ui_user/features/manage_account/presentation/extensions/handle_setup_label_visibility_in_setting_extension.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/menu/settings_utils.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/model/account_menu_item.dart';
-import 'package:tmail_ui_user/features/manage_account/presentation/model/preferences_option_type.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/preferences/preferences_controller.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/preferences/widgets/preferences_option_item.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/widgets/setting_header_widget.dart';
@@ -52,61 +50,19 @@ class PreferencesView extends GetWidget<PreferencesController> with AppLoaderMix
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (controller.responsiveUtils.isWebDesktop(context))
-                    Obx(
-                      () {
-                        final labelVisibility = controller
-                            .accountDashboardController.isLabelVisibilityEnabled.value;
-
-                        final isLabelCapabilitySupported = controller
-                            .accountDashboardController
-                            .isLabelCapabilitySupported;
-
-                        final disableMultiClick =
-                            labelVisibility || !isLabelCapabilitySupported;
-
-                        return SettingHeaderWidget(
-                          menuItem: AccountMenuItem.preferences,
-                          padding: const EdgeInsets.only(bottom: 21),
-                          onMultiClickAction: disableMultiClick
-                              ? null
-                              : controller.accountDashboardController
-                                  .enableLabelVisibility,
-                        );
-                      },
+                    SettingHeaderWidget(
+                      menuItem: AccountMenuItem.preferences,
+                      padding: const EdgeInsets.only(bottom: 21),
+                      onMultiClickAction: controller.revealExperimentalPreferences,
                     ),
                   Obx(() {
-                    final settingOption = controller.settingOption.value;
-                    final localSettingOption = controller.localSettings.value;
-                    final isLabelVisibility = controller
-                        .accountDashboardController
-                        .isLabelVisibilityEnabled;
+                    final preferencesContext = controller.preferencesContext;
+                    final availableSettingOptions =
+                        controller.registry.available(preferencesContext);
 
-                    if (settingOption == null &&
-                        localSettingOption.configs.isEmpty) {
+                    if (availableSettingOptions.isEmpty) {
                       return const SizedBox.shrink();
                     }
-
-                    final availableSettingOptions = [
-                      if (settingOption != null)
-                        ...PreferencesOptionType.values.where(
-                          (type) =>
-                              !type.isLocal &&
-                              type != PreferencesOptionType.aiNeedsAction,
-                        ),
-                      if (localSettingOption.configs.isNotEmpty)
-                        ...PreferencesOptionType.values.where(
-                          (type) =>
-                              type.isLocal &&
-                              type != PreferencesOptionType.label &&
-                              (type != PreferencesOptionType.aiScribe ||
-                                  controller.isAIScribeCapabilityAvailable),
-                        ),
-                      if (settingOption != null &&
-                          controller.isAICapabilitySupported)
-                        PreferencesOptionType.aiNeedsAction,
-                      if (isLabelVisibility.isTrue)
-                        PreferencesOptionType.label,
-                    ];
 
                     return Expanded(
                       child: ListView.separated(
@@ -114,10 +70,10 @@ class PreferencesView extends GetWidget<PreferencesController> with AppLoaderMix
                         itemBuilder: (context, index) {
                           return PreferencesOptionItem(
                             imagePaths: controller.imagePaths,
-                            settingOption: settingOption,
-                            preferencesSetting: localSettingOption,
-                            optionType: availableSettingOptions[index],
-                            onTapPreferencesOptionAction: controller.updateStateSettingOption,
+                            option: availableSettingOptions[index],
+                            preferencesContext: preferencesContext,
+                            onTapPreferencesOptionAction:
+                                controller.updateStateSettingOption,
                           );
                         },
                         separatorBuilder: (_, __) => const SizedBox(height: 49),

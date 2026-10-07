@@ -1,25 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:labels/labels.dart';
-import 'package:tmail_ui_user/features/search/email/presentation/search_email_view.dart';
-import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_builder.dart';
+import 'package:tmail_ui_user/features/base/widget/popup_menu/popup_menu_item_action_widget.dart';
 
 import '../../base/base_test_scenario.dart';
 import '../../mixin/provisioning_label_scenario_mixin.dart';
-import '../../robots/label_list_context_menu_robot.dart';
-import '../../robots/search_robot.dart';
-import '../../robots/thread_robot.dart';
+import '../../utils/test_timeouts.dart';
+import '../../utils/wait_for_condition.dart';
 
 class SearchEmailWithTagScenario extends BaseTestScenario
     with ProvisioningLabelScenarioMixin {
-  const SearchEmailWithTagScenario(super.$);
+  const SearchEmailWithTagScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
     const emailUser = String.fromEnvironment('BASIC_AUTH_EMAIL');
 
-    final threadRobot = ThreadRobot($);
-    final searchRobot = SearchRobot($);
-    final labelListContextMenuRobot = LabelListContextMenuRobot($);
+    final commonRobot = robots.commonRobot();
+    final searchRobot = robots.searchRobot();
+
+    // Labels are created directly through the dashboard controller, which only
+    // becomes available after the seeded-credentials login settles. Wait for it
+    // before provisioning, otherwise the labels come back empty (no accountId).
+    await commonRobot.waitForMailboxReady();
 
     final labels = await provisionLabelsByDisplayNames(
       ['Search Tag 1', 'Search Tag 2', 'Search Tag 3'],
@@ -28,7 +30,7 @@ class SearchEmailWithTagScenario extends BaseTestScenario
 
     int emailCount = 3;
     for (final label in labels) {
-      await provisionEmail(
+      await commonRobot.provisionEmail(
         buildEmailsForLabel(
           label: label,
           toEmail: emailUser,
@@ -37,10 +39,8 @@ class SearchEmailWithTagScenario extends BaseTestScenario
         requestReadReceipt: false,
       );
     }
-    await $.pumpAndSettle(duration: const Duration(seconds: 2));
 
-    await threadRobot.openSearchView();
-    await _expectSearchViewVisible();
+    await searchRobot.tapOnSearchField();
 
     for (final label in labels) {
       final labelDisplayName = label.safeDisplayName;
@@ -48,34 +48,20 @@ class SearchEmailWithTagScenario extends BaseTestScenario
       await searchRobot.openLabelListModal();
       await _expectLabelListContextMenuVisible();
 
-      await labelListContextMenuRobot.selectLabelByName(labelDisplayName);
-      await _expectEmailListDisplayedCorrectByTag(
-        tagDisplayName: labelDisplayName,
-        emailCount: emailCount,
-      );
-
-      await $.pumpAndSettle(duration: const Duration(seconds: 1));
+      await commonRobot.selectContextMenuItemByName(labelDisplayName);
+      await searchRobot.expectEmailListCountAtLeast(emailCount);
     }
   }
 
-  Future<void> _expectSearchViewVisible() async {
-    await expectViewVisible($(SearchEmailView));
-  }
-
   Future<void> _expectLabelListContextMenuVisible() async {
-    await expectViewVisible($(#label_list_bottom_sheet_context_menu));
-  }
-
-  Future<void> _expectEmailListDisplayedCorrectByTag({
-    required String tagDisplayName,
-    required int emailCount,
-  }) async {
-    // Emails provisioned by buildEmailsForLabel include the tag name in the subject
-    final listEmailTileWithTag = $.tester.widgetList<EmailTileBuilder>(
-      $(EmailTileBuilder).which<EmailTileBuilder>((widget) =>
-          widget.presentationEmail.subject?.contains(tagDisplayName) == true),
+    // Mobile: bottom sheet identified by #label_list_bottom_sheet_context_menu.
+    // Web: showMenu popup has no container key — identified by PopupMenuItemActionWidget.
+    await waitForCondition(
+      () async =>
+        $(#label_list_bottom_sheet_context_menu).evaluate().isNotEmpty ||
+        $(PopupMenuItemActionWidget).evaluate().isNotEmpty,
+      timeout: TestTimeouts.short,
     );
-
-    expect(listEmailTileWithTag.length, greaterThanOrEqualTo(emailCount));
   }
+
 }

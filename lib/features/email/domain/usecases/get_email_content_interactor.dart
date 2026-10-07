@@ -9,7 +9,10 @@ import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:jmap_dart_client/jmap/core/properties/properties.dart';
 import 'package:jmap_dart_client/jmap/core/session/session.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email.dart';
+import 'package:jmap_dart_client/jmap/mail/email/email_header_value.dart';
+import 'package:jmap_dart_client/jmap/mail/email/individual_header_identifier.dart';
 import 'package:model/model.dart';
+import 'package:tmail_ui_user/features/email/domain/extensions/email_attachment_classifier_extension.dart';
 import 'package:tmail_ui_user/features/email/domain/model/detailed_email.dart';
 import 'package:tmail_ui_user/features/email/domain/repository/email_repository.dart';
 import 'package:tmail_ui_user/features/email/domain/state/get_email_content_state.dart';
@@ -77,8 +80,9 @@ class GetEmailContentInteractor {
         accountId,
         emailId,
         additionalProperties: additionalProperties);
-      final listAttachments = email.allAttachments.getListAttachmentsDisplayedOutside(email.htmlBodyAttachments);
-      final listInlineImages = email.allAttachments.listAttachmentsDisplayedInContent;
+      final classified = email.toPresentationAttachments();
+      final listAttachments = classified.attachments;
+      final listInlineImages = classified.inlineImages;
       log('GetEmailContentInteractor::_getContentEmailFromServer: listAttachments = ${listAttachments.length} | listInlineImages = ${listInlineImages.length}');
       if (email.emailContentList.isNotEmpty) {
         final mapCidImageDownloadUrl = listInlineImages.toMapCidImageDownloadUrl(
@@ -143,7 +147,13 @@ class GetEmailContentInteractor {
         inlineImages: detailedEmail.inlineImages ?? [],
         emailCurrent: emailCache.copyWith(
           headers: detailedEmail.headers,
-          sMimeStatusHeader: detailedEmail.sMimeStatusHeader,
+          individualHeaders: () {
+            final map = emailCache.individualHeaders.merge({
+              if (detailedEmail.sMimeStatusHeader != null)
+                IndividualHeaderIdentifier.sMimeStatusHeader: detailedEmail.sMimeStatusHeader!,
+            });
+            return map.isEmpty ? null : map;
+          }(),
           references: detailedEmail.references,
           messageId: detailedEmail.messageId,
         )
@@ -183,8 +193,15 @@ class GetEmailContentInteractor {
         inlineImages: detailedEmail.inlineImages ?? [],
         emailCurrent: emailCache.copyWith(
           headers: detailedEmail.headers,
-          sMimeStatusHeader: detailedEmail.sMimeStatusHeader,
-          identityHeader: detailedEmail.identityHeader,
+          individualHeaders: () {
+            final map = emailCache.individualHeaders.merge({
+              if (detailedEmail.sMimeStatusHeader != null)
+                IndividualHeaderIdentifier.sMimeStatusHeader: detailedEmail.sMimeStatusHeader!,
+              if (detailedEmail.identityHeader != null)
+                IndividualHeaderIdentifier.identityHeader: detailedEmail.identityHeader!,
+            });
+            return map.isEmpty ? null : map;
+          }(),
           references: detailedEmail.references,
           messageId: detailedEmail.messageId,
         )
@@ -200,5 +217,13 @@ class GetEmailContentInteractor {
         additionalProperties: additionalProperties
       );
     }
+  }
+}
+
+extension on Map<IndividualHeaderIdentifier, EmailHeaderValue> {
+  Map<IndividualHeaderIdentifier, EmailHeaderValue> merge(
+    Map<IndividualHeaderIdentifier, EmailHeaderValue> other,
+  ) {
+    return Map.from(this)..addAll(other);
   }
 }

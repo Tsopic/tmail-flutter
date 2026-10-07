@@ -11,7 +11,7 @@ import '../../robots/mailbox_menu_robot.dart';
 import '../../robots/thread_robot.dart';
 
 class TeamMailboxReceiveEmailScenario extends BaseTestScenario {
-  const TeamMailboxReceiveEmailScenario(super.$);
+  const TeamMailboxReceiveEmailScenario(super.$, super.robots);
   
   @override
   Future<void> runTestLogic() async {
@@ -43,8 +43,8 @@ class TeamMailboxReceiveEmailScenario extends BaseTestScenario {
     await $.pump(const Duration(seconds: 2));
 
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.expandMailboxWithName(teamMailboxName);
-    await mailboxMenuRobot.openFolderByName(appLocalizations.inboxMailboxDisplayName.toUpperCase());
+    await mailboxMenuRobot.navigation.expandMailbox(mailboxMenuRobot.mailboxItemByName(teamMailboxName));
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.inboxMailboxDisplayName.toUpperCase()));
     await _expectEmailWithSubjectVisible(subject);
   }
 
@@ -53,6 +53,7 @@ class TeamMailboxReceiveEmailScenario extends BaseTestScenario {
   }
 
   Future<void> _expectTeamMailboxVisible(String name) async {
+    await $.waitUntilExists($(name));
     await $.scrollUntilVisible(finder: $(name));
     await expectViewVisible($(name));
   }

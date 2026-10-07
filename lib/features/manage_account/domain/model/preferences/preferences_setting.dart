@@ -1,6 +1,6 @@
-import 'package:collection/collection.dart';
 import 'package:equatable/equatable.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/ai_scribe_config.dart';
+import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/drive_attachment_config.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/label_config.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/preferences_config.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/quoted_content_config.dart';
@@ -19,68 +19,33 @@ class PreferencesSetting with EquatableMixin {
       SpamReportConfig.initial(),
       TextFormattingMenuConfig.initial(),
       AIScribeConfig.initial(),
+      LabelConfig.initial(),
+      DriveAttachmentConfig.initial(),
     ]);
   }
 
-  ThreadDetailConfig get threadConfig {
-    final threadConfig =
-        configs.firstWhereOrNull((config) => config is ThreadDetailConfig);
-    if (threadConfig != null) {
-      return threadConfig as ThreadDetailConfig;
-    } else {
-      return ThreadDetailConfig.initial();
-    }
-  }
+  T getConfigOrDefault<T extends PreferencesConfig>(T defaultValue) =>
+      configs.whereType<T>().firstOrNull ?? defaultValue;
 
-  SpamReportConfig get spamReportConfig {
-    final spamConfig =
-        configs.firstWhereOrNull((config) => config is SpamReportConfig);
-    if (spamConfig != null) {
-      return spamConfig as SpamReportConfig;
-    } else {
-      return SpamReportConfig.initial();
-    }
-  }
+  ThreadDetailConfig get threadConfig =>
+      getConfigOrDefault(ThreadDetailConfig.initial());
 
-  TextFormattingMenuConfig get textFormattingMenuConfig {
-    final formatConfig = configs
-        .firstWhereOrNull((config) => config is TextFormattingMenuConfig);
-    if (formatConfig != null) {
-      return formatConfig as TextFormattingMenuConfig;
-    } else {
-      return TextFormattingMenuConfig.initial();
-    }
-  }
+  SpamReportConfig get spamReportConfig =>
+      getConfigOrDefault(SpamReportConfig.initial());
 
-  AIScribeConfig get aiScribeConfig {
-    final aiConfig =
-        configs.firstWhereOrNull((config) => config is AIScribeConfig);
-    if (aiConfig != null) {
-      return aiConfig as AIScribeConfig;
-    } else {
-      return AIScribeConfig.initial();
-    }
-  }
+  TextFormattingMenuConfig get textFormattingMenuConfig =>
+      getConfigOrDefault(TextFormattingMenuConfig.initial());
 
-  LabelConfig get labelConfig {
-    final labelConfig =
-        configs.firstWhereOrNull((config) => config is LabelConfig);
-    if (labelConfig != null) {
-      return labelConfig as LabelConfig;
-    } else {
-      return LabelConfig.initial();
-    }
-  }
+  AIScribeConfig get aiScribeConfig =>
+      getConfigOrDefault(AIScribeConfig.initial());
 
-  QuotedContentConfig get quotedContentConfig {
-    final quotedConfig =
-        configs.firstWhereOrNull((config) => config is QuotedContentConfig);
-    if (quotedConfig != null) {
-      return quotedConfig as QuotedContentConfig;
-    } else {
-      return QuotedContentConfig.initial();
-    }
-  }
+  LabelConfig get labelConfig => getConfigOrDefault(LabelConfig.initial());
+
+  DriveAttachmentConfig get driveAttachmentConfig =>
+      getConfigOrDefault(DriveAttachmentConfig.initial());
+
+  QuotedContentConfig get quotedContentConfig =>
+      getConfigOrDefault(QuotedContentConfig.initial());
 
   @override
   List<Object?> get props => [configs];

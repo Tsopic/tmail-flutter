@@ -281,9 +281,7 @@ class VacationController extends BaseController {
       );
     } else {
       consumeState(
-        Stream.value(
-          Left(UpdateVacationFailure(NullSessionOrAccountIdException())),
-        ),
+        Stream.value(Left(UpdateVacationFailure(const NullSessionOrAccountIdException()))),
       );
     }
   }

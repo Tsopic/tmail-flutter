@@ -1,7 +1,7 @@
 import 'package:core/data/network/dio_client.dart';
 import 'package:scribe/scribe/ai/data/model/ai_api_request.dart';
 import 'package:scribe/scribe/ai/data/model/ai_api_response.dart';
-import 'package:scribe/scribe/ai/data/model/ai_message.dart';
+import 'package:scribe/scribe/ai/domain/model/ai_message.dart';
 
 class AIApi {
   final DioClient _dioClient;
@@ -9,8 +9,8 @@ class AIApi {
 
   AIApi(this._dioClient, this.aiEndpoint);
 
-  Future<AIApiResponse> generateMessage(String prompt) async {
-    final aiRequest = _generateRequest(prompt);
+  Future<AIApiResponse> generateMessage(List<AIMessage> messages) async {
+    final aiRequest = AIAPIRequest(messages: messages);
 
     final response = await _dioClient.post(
       aiEndpoint,
@@ -19,9 +19,5 @@ class AIApi {
     );
 
     return AIApiResponse.fromJson(response);
-  }
-
-  AIAPIRequest _generateRequest(String prompt) {
-    return AIAPIRequest(messages: [AIMessage.ofUser(prompt)]);
   }
 }

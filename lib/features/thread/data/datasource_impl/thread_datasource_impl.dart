@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:tmail_ui_user/main/exceptions/remote/method_level_exception.dart';
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
+import 'package:core/utils/app_logger.dart';
 import 'package:dartz/dartz.dart' as dartz;
 import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:jmap_dart_client/jmap/core/filter/filter.dart';
@@ -22,7 +24,7 @@ import 'package:tmail_ui_user/features/thread/data/network/thread_isolate_worker
 import 'package:tmail_ui_user/features/thread/domain/model/email_response.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/filter_message_option.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_emails_response.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 class ThreadDataSourceImpl extends ThreadDataSource {
 
@@ -45,6 +47,7 @@ class ThreadDataSourceImpl extends ThreadDataSource {
       int? position,
       Set<Comparator>? sort,
       Filter? filter,
+      bool? collapseThreads,
       Properties? properties,
     }
   ) {
@@ -56,6 +59,7 @@ class ThreadDataSourceImpl extends ThreadDataSource {
         position: position,
         sort: sort,
         filter: filter,
+        collapseThreads: collapseThreads,
         properties: properties);
     }).catchError(_exceptionThrower.throwException);
   }
@@ -69,6 +73,7 @@ class ThreadDataSourceImpl extends ThreadDataSource {
       int? position,
       Set<Comparator>? sort,
       Filter? filter,
+      bool? collapseThreads,
       Properties? properties,
     }
   ) {
@@ -80,6 +85,7 @@ class ThreadDataSourceImpl extends ThreadDataSource {
         position: position,
         sort: sort,
         filter: filter,
+        collapseThreads: collapseThreads,
         properties: properties);
     }).catchError(_exceptionThrower.throwException);
   }
@@ -103,6 +109,68 @@ class ThreadDataSourceImpl extends ThreadDataSource {
         propertiesCreated: propertiesCreated,
         propertiesUpdated: propertiesUpdated,
         maxCreatedEmailsToFetch: maxCreatedEmailsToFetch);
+    }).catchError(_exceptionThrower.throwException);
+  }
+
+  /// Upper bound on `Email/changes` pages drained in a single sync. With a page
+  /// size of 128 this caps one sync at ~12.8k changes; beyond that the local
+  /// state is hopelessly stale and a full reload is cheaper than paginating.
+  static const int _maxGetAllEmailChangesIterations = 100;
+
+  @override
+  Future<EmailChangeResponse?> getAllEmailChanges(
+    Session session,
+    AccountId accountId,
+    State sinceState,
+    {
+      Properties? propertiesCreated,
+      Properties? propertiesUpdated
+    }
+  ) {
+    return Future.sync(() async {
+      EmailChangeResponse? emailChangeResponse;
+      bool hasMoreChanges = true;
+      State? currentSinceState = sinceState;
+      int iterationCount = 0;
+
+      while (hasMoreChanges && currentSinceState != null) {
+        final State previousSinceState = currentSinceState;
+
+        final changesResponse = await threadAPI.getChanges(
+          session,
+          accountId,
+          currentSinceState,
+          propertiesCreated: propertiesCreated,
+          propertiesUpdated: propertiesUpdated);
+
+        emailChangeResponse = emailChangeResponse == null
+          ? changesResponse
+          : emailChangeResponse.union(changesResponse);
+
+        hasMoreChanges = changesResponse.hasMoreChanges;
+        currentSinceState = changesResponse.newStateChanges;
+
+        // Progress guard: the server claims more changes but the state cursor
+        // did not advance. Continuing would re-request the same page forever
+        // (self-inflicted DDoS), so stop here.
+        if (hasMoreChanges &&
+            (currentSinceState == null || currentSinceState == previousSinceState)) {
+          logWarning(
+            'ThreadDataSourceImpl::getAllEmailChanges(): state did not advance '
+            '($previousSinceState) while hasMoreChanges=true. Aborting pagination.');
+          throw CannotCalculateChangesMethodResponseException();
+        }
+
+        iterationCount++;
+        if (hasMoreChanges && iterationCount >= _maxGetAllEmailChangesIterations) {
+          logWarning(
+            'ThreadDataSourceImpl::getAllEmailChanges(): reached max iterations '
+            '($_maxGetAllEmailChangesIterations) from $sinceState. Aborting pagination.');
+          throw CannotCalculateChangesMethodResponseException();
+        }
+      }
+
+      return emailChangeResponse;
     }).catchError(_exceptionThrower.throwException);
   }
 

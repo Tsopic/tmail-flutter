@@ -1,4 +1,4 @@
-ARG FLUTTER_VERSION=3.38.7
+ARG FLUTTER_VERSION=3.38.9
 ARG APP_VERSION
 
 # Stage 1 - Install dependencies and build the app
@@ -25,32 +25,17 @@ ENV GITHUB_SHA=$GITHUB_SHA \
     SENTRY_URL=$SENTRY_URL \
     SENTRY_RELEASE=$SENTRY_RELEASE
 
-# Precompile tmail flutter
-RUN ./scripts/prebuild.sh
-# Build flutter for web (use --build-name if APP_VERSION is set)
-RUN if [ -n "$APP_VERSION" ]; then \
-      flutter build web --release --source-maps --dart-define=SENTRY_RELEASE=$SENTRY_RELEASE --build-name="$APP_VERSION"; \
+RUN ./scripts/prebuild.sh && \
+    SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN:-} ./scripts/configure-sentry.sh && \
+    if [ -n "$APP_VERSION" ]; then \
+      flutter build web --release --source-maps --no-web-resources-cdn \
+        --dart-define=SENTRY_RELEASE=$SENTRY_RELEASE --dart-define=SENTRY_DIST=$GITHUB_SHA \
+        --build-name="$APP_VERSION"; \
     else \
-      flutter build web --release --source-maps --dart-define=SENTRY_RELEASE=$SENTRY_RELEASE; \
+      flutter build web --release --source-maps --no-web-resources-cdn \
+        --dart-define=SENTRY_RELEASE=$SENTRY_RELEASE --dart-define=SENTRY_DIST=$GITHUB_SHA; \
     fi && \
-    if [ -n "$SENTRY_AUTH_TOKEN" ] && [ -n "$SENTRY_ORG" ] && [ -n "$SENTRY_PROJECT" ] && [ -n "$SENTRY_RELEASE" ]; then \
-        echo "Sentry configuration detected, uploading sourcemaps..." && \
-        curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.20.7 bash && \
-        sentry-cli releases new "$SENTRY_RELEASE" && \
-        sentry-cli sourcemaps upload build/web \
-            --org "$SENTRY_ORG" \
-            --project "$SENTRY_PROJECT" \
-            --auth-token "$SENTRY_AUTH_TOKEN" \
-            --release "$SENTRY_RELEASE" \
-            --dist "$GITHUB_SHA" \
-            --url-prefix "~/" \
-            --validate \
-            --wait && \
-        sentry-cli releases finalize "$SENTRY_RELEASE" && \
-        echo "Sentry sourcemaps uploaded successfully"; \
-    else \
-        echo "Sentry configuration not complete, skipping sourcemap upload"; \
-    fi
+    SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN:-} ./scripts/run-sentry.sh
 
 FROM nginx:alpine
 RUN apk add gzip

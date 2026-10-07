@@ -162,6 +162,18 @@
       "emailAddress": {}
     }
   },
+  "header_email_quoted_date_time": "{date} в {time}",
+  "@header_email_quoted_date_time": {
+    "type": "text",
+    "placeholders_order": [
+      "date",
+      "time"
+    ],
+    "placeholders": {
+      "date": {},
+      "time": {}
+    }
+  },
   "prefix_reply_email": "Re:",
   "@prefix_reply_email": {
     "type": "text",
@@ -2632,6 +2644,16 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "sendMessageFailureWithInvalidRecipients": "Не удалось отправить сообщение, так как следующие получатели недействительны: {invalidRecipients}",
+  "@sendMessageFailureWithInvalidRecipients": {
+    "type": "text",
+    "placeholders_order": [
+      "invalidRecipients"
+    ],
+    "placeholders": {
+      "invalidRecipients": {}
+    }
+  },
   "languageArabic": "Арабский",
   "@languageArabic": {
     "type": "text",
@@ -2828,6 +2850,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "languageBrazilianPortuguese": "Португальский (Бразилия)",
+  "@languageBrazilianPortuguese": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "emptyListEmailForward": "Укажите хотя бы одного получателя",
   "@emptyListEmailForward": {
     "type": "text",
@@ -2890,6 +2918,30 @@
   },
   "organizer": "Организатор",
   "@organizer": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "attending": "Участие?",
+  "@attending": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "joinTheVideoConference": "Присоединиться к видеоконференции",
+  "@joinTheVideoConference": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "copyLink": "Копировать ссылку",
+  "@copyLink": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkCopiedToClipboard": "Ссылка скопирована",
+  "@linkCopiedToClipboard": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -4306,6 +4358,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "languageMongolian": "Монгольский",
+  "@languageMongolian": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "descriptionWelcomeTo": "Новый стандарт электронной почты \n с открытым исходным кодом",
   "@descriptionWelcomeTo": {
     "type": "text",
@@ -4326,6 +4384,12 @@
   },
   "cannotOpenNewWindow": "Невозможно открыть новое окно",
   "@cannotOpenNewWindow": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkCannotBeOpened": "Эту ссылку невозможно открыть",
+  "@linkCannotBeOpened": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -4848,6 +4912,12 @@
   },
   "youAreNotInvitedToThisEventPleaseContactTheOrganizer": "Вы не приглашены на это мероприятие. Пожалуйста, свяжитесь с организатором.",
   "@youAreNotInvitedToThisEventPleaseContactTheOrganizer": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "seeInYourCalendar": "Посмотреть в вашем Календаре",
+  "@seeInYourCalendar": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -5384,42 +5454,6 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "mailComposer": "Редактор письма",
-  "@mailComposer": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "focusOnSearch": "Фокус на поиске",
-  "@focusOnSearch": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "openedModal": "Открытое модальное окно",
-  "@openedModal": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailboxList": "Список почтовых ящиков",
-  "@mailboxList": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "openedMailView": "Вид открытого письма",
-  "@openedMailView": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailboxListWithSelectedMail": "Список почтовых ящиков (выбранное письмо)",
-  "@mailboxListWithSelectedMail": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
   "replyToAll": "Ответить всем",
   "@replyToAll": {
     "type": "text",
@@ -5672,7 +5706,7 @@
       "labelName": {}
     }
   },
-  "addLabelToEmailSuccessfullyMessage": "Письмо добавлено в метку \"{labelName}\"",
+  "addLabelToEmailSuccessfullyMessage": "Метка \"{labelName}\" добавлена к письму",
   "@addLabelToEmailSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5682,7 +5716,7 @@
       "labelName": {}
     }
   },
-  "addLabelToEmailFailureMessage": "Не удалось добавить письмо в метку \"{labelName}\"",
+  "addLabelToEmailFailureMessage": "Не удалось добавить метку \"{labelName}\" к письму",
   "@addLabelToEmailFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5692,7 +5726,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromEmailSuccessfullyMessage": "Письмо удалено из метки \"{labelName}\"",
+  "removeLabelFromEmailSuccessfullyMessage": "Метка \"{labelName}\" удалена с письма",
   "@removeLabelFromEmailSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5702,7 +5736,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromEmailFailureMessage": "Не удалось удалить письмо из метки \"{labelName}\"",
+  "removeLabelFromEmailFailureMessage": "Не удалось удалить метку \"{labelName}\" с письма",
   "@removeLabelFromEmailFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5712,7 +5746,7 @@
       "labelName": {}
     }
   },
-  "addLabelToThreadSuccessfullyMessage": "Все письма в цепочке добавлены в метку \"{labelName}\"",
+  "addLabelToThreadSuccessfullyMessage": "Метка \"{labelName}\" добавлена ко всем письмам в цепочке",
   "@addLabelToThreadSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5722,7 +5756,7 @@
       "labelName": {}
     }
   },
-  "addLabelToThreadFailureMessage": "Не удалось добавить все письма в цепочке в метку \"{labelName}\"",
+  "addLabelToThreadFailureMessage": "Не удалось добавить метку \"{labelName}\" ко всем письмам в цепочке",
   "@addLabelToThreadFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5732,7 +5766,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromThreadSuccessfullyMessage": "Все письма в цепочке удалены из метки \"{labelName}\"",
+  "removeLabelFromThreadSuccessfullyMessage": "Метка \"{labelName}\" удалена со всех писем в цепочке",
   "@removeLabelFromThreadSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5742,7 +5776,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromThreadFailureMessage": "Не удалось удалить все письма в цепочке из метки \"{labelName}\"",
+  "removeLabelFromThreadFailureMessage": "Не удалось удалить метку \"{labelName}\" со всех писем в цепочке",
   "@removeLabelFromThreadFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5751,5 +5785,279 @@
     "placeholders": {
       "labelName": {}
     }
+  },
+  "pleaseEnterNameYourNewLabel": "Пожалуйста, введите название новой метки",
+  "@pleaseEnterNameYourNewLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseALabelColor": "Выберите цвет метки",
+  "@chooseALabelColor": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "tagNameAlreadyExists": "Метка с таким названием уже существует. Пожалуйста, выберите другое название.",
+  "@tagNameAlreadyExists": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseCustomColour": "Выбрать произвольный цвет",
+  "@chooseCustomColour": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "createNewLabelFailure": "Ошибка создания новой метки",
+  "@createNewLabelFailure": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelVisibilitySettingExplanation": "Показывать метки, назначенные письмам, непосредственно в списке сообщений для удобной категоризации.",
+  "@labelVisibilitySettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelVisibilityToggleDescription": "Показывать метки",
+  "@labelVisibilityToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "updateTheLabelName": "Обновить название метки",
+  "@updateTheLabelName": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "areYouSureYouWantToDeleteTheLabel": "Вы уверены, что хотите удалить метку \"{labelName}\"?",
+  "@areYouSureYouWantToDeleteTheLabel": {
+    "type": "text",
+    "placeholders_order": [
+      "labelName"
+    ],
+    "placeholders": {
+      "labelName": {}
+    }
+  },
+  "labelDescription": "Описание (опционально)",
+  "@labelDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelDescriptionHintText": "Добавьте краткое описание метки",
+  "@labelDescriptionHintText": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "notIncludeEvents": "Не включать события",
+  "@notIncludeEvents": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "closeMailDetailView": "Закрыть подробный просмотр",
+  "@closeMailDetailView": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "allEmail": "Вся почта",
+  "@allEmail": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "allEmailTrashAndSpam": "Вся почта, корзина и спам",
+  "@allEmailTrashAndSpam": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseLabel": "Выбрать метку",
+  "@chooseLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "selectLabel": "Выделить метку",
+  "@selectLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailSuccessfullyMessage": "Метки успешно добавлены к этим письмам.",
+  "@addListLabelToListEmailSuccessfullyMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailHasSomeFailureMessage": "Метки успешно добавлены к некоторым письмам.",
+  "@addListLabelToListEmailHasSomeFailureMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailFailureMessage": "Не удалось добавить метки",
+  "@addListLabelToListEmailFailureMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "noLabelsYet": "Меток еще нет",
+  "@noLabelsYet": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "noLabelsYetMessageDescriptions": "Создайте первую метку, чтобы письма было проще организовать.",
+  "@noLabelsYetMessageDescriptions": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "createALabel": "Создать метку",
+  "@createALabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "confirm": "Подтвердить",
+  "@confirm": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "titleConfirmRuleWithRejectAction": "Отклонить все письма, соответствующие условию?",
+  "@titleConfirmRuleWithRejectAction": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "messageConfirmationRuleWithRejectAction": "Это действие нельзя отменить. Хотите продолжить?",
+  "@messageConfirmationRuleWithRejectAction": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorization": "Категоризация меток",
+  "@aiLabelCategorization": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorizationToggleDescription": "Включить категоризацию меток",
+  "@aiLabelCategorizationToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorizationSettingExplanation": "Применять мои метки к входящим письмам, используя их описание",
+  "@aiLabelCategorizationSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "ssoRedirectFailedMessage": "Не удалось завершить перенаправление единого входа (SSO). Пожалуйста, попробуйте ещё раз.",
+  "@ssoRedirectFailedMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "cannotPreviewPdf": "Невозможно просмотреть PDF-файл",
+  "@cannotPreviewPdf": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "openInDrive": "Открыть в Drive",
+  "@openInDrive": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachment": "Вложение из Drive",
+  "@driveAttachment": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentSettingExplanation": "Показать или скрыть кнопку вложения Twake Drive в редакторе письма",
+  "@driveAttachmentSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentToggleDescription": "Включить кнопку вложения Drive",
+  "@driveAttachmentToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReporting": "Отправка отчетов об ошибках",
+  "@errorReporting": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReportingSettingExplanation": "Отправляйте отчеты о сбоях и ошибках, чтобы служба поддержки могла диагностировать возникающие у вас проблемы. Ваши письма, их содержимое и получатели никогда не включаются.",
+  "@errorReportingSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReportingToggleDescription": "Отправлять отчеты об ошибках",
+  "@errorReportingToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentAddedSuccessfully": "Файлы прикреплены из Drive.",
+  "@driveAttachmentAddedSuccessfully": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentTransferFailed": "Не удалось прикрепить файлы из Drive.",
+  "@driveAttachmentTransferFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveNoValidAttachment": "Нет допустимых вложений",
+  "@driveNoValidAttachment": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersSuccess": "Подпапки Корзины удалены",
+  "@clearTrashSubfoldersSuccess": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersPartialSuccess": "Некоторые подпапки в Корзине не удалось удалить",
+  "@clearTrashSubfoldersPartialSuccess": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersFailed": "Не удалось удалить подпапки в Корзине",
+  "@clearTrashSubfoldersFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "deepLinkCannotBeOpened": "Эта ссылка для входа не от Twake. Пожалуйста, войдите через приложение.",
+  "@deepLinkCannotBeOpened": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
   }
 }

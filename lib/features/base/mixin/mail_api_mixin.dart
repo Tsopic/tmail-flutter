@@ -1,3 +1,4 @@
+import 'package:tmail_ui_user/main/error/capability_validator.dart';
 import 'dart:async';
 import 'dart:math' hide log;
 
@@ -7,8 +8,6 @@ import 'package:core/utils/app_logger.dart';
 import 'package:dartz/dartz.dart' hide State;
 import 'package:jmap_dart_client/http/http_client.dart';
 import 'package:jmap_dart_client/jmap/account_id.dart';
-import 'package:jmap_dart_client/jmap/core/capability/capability_identifier.dart';
-import 'package:jmap_dart_client/jmap/core/capability/core_capability.dart';
 import 'package:jmap_dart_client/jmap/core/error/set_error.dart';
 import 'package:jmap_dart_client/jmap/core/filter/filter.dart';
 import 'package:jmap_dart_client/jmap/core/id.dart';
@@ -34,53 +33,19 @@ import 'package:model/email/email_property.dart';
 import 'package:model/extensions/list_email_extension.dart';
 import 'package:model/extensions/list_email_id_extension.dart';
 import 'package:model/extensions/list_id_extension.dart';
-import 'package:model/extensions/session_extension.dart';
 import 'package:tmail_ui_user/features/base/mixin/handle_error_mixin.dart';
+import 'package:tmail_ui_user/features/base/mixin/session_mixin.dart';
 import 'package:tmail_ui_user/features/email/domain/model/move_action.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/exceptions/mailbox_exception.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/state/move_folder_content_state.dart';
 import 'package:tmail_ui_user/features/thread/data/extensions/list_email_extension.dart';
 import 'package:tmail_ui_user/features/thread/data/extensions/list_email_id_extension.dart';
+import 'package:tmail_ui_user/features/thread/data/extensions/query_email_method_extension.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/email_response.dart';
-import 'package:tmail_ui_user/main/error/capability_validator.dart';
 
-mixin MailAPIMixin on HandleSetErrorMixin {
-  int getMaxObjectsInSetMethod(Session session, AccountId accountId) {
-    final coreCapability = session.getCapabilityProperties<CoreCapability>(
-      accountId,
-      CapabilityIdentifier.jmapCore,
-    );
-    final maxObjectsInSetMethod =
-        coreCapability?.maxObjectsInSet?.value.toInt() ??
-            CapabilityIdentifierExtension.defaultMaxObjectsInSet;
-
-    final minOfMaxObjectsInSetMethod = min(
-      maxObjectsInSetMethod,
-      CapabilityIdentifierExtension.defaultMaxObjectsInSet,
-    );
-    log('$runtimeType::getMaxObjectsInSetMethod:minOfMaxObjectsInSetMethod = $minOfMaxObjectsInSetMethod');
-    return minOfMaxObjectsInSetMethod;
-  }
-
-  int getMaxObjectsInGetMethod(Session session, AccountId accountId) {
-    final coreCapability = session.getCapabilityProperties<CoreCapability>(
-      accountId,
-      CapabilityIdentifier.jmapCore,
-    );
-    final maxObjectsInGetMethod =
-        coreCapability?.maxObjectsInGet?.value.toInt() ??
-            CapabilityIdentifierExtension.defaultMaxObjectsInGet;
-
-    final minOfMaxObjectsInGetMethod = min(
-      maxObjectsInGetMethod,
-      CapabilityIdentifierExtension.defaultMaxObjectsInGet,
-    );
-    log('$runtimeType::getMaxObjectsInGetMethod:minOfMaxObjectsInGetMethod = $minOfMaxObjectsInGetMethod');
-    return minOfMaxObjectsInGetMethod;
-  }
-
+mixin MailAPIMixin on HandleSetErrorMixin, SessionMixin {
   Future<({List<EmailId> emailIdsSuccess, Map<Id, SetError> mapErrors})>
-      moveEmailsBetweenMailboxes({
+  moveEmailsBetweenMailboxes({
     required HttpClient httpClient,
     required Session session,
     required AccountId accountId,
@@ -97,31 +62,38 @@ mixin MailAPIMixin on HandleSetErrorMixin {
     final Map<Id, SetError> mapErrors = <Id, SetError>{};
 
     for (int start = 0; start < totalEmails; start += maxBatches) {
-      int end =
-          (start + maxBatches < totalEmails) ? start + maxBatches : totalEmails;
-      log('$runtimeType::moveEmailsBetweenMailboxes:emails from ${start + 1} to $end');
+      int end = (start + maxBatches < totalEmails)
+          ? start + maxBatches
+          : totalEmails;
+      log(
+        '$runtimeType::moveEmailsBetweenMailboxes:emails from ${start + 1} to $end',
+      );
 
       final currentEmailIds = emailIds.sublist(start, end);
 
-      final moveProperties = currentEmailIds.generateMapUpdateObjectMoveToMailbox(
-        currentMailboxId: currentMailboxId,
-        destinationMailboxId: destinationMailboxId,
-        markAsRead: markAsRead,
-      );
+      final moveProperties = currentEmailIds
+          .generateMapUpdateObjectMoveToMailbox(
+            currentMailboxId: currentMailboxId,
+            destinationMailboxId: destinationMailboxId,
+            markAsRead: markAsRead,
+          );
 
       final setEmailMethod = SetEmailMethod(accountId)
         ..addUpdates(moveProperties);
 
-      final requestBuilder =
-          JmapRequestBuilder(httpClient, ProcessingInvocation());
+      final requestBuilder = JmapRequestBuilder(
+        httpClient,
+        ProcessingInvocation(),
+      );
 
       final setEmailInvocation = requestBuilder.invocation(setEmailMethod);
 
       final capabilities = setEmailMethod.requiredCapabilities
           .toCapabilitiesSupportTeamMailboxes(session, accountId);
 
-      final response =
-          await (requestBuilder..usings(capabilities)).build().execute();
+      final response = await (requestBuilder..usings(capabilities))
+          .build()
+          .execute();
 
       final setEmailResponse = response.parse(
         setEmailInvocation.methodCallId,
@@ -129,10 +101,10 @@ mixin MailAPIMixin on HandleSetErrorMixin {
       );
 
       final listEmailIds = setEmailResponse?.updated?.keys.toEmailIds() ?? [];
-      final mapErrors = handleSetResponse([setEmailResponse]);
+      final batchErrors = handleSetResponse([setEmailResponse]);
 
       updatedEmailIds.addAll(listEmailIds);
-      mapErrors.addAll(mapErrors);
+      mapErrors.addAll(batchErrors);
     }
 
     return (emailIdsSuccess: updatedEmailIds, mapErrors: mapErrors);
@@ -146,6 +118,7 @@ mixin MailAPIMixin on HandleSetErrorMixin {
     int? position,
     Set<Comparator>? sort,
     Filter? filter,
+    bool? collapseThreads,
     Properties? properties,
   }) async {
     final processingInvocation = ProcessingInvocation();
@@ -155,18 +128,16 @@ mixin MailAPIMixin on HandleSetErrorMixin {
       processingInvocation,
     );
 
-    final queryEmailMethod = QueryEmailMethod(accountId);
+    final queryEmailMethod = QueryEmailMethod(accountId)
+      ..addLimitIfNotNull(limit)
+      ..addPositionIfAvailable(position)
+      ..addSortsIfNotNull(sort)
+      ..addFiltersIfNotNull(filter)
+      ..addCollapseThreadsIfAvailable(collapseThreads);
 
-    if (limit != null) queryEmailMethod.addLimit(limit);
-
-    if (position != null && position > 0) queryEmailMethod.addPosition(position);
-
-    if (sort != null) queryEmailMethod.addSorts(sort);
-
-    if (filter != null) queryEmailMethod.addFilters(filter);
-
-    final queryEmailInvocation =
-        jmapRequestBuilder.invocation(queryEmailMethod);
+    final queryEmailInvocation = jmapRequestBuilder.invocation(
+      queryEmailMethod,
+    );
 
     final getEmailMethod = GetEmailMethod(accountId);
 
@@ -184,8 +155,9 @@ mixin MailAPIMixin on HandleSetErrorMixin {
     final capabilities = getEmailMethod.requiredCapabilities
         .toCapabilitiesSupportTeamMailboxes(session, accountId);
 
-    final result =
-        await (jmapRequestBuilder..usings(capabilities)).build().execute();
+    final result = await (jmapRequestBuilder..usings(capabilities))
+        .build()
+        .execute();
 
     final responseOfGetEmailMethod = result.parse<GetEmailResponse>(
       getEmailInvocation.methodCallId,
@@ -202,9 +174,12 @@ mixin MailAPIMixin on HandleSetErrorMixin {
       queryEmailResponse: responseOfQueryEmailMethod,
     );
 
-    final notFoundEmailIds =
-        responseOfGetEmailMethod?.notFound?.toEmailIds().toList();
-    log('$runtimeType::getAllEmail:notFoundEmailIds = ${notFoundEmailIds!.asListString.toString()} | NewState = ${responseOfGetEmailMethod?.state.value}');
+    final notFoundEmailIds = responseOfGetEmailMethod?.notFound
+        ?.toEmailIds()
+        .toList();
+    log(
+      '$runtimeType::getAllEmail:notFoundEmailIds = ${notFoundEmailIds!.asListString.toString()} | NewState = ${responseOfGetEmailMethod?.state.value}',
+    );
     return EmailsResponse(
       emailList: emailList,
       notFoundEmailIds: notFoundEmailIds,
@@ -251,7 +226,9 @@ mixin MailAPIMixin on HandleSetErrorMixin {
         mailboxId: currentMailboxId,
         lastEmail: lastEmail,
       );
-      log('$runtimeType::moveAllEmailsBetweenFolders(): Length of emails = ${listEmails.length}');
+      log(
+        '$runtimeType::moveAllEmailsBetweenFolders(): Length of emails = ${listEmails.length}',
+      );
       if (listEmails.isEmpty) {
         hasEmails = false;
       } else {
@@ -271,15 +248,19 @@ mixin MailAPIMixin on HandleSetErrorMixin {
         countEmailsCompleted += movedEmails.emailIdsSuccess.length;
 
         onProgressController?.add(
-          Right<Failure, Success>(MoveFolderContentProgressState(
-            currentMailboxId,
-            countEmailsCompleted,
-            totalEmails,
-          )),
+          Right<Failure, Success>(
+            MoveFolderContentProgressState(
+              currentMailboxId,
+              countEmailsCompleted,
+              totalEmails,
+            ),
+          ),
         );
       }
     }
-    log('$runtimeType::moveAllEmailsBetweenFolders(): Total emails moved = $countEmailsCompleted');
+    log(
+      '$runtimeType::moveAllEmailsBetweenFolders(): Total emails moved = $countEmailsCompleted',
+    );
     if (moveAction == MoveAction.moving &&
         countEmailsCompleted < totalEmails &&
         totalEmails > 0) {
@@ -287,7 +268,8 @@ mixin MailAPIMixin on HandleSetErrorMixin {
     }
   }
 
-  Future<({List<Email> emails, State? state, List<EmailId> notFoundIds})> getEmailsByIdsBatched({
+  Future<({List<Email> emails, State? state, List<EmailId> notFoundIds})>
+  getEmailsByIdsBatched({
     required HttpClient httpClient,
     required Session session,
     required AccountId accountId,
@@ -296,13 +278,15 @@ mixin MailAPIMixin on HandleSetErrorMixin {
     int? batchSize,
     int? maxEmailsToFetch,
   }) async {
-    final maxObjectsInGet = batchSize ?? getMaxObjectsInGetMethod(session, accountId);
+    final maxObjectsInGet =
+        batchSize ?? getMaxObjectsInGetMethod(session, accountId);
     final List<Email> allEmails = [];
     final List<EmailId> allNotFoundIds = [];
     State? latestState;
 
     // If maxEmailsToFetch is specified, only fetch up to that many IDs
-    final idsToFetch = maxEmailsToFetch != null && maxEmailsToFetch < emailIds.length
+    final idsToFetch =
+        maxEmailsToFetch != null && maxEmailsToFetch < emailIds.length
         ? emailIds.sublist(0, maxEmailsToFetch)
         : emailIds;
 
@@ -312,10 +296,15 @@ mixin MailAPIMixin on HandleSetErrorMixin {
           : idsToFetch.length;
       final batch = idsToFetch.sublist(start, end);
 
-      log('$runtimeType::getEmailsByIdsBatched:fetching batch ${start ~/ maxObjectsInGet + 1} with ${batch.length} emails (max: $maxEmailsToFetch)');
+      log(
+        '$runtimeType::getEmailsByIdsBatched:fetching batch ${start ~/ maxObjectsInGet + 1} with ${batch.length} emails (max: $maxEmailsToFetch)',
+      );
 
       final processingInvocation = ProcessingInvocation();
-      final jmapRequestBuilder = JmapRequestBuilder(httpClient, processingInvocation);
+      final jmapRequestBuilder = JmapRequestBuilder(
+        httpClient,
+        processingInvocation,
+      );
 
       final getEmailMethod = GetEmailMethod(accountId)
         ..addIds(batch.map((id) => id.id).toSet())
@@ -326,10 +315,9 @@ mixin MailAPIMixin on HandleSetErrorMixin {
       final capabilities = getEmailMethod.requiredCapabilities
           .toCapabilitiesSupportTeamMailboxes(session, accountId);
 
-      final result = await (jmapRequestBuilder
-          ..usings(capabilities))
-        .build()
-        .execute();
+      final result = await (jmapRequestBuilder..usings(capabilities))
+          .build()
+          .execute();
 
       final emailResponse = result.parse<GetEmailResponse>(
         getEmailInvocation.methodCallId,
@@ -348,7 +336,9 @@ mixin MailAPIMixin on HandleSetErrorMixin {
 
       // Early termination: stop if we've fetched enough emails
       if (maxEmailsToFetch != null && allEmails.length >= maxEmailsToFetch) {
-        log('$runtimeType::getEmailsByIdsBatched:early termination - fetched ${allEmails.length} emails (max: $maxEmailsToFetch)');
+        log(
+          '$runtimeType::getEmailsByIdsBatched:early termination - fetched ${allEmails.length} emails (max: $maxEmailsToFetch)',
+        );
         break;
       }
     }
@@ -367,19 +357,16 @@ mixin MailAPIMixin on HandleSetErrorMixin {
       httpClient: httpClient,
       session: session,
       accountId: accountId,
-      sort: <Comparator>{}..add(
-        EmailComparator(
-          EmailComparatorProperty.receivedAt,
-        )..setIsAscending(false),
-      ),
+      sort: <Comparator>{}
+        ..add(
+          EmailComparator(EmailComparatorProperty.receivedAt)
+            ..setIsAscending(false),
+        ),
       filter: EmailFilterCondition(
         inMailbox: mailboxId,
         before: lastEmail?.receivedAt,
       ),
-      properties: Properties({
-        EmailProperty.id,
-        EmailProperty.receivedAt,
-      }),
+      properties: Properties({EmailProperty.id, EmailProperty.receivedAt}),
     );
 
     if (lastEmail?.id != null) {

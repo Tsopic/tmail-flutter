@@ -1,4 +1,3 @@
-
 import 'package:core/utils/platform_info.dart';
 import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
 import 'package:model/email/presentation_email.dart';
@@ -9,29 +8,29 @@ import 'package:tmail_ui_user/features/mailbox/presentation/extensions/presentat
 import 'package:tmail_ui_user/features/thread/domain/model/search_query.dart';
 import 'package:tmail_ui_user/features/thread_detail/domain/model/email_in_thread_detail_info.dart';
 import 'package:tmail_ui_user/main/routes/app_routes.dart';
-import 'package:tmail_ui_user/main/routes/navigation_router.dart';
 import 'package:tmail_ui_user/main/routes/route_utils.dart';
 
 extension ListPresentationEmailExtensions on List<PresentationEmail> {
-
   List<PresentationEmail> syncPresentationEmail({
     required Map<MailboxId, PresentationMailbox> mapMailboxById,
     PresentationMailbox? selectedMailbox,
     bool isSearchEmailRunning = false,
-    SearchQuery? searchQuery
+    SearchQuery? searchQuery,
   }) {
     final newEmailList = map((presentationEmail) {
       final routeUri = _generateNavigationRoute(
         currentEmail: presentationEmail,
         selectedMailbox: selectedMailbox,
         isSearchEmailRunning: isSearchEmailRunning,
-        searchQuery: searchQuery
+        searchQuery: searchQuery,
       );
-      final mailboxContain = presentationEmail.findMailboxContain(mapMailboxById);
+      final mailboxContain = presentationEmail.findMailboxContain(
+        mapMailboxById,
+      );
 
       return presentationEmail.syncPresentationEmail(
         mailboxContain: mailboxContain,
-        routeWeb: routeUri
+        routeWeb: routeUri,
       );
     }).toList();
 
@@ -47,15 +46,12 @@ extension ListPresentationEmailExtensions on List<PresentationEmail> {
     if (PlatformInfo.isWeb) {
       final route = RouteUtils.createUrlWebLocationBar(
         AppRoutes.dashboard,
-        router: NavigationRouter(
+        router: RouteUtils.dashboardRouterForMailboxOrSearch(
+          isSearchRunning: isSearchEmailRunning,
           emailId: currentEmail.id,
-          mailboxId: isSearchEmailRunning
-              ? null
-              : selectedMailbox?.browserRouteMailboxId,
-          labelId: selectedMailbox?.labelId,
-          searchQuery: isSearchEmailRunning ? searchQuery : null,
-          dashboardType: isSearchEmailRunning ? DashboardType.search : DashboardType.normal
-        )
+          selectedMailbox: selectedMailbox,
+          searchQuery: searchQuery,
+        ),
       );
       return route;
     } else {
@@ -75,9 +71,9 @@ extension ListPresentationEmailExtensions on List<PresentationEmail> {
         isValidToDisplay: sentMailboxId == null || ownEmailAddress == null
             ? true
             : email.toEmail().checkEmailValidForThreadDetail(
-                  sentMailboxId,
-                  ownEmailAddress,
-                ),
+                sentMailboxId,
+                ownEmailAddress,
+              ),
       ),
     ).toList();
   }

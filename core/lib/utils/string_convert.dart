@@ -251,17 +251,15 @@ class StringConvert {
     }
   }
 
+  static String escapeTextContent(String textContent) {
+    const HtmlEscape htmlEscape = HtmlEscape();
+
+    return htmlEscape.convert(textContent);
+  }
+
   static String convertTextContentToHtmlContent(String textContent) {
-    // Escape HTML entities first to prevent interpretation as HTML
-    final escapedContent = textContent
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-
-    final htmlContent = escapedContent.replaceAll('\n', '<br>');
-
+    final escapedText = escapeTextContent(textContent);
+    final htmlContent = escapedText.replaceAll('\n', '<br>');
     return '<div>$htmlContent</div>';
   }
 }

@@ -12,7 +12,7 @@ import '../robots/email_robot.dart';
 import '../robots/thread_robot.dart';
 
 class SendEmailWithReadReceiptEnabledScenario extends BaseTestScenario {
-  const SendEmailWithReadReceiptEnabledScenario(super.$);
+  const SendEmailWithReadReceiptEnabledScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -53,7 +53,7 @@ class SendEmailWithReadReceiptEnabledScenario extends BaseTestScenario {
     await threadRobot.openEmailWithSubject(emailSubject);
     await _expectReadReceiptRequestDialog(appLocalizations);
 
-    await $.platform.android.pressBack();
+    await mobileBack($);
     await emailRobot.onTapBackButton();
 
     await $.pumpAndSettle(duration: seconds(5));

@@ -8,7 +8,7 @@ import 'package:tmail_ui_user/features/push_notification/data/datasource/strateg
 import 'package:tmail_ui_user/features/push_notification/data/datasource/web_socket_capability_provider.dart';
 import 'package:tmail_ui_user/features/push_notification/data/datasource/web_socket_datasource.dart';
 import 'package:tmail_ui_user/features/push_notification/data/utils/web_socket_uri_builder.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Implementation of [WebSocketDatasource] that connects to JMAP WebSocket servers.
@@ -31,7 +31,10 @@ class WebSocketDatasourceImpl implements WebSocketDatasource {
   );
 
   @override
-  Future<WebSocketChannel> getWebSocketChannel(Session session, AccountId accountId) {
+  Future<WebSocketChannel> getWebSocketChannel(
+    Session session,
+    AccountId accountId,
+  ) {
     return Future.sync(() async {
       // Validate WebSocket capability is present and supports push
       _capabilityProvider.validateCapability(session);
@@ -47,7 +50,9 @@ class WebSocketDatasourceImpl implements WebSocketDatasource {
         accountId,
       );
 
-      log('WebSocketDatasourceImpl::getWebSocketChannel: Connecting to ${WebSocketUriBuilder.redactSensitiveParams(connectionUri)}');
+      log(
+        'WebSocketDatasourceImpl::getWebSocketChannel: Connecting to ${WebSocketUriBuilder.redactSensitiveParams(connectionUri)}',
+      );
 
       final webSocketChannel = WebSocketChannel.connect(
         connectionUri,
@@ -55,7 +60,9 @@ class WebSocketDatasourceImpl implements WebSocketDatasource {
       );
 
       await webSocketChannel.ready;
-      log('WebSocketDatasourceImpl::getWebSocketChannel: WebSocket connected successfully');
+      log(
+        'WebSocketDatasourceImpl::getWebSocketChannel: WebSocket connected successfully',
+      );
 
       return webSocketChannel;
     }).catchError(_exceptionThrower.throwException);

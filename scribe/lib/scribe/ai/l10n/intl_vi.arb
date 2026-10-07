@@ -1,6 +1,6 @@
 {
   "@@last_modified": "2025-12-09T07:30:00.000000",
-  "categoryCorrectGrammar": "Sửa chữa",
+  "categoryCorrectGrammar": "Sửa ngữ pháp",
   "@categoryCorrectGrammar": {
     "type": "text",
     "placeholders_order": [],
@@ -12,7 +12,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "categoryChangeTone": "Thay đổi giọng điệu",
+  "categoryChangeTone": "Điều chỉnh giọng văn",
   "@categoryChangeTone": {
     "type": "text",
     "placeholders_order": [],
@@ -42,7 +42,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "actionTransformToBullets": "Chuyển thành danh sách",
+  "actionTransformToBullets": "Trình bày dạng danh sách",
   "@actionTransformToBullets": {
     "type": "text",
     "placeholders_order": [],
@@ -54,7 +54,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "actionMoreCasual": "Thân mật hơn",
+  "actionMoreCasual": "Tự nhiên hơn",
   "@actionMoreCasual": {
     "type": "text",
     "placeholders_order": [],
@@ -90,14 +90,20 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "customPromptAction": "Giúp tôi viết",
+  "customPromptAction": "Tuỳ chỉnh nội dung",
   "@customPromptAction": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
   },
-  "failedToGenerate": "Không thể tạo phản hồi AI",
+  "failedToGenerate": "Tạo nội dung thất bại",
   "@failedToGenerate": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "improve": "Cải thiện",
+  "@improve": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -122,6 +128,24 @@
   },
   "aiAssistant": "Trợ lý AI",
   "@aiAssistant": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "copy": "Sao chép",
+  "@copy": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "retry": "Thử lại",
+  "@retry": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "copiedToClipboard": "Kết quả đã được sao chép vào clipboard",
+  "@copiedToClipboard": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}

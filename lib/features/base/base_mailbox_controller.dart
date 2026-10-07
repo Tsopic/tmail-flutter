@@ -1,8 +1,8 @@
-import 'package:core/presentation/resources/image_paths.dart';
 import 'package:core/presentation/utils/responsive_utils.dart';
 import 'package:core/presentation/views/bottom_popup/confirmation_dialog_action_sheet_builder.dart';
 import 'package:core/presentation/views/modal_sheets/edit_text_modal_sheet_builder.dart';
 import 'package:core/utils/app_logger.dart';
+import 'package:dartz/dartz.dart';
 import 'package:core/utils/platform_info.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -22,11 +22,13 @@ import 'package:tmail_ui_user/features/base/base_controller.dart';
 import 'package:tmail_ui_user/features/base/mixin/expand_folder_trigger_scrollable_mixin.dart';
 import 'package:tmail_ui_user/features/base/mixin/message_dialog_action_manager.dart';
 import 'package:tmail_ui_user/features/destination_picker/presentation/model/destination_picker_arguments.dart';
+import 'package:tmail_ui_user/features/home/data/exceptions/session_exceptions.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/mailbox_subscribe_action_state.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/mailbox_subscribe_state.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/subscribe_mailbox_request.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/subscribe_multiple_mailbox_request.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/subscribe_request.dart';
+import 'package:tmail_ui_user/features/mailbox/domain/state/move_mailbox_state.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/usecases/get_all_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/usecases/refresh_all_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/extensions/expand_mode_extension.dart';
@@ -54,16 +56,24 @@ import 'package:tmail_ui_user/main/routes/app_routes.dart';
 import 'package:tmail_ui_user/main/routes/dialog_router.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 
-typedef RenameMailboxActionCallback = void Function(PresentationMailbox mailbox, MailboxName newMailboxName);
-typedef MovingMailboxActionCallback = void Function(PresentationMailbox mailboxSelected, PresentationMailbox? destinationMailbox);
-typedef OnMoveFolderContentActionCallback = void Function(
-  PresentationMailbox currentMailbox,
-  PresentationMailbox destinationMailbox,
-  String destinationMailboxName,
-);
-typedef DeleteMailboxActionCallback = void Function(PresentationMailbox mailbox);
-typedef AllowSubaddressingActionCallback = void Function(MailboxId, Map<String, List<String>?>?, MailboxActions);
-typedef OnUpdateMailboxCollectionCallback = MailboxCollection Function(MailboxCollection);
+typedef RenameMailboxActionCallback =
+    void Function(PresentationMailbox mailbox, MailboxName newMailboxName);
+typedef MovingMailboxActionCallback =
+    void Function(
+      PresentationMailbox mailboxSelected,
+      PresentationMailbox? destinationMailbox,
+    );
+typedef OnMoveFolderContentActionCallback =
+    void Function(
+      PresentationMailbox currentMailbox,
+      PresentationMailbox destinationMailbox,
+    );
+typedef DeleteMailboxActionCallback =
+    void Function(PresentationMailbox mailbox);
+typedef AllowSubaddressingActionCallback =
+    void Function(MailboxId, Map<String, List<String>?>?, MailboxActions);
+typedef OnUpdateMailboxCollectionCallback =
+    MailboxCollection Function(MailboxCollection);
 
 abstract class BaseMailboxController extends BaseController
     with ExpandFolderTriggerScrollableMixin {
@@ -76,18 +86,22 @@ abstract class BaseMailboxController extends BaseController
 
   BaseMailboxController(
     this._treeBuilder,
-    this.verifyNameInteractor,
-    {
-      this.getAllMailboxInteractor,
-      this.refreshAllMailboxInteractor
-    }
-  );
+    this.verifyNameInteractor, {
+    this.getAllMailboxInteractor,
+    this.refreshAllMailboxInteractor,
+  });
 
   final personalMailboxTree = MailboxTree(MailboxNode.root()).obs;
   final defaultMailboxTree = MailboxTree(MailboxNode.root()).obs;
-  final teamMailboxesTree =  MailboxTree(MailboxNode.root()).obs;
+  final teamMailboxesTree = MailboxTree(MailboxNode.root()).obs;
 
   List<PresentationMailbox> allMailboxes = <PresentationMailbox>[];
+
+  List<Rx<MailboxTree>> get mailboxTrees => [
+    defaultMailboxTree,
+    personalMailboxTree,
+    teamMailboxesTree,
+  ];
 
   MailboxCollection get currentMailboxCollection => MailboxCollection(
     allMailboxes: allMailboxes,
@@ -101,12 +115,12 @@ abstract class BaseMailboxController extends BaseController
     MailboxId? mailboxIdSelected,
     OnUpdateMailboxCollectionCallback? onUpdateMailboxCollectionCallback,
   }) async {
-    MailboxCollection mailboxCollection =
-        await _treeBuilder.generateMailboxTreeInUI(
-      allMailboxes: allMailbox,
-      currentCollection: currentMailboxCollection,
-      mailboxIdSelected: mailboxIdSelected,
-    );
+    MailboxCollection mailboxCollection = await _treeBuilder
+        .generateMailboxTreeInUI(
+          allMailboxes: allMailbox,
+          currentCollection: currentMailboxCollection,
+          mailboxIdSelected: mailboxIdSelected,
+        );
 
     if (onUpdateMailboxCollectionCallback != null) {
       mailboxCollection = onUpdateMailboxCollectionCallback(mailboxCollection);
@@ -119,11 +133,11 @@ abstract class BaseMailboxController extends BaseController
     List<PresentationMailbox> allMailbox, {
     OnUpdateMailboxCollectionCallback? onUpdateMailboxCollectionCallback,
   }) async {
-    MailboxCollection mailboxCollection =
-        await _treeBuilder.generateMailboxTreeInUIAfterRefreshChanges(
-      allMailboxes: allMailbox,
-      currentCollection: currentMailboxCollection,
-    );
+    MailboxCollection mailboxCollection = await _treeBuilder
+        .generateMailboxTreeInUIAfterRefreshChanges(
+          allMailboxes: allMailbox,
+          currentCollection: currentMailboxCollection,
+        );
 
     if (onUpdateMailboxCollectionCallback != null) {
       mailboxCollection = onUpdateMailboxCollectionCallback(mailboxCollection);
@@ -149,47 +163,38 @@ abstract class BaseMailboxController extends BaseController
 
   void syncAllMailboxWithDisplayName(BuildContext context) {
     final syncedMailbox = allMailboxes
-      .map((mailbox) => mailbox.withDisplayName(mailbox.getDisplayName(context)))
-      .toList();
+        .map(
+          (mailbox) => mailbox.withDisplayName(mailbox.getDisplayName(context)),
+        )
+        .toList();
     allMailboxes = syncedMailbox;
   }
 
-  void toggleMailboxFolder(
-    MailboxNode selectedMailboxNode,
-    ScrollController scrollController,
-    GlobalKey itemKey,
-  ) {
+  /// Expands or collapses [selectedMailboxNode] in the tree holding it.
+  ///
+  /// Returns the applied [ExpandMode], or `null` when the node belongs to no
+  /// tree. Scrolling the node into view is a view concern, see
+  /// [ToggleMailboxExpandWithScrollExtension].
+  ExpandMode? toggleMailboxFolder(MailboxNode selectedMailboxNode) {
     final newExpandMode = selectedMailboxNode.expandMode.toggle();
+    var isNodeUpdated = false;
 
-    if (defaultMailboxTree.value.updateExpandedNode(selectedMailboxNode, newExpandMode) != null) {
-      log('toggleMailboxFolder() refresh defaultMailboxTree');
-      defaultMailboxTree.refresh();
-      triggerScrollWhenExpandFolder(
-        selectedMailboxNode.expandMode,
-        itemKey,
-        scrollController,
+    for (final mailboxTree in mailboxTrees) {
+      final updatedNode = mailboxTree.value.updateExpandedNode(
+        selectedMailboxNode,
+        newExpandMode,
       );
+      if (updatedNode == null) continue;
+
+      mailboxTree.refresh();
+      isNodeUpdated = true;
+      break;
     }
 
-    if (personalMailboxTree.value.updateExpandedNode(selectedMailboxNode, newExpandMode) != null) {
-      log('toggleMailboxFolder() refresh folderMailboxTree');
-      personalMailboxTree.refresh();
-      triggerScrollWhenExpandFolder(
-        selectedMailboxNode.expandMode,
-        itemKey,
-        scrollController,
-      );
-    }
-
-    if (teamMailboxesTree.value.updateExpandedNode(selectedMailboxNode, newExpandMode) != null) {
-      log('toggleMailboxFolder() refresh teamMailboxesTree');
-      teamMailboxesTree.refresh();
-      triggerScrollWhenExpandFolder(
-        selectedMailboxNode.expandMode,
-        itemKey,
-        scrollController,
-      );
-    }
+    log(
+      'BaseMailboxController::toggleMailboxFolder(): isNodeUpdated: $isNodeUpdated',
+    );
+    return isNodeUpdated ? newExpandMode : null;
   }
 
   void selectMailboxNode(MailboxNode mailboxNodeSelected) {
@@ -197,49 +202,52 @@ abstract class BaseMailboxController extends BaseController
         ? SelectMode.ACTIVE
         : SelectMode.INACTIVE;
 
-    if (defaultMailboxTree.value.updateSelectedNode(mailboxNodeSelected, newSelectMode) != null) {
-      log('selectMailboxNode() refresh defaultMailboxTree');
-      defaultMailboxTree.refresh();
-    }
+    for (final mailboxTree in mailboxTrees) {
+      final updatedNode = mailboxTree.value.updateSelectedNode(
+        mailboxNodeSelected,
+        newSelectMode,
+      );
+      if (updatedNode == null) continue;
 
-    if (personalMailboxTree.value.updateSelectedNode(mailboxNodeSelected, newSelectMode) != null) {
-      log('selectMailboxNode() refresh folderMailboxTree');
-      personalMailboxTree.refresh();
-    }
-
-    if (teamMailboxesTree.value.updateSelectedNode(mailboxNodeSelected, newSelectMode) != null) {
-      log('selectMailboxNode() refresh folderMailboxTree');
-      teamMailboxesTree.refresh();
+      mailboxTree.refresh();
+      break;
     }
   }
 
   void unAllSelectedMailboxNode() {
-    defaultMailboxTree.value.updateNodesUIMode(selectMode: SelectMode.INACTIVE);
-    personalMailboxTree.value.updateNodesUIMode(selectMode: SelectMode.INACTIVE);
-    teamMailboxesTree.value.updateNodesUIMode(selectMode: SelectMode.INACTIVE);
-    defaultMailboxTree.refresh();
-    personalMailboxTree.refresh();
-    teamMailboxesTree.refresh();
+    for (final mailboxTree in mailboxTrees) {
+      mailboxTree.value.updateNodesUIMode(selectMode: SelectMode.INACTIVE);
+      mailboxTree.refresh();
+    }
   }
 
   MailboxNode? findMailboxNodeById(MailboxId mailboxId) {
-    final mailboxNode = defaultMailboxTree.value.findNode((node) => node.item.id == mailboxId);
+    final mailboxNode = defaultMailboxTree.value.findNode(
+      (node) => node.item.id == mailboxId,
+    );
     if (mailboxNode != null) {
       return mailboxNode;
     }
 
-    final mailboxPersonal = personalMailboxTree.value.findNode((node) => node.item.id == mailboxId);
+    final mailboxPersonal = personalMailboxTree.value.findNode(
+      (node) => node.item.id == mailboxId,
+    );
     if (mailboxPersonal != null) {
       return mailboxPersonal;
     }
-    return teamMailboxesTree.value.findNode((node) => node.item.id == mailboxId);
+    return teamMailboxesTree.value.findNode(
+      (node) => node.item.id == mailboxId,
+    );
   }
 
   String? findNodePathWithSeparator(MailboxId mailboxId, String pathSeparator) {
-    var mailboxNodePath = defaultMailboxTree.value.getNodePath(mailboxId, pathSeparator)
-      ?? personalMailboxTree.value.getNodePath(mailboxId, pathSeparator)
-      ?? teamMailboxesTree.value.getNodePath(mailboxId, pathSeparator);
-    log('BaseMailboxController::findNodePath():mailboxNodePath: $mailboxNodePath');
+    var mailboxNodePath =
+        defaultMailboxTree.value.getNodePath(mailboxId, pathSeparator) ??
+        personalMailboxTree.value.getNodePath(mailboxId, pathSeparator) ??
+        teamMailboxesTree.value.getNodePath(mailboxId, pathSeparator);
+    log(
+      'BaseMailboxController::findNodePath():mailboxNodePath: $mailboxNodePath',
+    );
     return mailboxNodePath;
   }
 
@@ -248,18 +256,24 @@ abstract class BaseMailboxController extends BaseController
   }
 
   MailboxNode? findMailboxNodeByRole(Role role) {
-    final mailboxNode = defaultMailboxTree.value.findNode((node) => node.item.role == role);
+    final mailboxNode = defaultMailboxTree.value.findNode(
+      (node) => node.item.role == role,
+    );
     return mailboxNode;
   }
 
-  List<PresentationMailbox> findMailboxPath(List<PresentationMailbox> mailboxes) {
+  List<PresentationMailbox> findMailboxPath(
+    List<PresentationMailbox> mailboxes,
+  ) {
     return mailboxes.map((presentationMailbox) {
       if (!presentationMailbox.hasParentId()) {
         return presentationMailbox;
       } else {
         final mailboxNodePath = findNodePath(presentationMailbox.id);
         if (mailboxNodePath != null) {
-          return presentationMailbox.toPresentationMailboxWithMailboxPath(mailboxNodePath);
+          return presentationMailbox.toPresentationMailboxWithMailboxPath(
+            mailboxNodePath,
+          );
         } else {
           return presentationMailbox;
         }
@@ -268,14 +282,14 @@ abstract class BaseMailboxController extends BaseController
   }
 
   bool get defaultMailboxIsNotEmpty =>
-    defaultMailboxTree.value.root.childrenItems?.isNotEmpty ?? false;
+      defaultMailboxTree.value.root.childrenItems?.isNotEmpty ?? false;
 
   bool get personalMailboxIsNotEmpty =>
-    personalMailboxTree.value.root.childrenItems?.isNotEmpty ?? false;
-  
+      personalMailboxTree.value.root.childrenItems?.isNotEmpty ?? false;
+
   bool get teamMailboxesIsNotEmpty {
-    return (teamMailboxesTree.value.root.childrenItems?.isNotEmpty ?? false)
-      && !teamMailboxesTree.value.root.item.isTeamMailboxes;
+    return (teamMailboxesTree.value.root.childrenItems?.isNotEmpty ?? false) &&
+        !teamMailboxesTree.value.root.item.isTeamMailboxes;
   }
 
   MailboxNode get defaultRootNode => defaultMailboxTree.value.root;
@@ -284,92 +298,91 @@ abstract class BaseMailboxController extends BaseController
 
   MailboxNode get teamMailboxesRootNode => teamMailboxesTree.value.root;
 
-  List<String> getListMailboxNameInParentMailbox(PresentationMailbox parentMailbox) {
-    if (parentMailbox.parentId == null) {
-      final allChildrenAtMailboxLocation = (defaultMailboxTree.value.root.childrenItems ?? <MailboxNode>[])
-        + (personalMailboxTree.value.root.childrenItems ?? <MailboxNode>[])
-        + (teamMailboxesTree.value.root.childrenItems ?? <MailboxNode>[]);
-      if (allChildrenAtMailboxLocation.isNotEmpty) {
-        final listMailboxNameAsStringExist = allChildrenAtMailboxLocation
-          .where((mailboxNode) => mailboxNode.nameNotEmpty)
-          .map((mailboxNode) => mailboxNode.mailboxNameAsString)
-          .toList();
-        return listMailboxNameAsStringExist;
-      } else {
-        return [];
-      }
-    } else {
-      final mailboxNodeLocation = findMailboxNodeById(parentMailbox.parentId!);
-      if (mailboxNodeLocation != null && mailboxNodeLocation.childrenItems?.isNotEmpty == true) {
-        final allChildrenAtMailboxLocation =  mailboxNodeLocation.childrenItems!;
-        final listMailboxNameAsStringExist = allChildrenAtMailboxLocation
-          .where((mailboxNode) => mailboxNode.nameNotEmpty)
-          .map((mailboxNode) => mailboxNode.mailboxNameAsString)
-          .toList();
-        return listMailboxNameAsStringExist;
-      } else {
-        return [];
-      }
-    }
+  List<String> getListMailboxNameInParentMailbox(
+    PresentationMailbox parentMailbox,
+  ) {
+    final parentId = parentMailbox.parentId;
+    final mailboxNodesAtSameLocation = parentId == null
+        ? rootChildrenNodes
+        : findMailboxNodeById(parentId)?.childrenItems;
+
+    return mailboxNodesAtSameLocation?.mailboxNames ?? [];
   }
+
+  List<MailboxNode> get rootChildrenNodes => [
+    for (final mailboxTree in mailboxTrees)
+      ...?mailboxTree.value.root.childrenItems,
+  ];
 
   String? verifyMailboxNameAction(
     BuildContext context,
     String newName,
     List<String> listMailboxName,
-    MailboxActions mailboxActions
+    MailboxActions mailboxActions,
   ) {
-    return verifyNameInteractor.execute(newName, [
-      EmptyNameValidator(),
-      NameWithSpaceOnlyValidator(),
-      DuplicateNameValidator(listMailboxName),
-      SpecialCharacterValidator()
-    ]).fold((failure) {
-      if (failure is VerifyNameFailure) {
-        return failure.getMessage(context, actions: mailboxActions);
-      } else {
-        return null;
-      }
-    }, (success) => null);
+    return verifyNameInteractor
+        .execute(newName, [
+          EmptyNameValidator(),
+          NameWithSpaceOnlyValidator(),
+          DuplicateNameValidator(listMailboxName),
+          SpecialCharacterValidator(),
+        ])
+        .fold((failure) {
+          if (failure is VerifyNameFailure) {
+            return failure.getMessage(context, actions: mailboxActions);
+          } else {
+            return null;
+          }
+        }, (success) => null);
   }
 
   void openDialogRenameMailboxAction(
     BuildContext context,
     PresentationMailbox presentationMailbox,
     ResponsiveUtils responsiveUtils, {
-    required RenameMailboxActionCallback onRenameMailboxAction
+    required RenameMailboxActionCallback onRenameMailboxAction,
   }) {
-    final listMailboxName = getListMailboxNameInParentMailbox(presentationMailbox);
+    final listMailboxName = getListMailboxNameInParentMailbox(
+      presentationMailbox,
+    );
 
     if (responsiveUtils.isMobile(context)) {
       (EditTextModalSheetBuilder()
-        ..key(const Key('rename_mailbox_dialog'))
-        ..title(AppLocalizations.of(context).renameFolder)
-        ..cancelText(AppLocalizations.of(context).cancel)
-        ..boxConstraints(responsiveUtils.isLandscapeMobile(context)
-            ? const BoxConstraints(maxWidth: 400)
-            : null)
-        ..onConfirmAction(
-          AppLocalizations.of(context).rename,
-          (value) => onRenameMailboxAction(presentationMailbox, MailboxName(value))
-        )
-        ..setErrorString((value) {
-          return verifyMailboxNameAction(
-              context,
-              value,
-              listMailboxName,
-              MailboxActions.rename
-          );
-        })
-        ..setTextController(TextEditingController.fromValue(
-            TextEditingValue(
-              text: presentationMailbox.name?.name ?? '',
-              selection: TextSelection(
-                baseOffset: 0,
-                extentOffset: presentationMailbox.name?.name.length ?? 0
-              )
-            )))
-      ).show(context);
+            ..key(const Key('rename_mailbox_dialog'))
+            ..title(AppLocalizations.of(context).renameFolder)
+            ..cancelText(AppLocalizations.of(context).cancel)
+            ..boxConstraints(
+              responsiveUtils.isLandscapeMobile(context)
+                  ? const BoxConstraints(maxWidth: 400)
+                  : null,
+            )
+            ..onConfirmAction(
+              AppLocalizations.of(context).rename,
+              (value) => onRenameMailboxAction(
+                presentationMailbox,
+                MailboxName(value),
+              ),
+            )
+            ..setErrorString((value) {
+              return verifyMailboxNameAction(
+                context,
+                value,
+                listMailboxName,
+                MailboxActions.rename,
+              );
+            })
+            ..setTextController(
+              TextEditingController.fromValue(
+                TextEditingValue(
+                  text: presentationMailbox.name?.name ?? '',
+                  selection: TextSelection(
+                    baseOffset: 0,
+                    extentOffset: presentationMailbox.name?.name.length ?? 0,
+                  ),
+                ),
+              ),
+            ))
+          .show(context);
     } else {
       MessageDialogActionManager().showInputDialogAction(
         key: const Key('rename_mailbox_dialog'),
@@ -397,55 +410,74 @@ abstract class BaseMailboxController extends BaseController
     }
   }
 
-  void moveMailboxAction(
-    BuildContext context,
+  Future<void> moveMailboxAction(
     PresentationMailbox mailboxSelected,
     MailboxDashBoardController dashBoardController, {
-    required MovingMailboxActionCallback onMovingMailboxAction
+    required MovingMailboxActionCallback onMovingMailboxAction,
   }) async {
     final accountId = dashBoardController.accountId.value;
     final session = dashBoardController.sessionCurrent;
-    if (accountId != null && session != null) {
-
-      final arguments = DestinationPickerArguments(
-        accountId,
-        MailboxActions.move,
-        session,
-        mailboxIdSelected: mailboxSelected.id
+    if (accountId == null || session == null) {
+      consumeState(
+        Stream.value(
+          Left(
+            MoveMailboxFailure(
+              accountId == null
+                  ? NotFoundAccountIdException()
+                  : NotFoundSessionException(),
+            ),
+          ),
+        ),
       );
-
-      final destinationMailbox = PlatformInfo.isWeb
-        ? await DialogRouter().pushGeneralDialog(routeName: AppRoutes.destinationPicker, arguments: arguments)
-        : await push(AppRoutes.destinationPicker, arguments: arguments);
-
-      if (destinationMailbox is PresentationMailbox) {
-        onMovingMailboxAction(
-          mailboxSelected,
-          destinationMailbox == PresentationMailbox.unifiedMailbox
-            ? null
-            : destinationMailbox
-        );
-      }
+      return;
     }
+
+    final destinationMailbox = await pickDestinationMailbox(
+      accountId: accountId,
+      session: session,
+      mailboxActions: MailboxActions.move,
+      mailboxIdSelected: mailboxSelected.id,
+    );
+    if (destinationMailbox == null) return;
+
+    onMovingMailboxAction(
+      mailboxSelected,
+      destinationMailbox == PresentationMailbox.unifiedMailbox
+          ? null
+          : destinationMailbox,
+    );
   }
 
   void openConfirmationDialogDeleteMailboxAction(
     BuildContext context,
-    ResponsiveUtils responsiveUtils,
-    ImagePaths imagePaths,
     PresentationMailbox presentationMailbox, {
-    required DeleteMailboxActionCallback onDeleteMailboxAction
+    required DeleteMailboxActionCallback onDeleteMailboxAction,
   }) {
-    if (responsiveUtils.isLandscapeMobile(context) || responsiveUtils.isPortraitMobile(context)) {
+    if (responsiveUtils.isLandscapeMobile(context) ||
+        responsiveUtils.isPortraitMobile(context)) {
       (ConfirmationDialogActionSheetBuilder(context)
-        ..messageText(AppLocalizations.of(context).message_confirmation_dialog_delete_folder(presentationMailbox.getDisplayName(context)))
-        ..onCancelAction(AppLocalizations.of(context).cancel, () => popBack())
-        ..onConfirmAction(AppLocalizations.of(context).delete, () => onDeleteMailboxAction(presentationMailbox))
-      ).show();
+            ..messageText(
+              AppLocalizations.of(
+                context,
+              ).message_confirmation_dialog_delete_folder(
+                presentationMailbox.getDisplayName(context),
+              ),
+            )
+            ..onCancelAction(
+              AppLocalizations.of(context).cancel,
+              () => popBack(),
+            )
+            ..onConfirmAction(
+              AppLocalizations.of(context).delete,
+              () => onDeleteMailboxAction(presentationMailbox),
+            ))
+          .show();
     } else {
       MessageDialogActionManager().showConfirmDialogAction(
         context,
-        AppLocalizations.of(context).message_confirmation_dialog_delete_folder(presentationMailbox.getDisplayName(context)),
+        AppLocalizations.of(context).message_confirmation_dialog_delete_folder(
+          presentationMailbox.getDisplayName(context),
+        ),
         AppLocalizations.of(context).delete,
         key: const Key('confirm_dialog_delete_mailbox'),
         title: AppLocalizations.of(context).deleteFolders,
@@ -457,82 +489,97 @@ abstract class BaseMailboxController extends BaseController
   }
 
   List<MailboxNode> getAncestorOfMailboxNode(MailboxNode mailboxNode) {
-    final listAncestor = defaultMailboxTree.value.getAncestorList(mailboxNode)
-      ?? personalMailboxTree.value.getAncestorList(mailboxNode)
-      ?? teamMailboxesTree.value.getAncestorList(mailboxNode);
+    final listAncestor =
+        defaultMailboxTree.value.getAncestorList(mailboxNode) ??
+        personalMailboxTree.value.getAncestorList(mailboxNode) ??
+        teamMailboxesTree.value.getAncestorList(mailboxNode);
     return listAncestor ?? [];
   }
 
   SubscribeRequest? generateSubscribeRequest(
     MailboxId mailboxId,
     MailboxSubscribeState subscribeState,
-    MailboxSubscribeAction subscribeAction
+    MailboxSubscribeAction subscribeAction,
   ) {
-    switch(subscribeState) {
+    switch (subscribeState) {
       case MailboxSubscribeState.enabled:
-        return _generateSubscribeRequestWhenSubscribeEnabled(mailboxId, subscribeAction);
+        return _generateSubscribeRequestWhenSubscribeEnabled(
+          mailboxId,
+          subscribeAction,
+        );
       case MailboxSubscribeState.disabled:
-        return _generateSubscribeRequestWhenSubscribeDisabled(mailboxId, subscribeAction);
+        return _generateSubscribeRequestWhenSubscribeDisabled(
+          mailboxId,
+          subscribeAction,
+        );
     }
   }
 
   SubscribeRequest? _generateSubscribeRequestWhenSubscribeDisabled(
     MailboxId mailboxId,
-    MailboxSubscribeAction subscribeAction
+    MailboxSubscribeAction subscribeAction,
   ) {
     final mailboxNode = findMailboxNodeById(mailboxId);
 
     if (mailboxNode == null) return null;
 
     if (mailboxNode.hasChildren()) {
-      final listDescendantMailboxIds = mailboxNode.descendantsAsList().mailboxIds;
-      log("BaseMailboxController::_generateSubscribeRequestWhenSubscribeDisabled:listDescendantMailboxIds $listDescendantMailboxIds");
+      final listDescendantMailboxIds = mailboxNode
+          .descendantsAsList()
+          .mailboxIds;
+      log(
+        "BaseMailboxController::_generateSubscribeRequestWhenSubscribeDisabled:listDescendantMailboxIds $listDescendantMailboxIds",
+      );
       return SubscribeMultipleMailboxRequest(
         mailboxId,
         listDescendantMailboxIds,
         MailboxSubscribeState.disabled,
-        subscribeAction
+        subscribeAction,
       );
     } else {
       return SubscribeMailboxRequest(
         mailboxId,
         MailboxSubscribeState.disabled,
-        subscribeAction
+        subscribeAction,
       );
     }
   }
 
   SubscribeRequest? _generateSubscribeRequestWhenSubscribeEnabled(
     MailboxId mailboxId,
-    MailboxSubscribeAction subscribeAction
+    MailboxSubscribeAction subscribeAction,
   ) {
     final mailboxNode = findMailboxNodeById(mailboxId);
 
     if (mailboxNode == null) return null;
 
     if (mailboxNode.hasParents()) {
-      final listAncestorMailboxIds = getAncestorOfMailboxNode(mailboxNode).mailboxIds;
+      final listAncestorMailboxIds = getAncestorOfMailboxNode(
+        mailboxNode,
+      ).mailboxIds;
       listAncestorMailboxIds.add(mailboxId);
-      log("BaseMailboxController::_generateSubscribeRequestWhenSubscribeEnabled:listAncestorMailboxIds $listAncestorMailboxIds");
+      log(
+        "BaseMailboxController::_generateSubscribeRequestWhenSubscribeEnabled:listAncestorMailboxIds $listAncestorMailboxIds",
+      );
       if (listAncestorMailboxIds.isNotEmpty) {
         return SubscribeMultipleMailboxRequest(
           mailboxId,
           listAncestorMailboxIds,
           MailboxSubscribeState.enabled,
-          subscribeAction
+          subscribeAction,
         );
       } else {
         return SubscribeMailboxRequest(
           mailboxId,
           MailboxSubscribeState.enabled,
-          subscribeAction
+          subscribeAction,
         );
       }
     } else {
       return SubscribeMailboxRequest(
         mailboxId,
         MailboxSubscribeState.enabled,
-        subscribeAction
+        subscribeAction,
       );
     }
   }
@@ -546,32 +593,40 @@ abstract class BaseMailboxController extends BaseController
   void refreshMailboxChanges(
     Session session,
     AccountId accountId,
-    jmap.State currentMailboxState,
-    {Properties? properties}
-  ) {
+    jmap.State currentMailboxState, {
+    Properties? properties,
+  }) {
     if (refreshAllMailboxInteractor != null) {
-      log('BaseMailboxController::refreshMailboxChanges(): currentMailboxState: $currentMailboxState');
-      consumeState(refreshAllMailboxInteractor!.execute(
-        session,
-        accountId,
-        currentMailboxState,
-        properties: properties
-      ));
+      log(
+        'BaseMailboxController::refreshMailboxChanges(): currentMailboxState: $currentMailboxState',
+      );
+      consumeState(
+        refreshAllMailboxInteractor!.execute(
+          session,
+          accountId,
+          currentMailboxState,
+          properties: properties,
+        ),
+      );
     }
   }
 
   MailboxNode? findNodeByNameOnFirstLevel(String name) {
-    MailboxNode? mailboxNode = defaultMailboxTree.value.findNodeOnFirstLevel((node) => node.item.name?.name.toLowerCase() == name);
+    MailboxNode? mailboxNode = defaultMailboxTree.value.findNodeOnFirstLevel(
+      (node) => node.item.name?.name.toLowerCase() == name,
+    );
     if (mailboxNode != null) {
       return mailboxNode;
     }
-    mailboxNode = personalMailboxTree.value.findNodeOnFirstLevel((node) => node.item.name?.name.toLowerCase() == name);
+    mailboxNode = personalMailboxTree.value.findNodeOnFirstLevel(
+      (node) => node.item.name?.name.toLowerCase() == name,
+    );
     return mailboxNode;
   }
 
   void updateMailboxNameById(MailboxId mailboxId, MailboxName mailboxName) {
     UpdateMailboxNameAction(
-      mailboxTrees: [defaultMailboxTree, personalMailboxTree, teamMailboxesTree],
+      mailboxTrees: mailboxTrees,
       mailboxId: mailboxId,
       mailboxName: mailboxName,
     ).execute();
@@ -582,26 +637,24 @@ abstract class BaseMailboxController extends BaseController
     required int unreadChanges,
   }) {
     UpdateMailboxUnreadCountAction(
-      mailboxTrees: [defaultMailboxTree, personalMailboxTree, teamMailboxesTree],
+      mailboxTrees: mailboxTrees,
       mailboxId: mailboxId,
       unreadChanges: unreadChanges,
     ).execute();
   }
 
   void clearUnreadCount(MailboxId mailboxId) {
-    final mailboxTrees = [
-      defaultMailboxTree,
-      personalMailboxTree,
-      teamMailboxesTree,
-    ];
-
     for (var mailboxTree in mailboxTrees) {
-      final selectedNode = mailboxTree.value.findNode((node) => node.item.id == mailboxId);
+      final selectedNode = mailboxTree.value.findNode(
+        (node) => node.item.id == mailboxId,
+      );
       if (selectedNode == null) continue;
-      final currentUnreadCount = selectedNode.item.unreadEmails?.value.value.toInt();
+      final currentUnreadCount = selectedNode.item.unreadEmails?.value.value
+          .toInt();
       mailboxTree.value.updateMailboxUnreadCountById(
         mailboxId,
-        -(currentUnreadCount ?? 0));
+        -(currentUnreadCount ?? 0),
+      );
       mailboxTree.refresh();
       break;
     }
@@ -609,78 +662,59 @@ abstract class BaseMailboxController extends BaseController
 
   void updateMailboxTotalEmailsCountById(MailboxId mailboxId, int totalEmails) {
     UpdateMailboxTotalEmailsCountAction(
-      mailboxTrees: [defaultMailboxTree, personalMailboxTree, teamMailboxesTree],
+      mailboxTrees: mailboxTrees,
       mailboxId: mailboxId,
       totalEmailsCountChanged: totalEmails,
     ).execute();
   }
 
-  void toggleMailboxCategories(
-    MailboxCategories category,
-    ScrollController scrollController,
-    GlobalKey itemKey,
-  ) {
-    switch (category) {
-      case MailboxCategories.exchange:
-        _toggleAndScroll(
-          currentExpandMode: mailboxCategoriesExpandMode.value.defaultMailbox,
-          updateExpandMode: (mode) => mailboxCategoriesExpandMode.value.defaultMailbox = mode,
-          hasChildren: defaultMailboxTree.value.root.hasChildren(),
-          itemKey: itemKey,
-          scrollController: scrollController,
-        );
-        break;
+  /// Expands or collapses [category] and returns the applied [ExpandMode].
+  ///
+  /// Scrolling the category into view is a view concern, see
+  /// [ToggleMailboxExpandWithScrollExtension].
+  ExpandMode toggleMailboxCategories(MailboxCategories category) {
+    final categoriesExpandMode = mailboxCategoriesExpandMode.value;
+    final newExpandMode = category.getExpandMode(categoriesExpandMode).toggle();
 
-      case MailboxCategories.personalFolders:
-        _toggleAndScroll(
-          currentExpandMode: mailboxCategoriesExpandMode.value.personalFolders,
-          updateExpandMode: (mode) => mailboxCategoriesExpandMode.value.personalFolders = mode,
-          hasChildren: personalMailboxTree.value.root.hasChildren(),
-          itemKey: itemKey,
-          scrollController: scrollController,
-        );
-        break;
+    mailboxCategoriesExpandMode.value = category.withExpandMode(
+      categoriesExpandMode,
+      newExpandMode,
+    );
 
-      case MailboxCategories.teamMailboxes:
-        _toggleAndScroll(
-          currentExpandMode: mailboxCategoriesExpandMode.value.teamMailboxes,
-          updateExpandMode: (mode) => mailboxCategoriesExpandMode.value.teamMailboxes = mode,
-          hasChildren: teamMailboxesTree.value.root.hasChildren(),
-          itemKey: itemKey,
-          scrollController: scrollController,
-        );
-        break;
-    }
+    return newExpandMode;
   }
 
-  void _toggleAndScroll({
-    required ExpandMode currentExpandMode,
-    required void Function(ExpandMode) updateExpandMode,
-    required bool hasChildren,
-    required GlobalKey itemKey,
-    required ScrollController scrollController,
-  }) {
-    final newExpandMode = currentExpandMode.toggle();
-    updateExpandMode(newExpandMode);
-    mailboxCategoriesExpandMode.refresh();
-
-    if (hasChildren) {
-      triggerScrollWhenExpandFolder(newExpandMode, itemKey, scrollController);
-    }
-  }
-
-  void moveFolderContentAction({
-    required AppLocalizations appLocalizations,
+  Future<void> moveFolderContentAction({
     required AccountId accountId,
     required Session session,
     required PresentationMailbox mailboxSelected,
     required OnMoveFolderContentActionCallback onMoveFolderContentAction,
   }) async {
+    final destinationMailbox = await pickDestinationMailbox(
+      accountId: accountId,
+      session: session,
+      mailboxActions: MailboxActions.moveFolderContent,
+      mailboxIdSelected: mailboxSelected.id,
+    );
+    if (destinationMailbox == null) return;
+
+    log(
+      '$runtimeType::moveFolderContentAction: DestinationMailbox is selected',
+    );
+    onMoveFolderContentAction(mailboxSelected, destinationMailbox);
+  }
+
+  Future<PresentationMailbox?> pickDestinationMailbox({
+    required AccountId accountId,
+    required Session session,
+    required MailboxActions mailboxActions,
+    required MailboxId mailboxIdSelected,
+  }) async {
     final arguments = DestinationPickerArguments(
       accountId,
-      MailboxActions.moveFolderContent,
+      mailboxActions,
       session,
-      mailboxIdSelected: mailboxSelected.id,
+      mailboxIdSelected: mailboxIdSelected,
     );
 
     final destinationMailbox = PlatformInfo.isWeb
@@ -689,19 +723,17 @@ abstract class BaseMailboxController extends BaseController
             arguments: arguments,
           )
         : await push(AppRoutes.destinationPicker, arguments: arguments);
-    if (destinationMailbox is PresentationMailbox) {
-      log('$runtimeType::moveFolderContentAction: DestinationMailbox is ${destinationMailbox.name?.name}');
-      onMoveFolderContentAction(
-        mailboxSelected,
-        destinationMailbox,
-        destinationMailbox.getDisplayNameWithoutContext(appLocalizations),
-      );
-    }
+
+    return destinationMailbox is PresentationMailbox
+        ? destinationMailbox
+        : null;
   }
 
   bool get isAINeedsActionEnabled => false;
 
-  MailboxCollection updateMailboxCollection(MailboxCollection mailboxCollection) {
+  MailboxCollection updateMailboxCollection(
+    MailboxCollection mailboxCollection,
+  ) {
     MailboxCollection updated = addFavoriteFolderToMailboxList(
       mailboxCollection: mailboxCollection,
     );

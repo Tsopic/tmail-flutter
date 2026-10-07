@@ -1,4 +1,3 @@
-
 import 'package:core/presentation/extensions/color_extension.dart';
 import 'package:core/presentation/utils/theme_utils.dart';
 import 'package:core/presentation/views/bottom_popup/cupertino_action_sheet_builder.dart';
@@ -10,6 +9,19 @@ import 'package:tmail_ui_user/features/base/widget/context_menu/context_menu_dia
 import 'package:tmail_ui_user/features/base/widget/context_menu/context_menu_item_action.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
+
+/// Optional presentation tweaks for [PopupContextMenuActionMixin.openPopupMenuAction].
+class PopupMenuActionOptions {
+  const PopupMenuActionOptions({
+    this.maxHeight,
+    this.requestFocus,
+    this.useRootNavigator = false,
+  });
+
+  final double? maxHeight;
+  final bool? requestFocus;
+  final bool useRootNavigator;
+}
 
 mixin PopupContextMenuActionMixin {
   Future<void> openContextMenuAction(
@@ -68,9 +80,9 @@ mixin PopupContextMenuActionMixin {
   Future<void> openPopupMenuAction(
     BuildContext context,
     RelativeRect position,
-    List<PopupMenuEntry> popupMenuItems,
-    {double? maxHeight}
-  ) async {
+    List<PopupMenuEntry> popupMenuItems, {
+    PopupMenuActionOptions options = const PopupMenuActionOptions(),
+  }) async {
     return await showMenu(
       context: context,
       position: position,
@@ -84,8 +96,10 @@ mixin PopupContextMenuActionMixin {
       constraints: BoxConstraints(
         maxWidth: 300,
         minWidth: 178,
-        maxHeight: maxHeight ?? double.infinity,
+        maxHeight: options.maxHeight ?? double.infinity,
       ),
+      requestFocus: options.requestFocus,
+      useRootNavigator: options.useRootNavigator,
       items: popupMenuItems,
     );
   }

@@ -19,21 +19,22 @@ import 'package:model/email/email_action_type.dart';
 import 'package:model/email/mark_star_action.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/set_method_exception.dart';
-import 'package:tmail_ui_user/features/email/domain/exceptions/calendar_event_exceptions.dart';
-import 'package:tmail_ui_user/features/email/domain/model/move_action.dart';
-import 'package:tmail_ui_user/features/email/domain/state/add_a_label_to_an_email_state.dart';
-import 'package:tmail_ui_user/features/email/domain/state/add_a_label_to_a_thread_state.dart';
-import 'package:tmail_ui_user/features/email/domain/state/calendar_event_reply_state.dart';
-import 'package:tmail_ui_user/features/email/domain/state/labels/remove_a_label_from_a_thread_state.dart';
-import 'package:tmail_ui_user/features/email/domain/state/mark_as_email_star_state.dart';
 import 'package:tmail_ui_user/features/download/domain/state/parse_email_by_blob_id_state.dart';
 import 'package:tmail_ui_user/features/download/domain/state/preview_email_from_eml_file_state.dart';
+import 'package:tmail_ui_user/features/email/domain/exceptions/calendar_event_exceptions.dart';
+import 'package:tmail_ui_user/features/email/domain/model/move_action.dart';
+import 'package:tmail_ui_user/features/email/domain/state/add_a_label_to_a_thread_state.dart';
+import 'package:tmail_ui_user/features/email/domain/state/add_a_label_to_an_email_state.dart';
+import 'package:tmail_ui_user/features/email/domain/state/calendar_event_reply_state.dart';
+import 'package:tmail_ui_user/features/email/domain/state/labels/add_list_label_to_list_email_state.dart';
+import 'package:tmail_ui_user/features/email/domain/state/labels/remove_a_label_from_a_thread_state.dart';
+import 'package:tmail_ui_user/features/email/domain/state/mark_as_email_star_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/remove_a_label_from_an_email_state.dart';
 import 'package:tmail_ui_user/features/home/data/exceptions/session_exceptions.dart';
 import 'package:tmail_ui_user/features/home/domain/state/get_session_state.dart';
 import 'package:tmail_ui_user/features/labels/domain/state/create_new_label_state.dart';
-import 'package:tmail_ui_user/features/labels/domain/state/edit_label_state.dart';
 import 'package:tmail_ui_user/features/labels/domain/state/delete_a_label_state.dart';
+import 'package:tmail_ui_user/features/labels/domain/state/edit_label_state.dart';
 import 'package:tmail_ui_user/features/login/data/network/oidc_error.dart';
 import 'package:tmail_ui_user/features/login/domain/exceptions/authentication_exception.dart';
 import 'package:tmail_ui_user/features/login/domain/exceptions/oauth_authorization_error.dart';
@@ -51,9 +52,13 @@ import 'package:tmail_ui_user/features/thread/domain/state/empty_spam_folder_sta
 import 'package:tmail_ui_user/features/thread/domain/state/empty_trash_folder_state.dart';
 import 'package:tmail_ui_user/features/thread/domain/state/move_multiple_email_to_mailbox_state.dart';
 import 'package:tmail_ui_user/main/exceptions/permission_exception.dart';
-import 'package:tmail_ui_user/main/exceptions/remote_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/authentication_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/method_level_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/network_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/unknown_remote_exception.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
+import 'package:workplace/presentation/model/drive_pick_state.dart';
 
 class ToastManager {
   final AppToast appToast;
@@ -95,7 +100,7 @@ class ToastManager {
       return appLocalizations.badCredentials;
     } else if (exception is ConnectionError) {
       return appLocalizations.connectionError;
-    } else if (exception is UnknownError && exception.message != null) {
+    } else if (exception is UnknownRemoteException && exception.message != null) {
       return '[${exception.code ?? ''}] ${exception.message}';
     } else if (exception is NotFoundSessionException) {
       return appLocalizations.notFoundSession;
@@ -132,9 +137,9 @@ class ToastManager {
         return '[${firstError.type.value}] ${firstError.description}';
       }
     } else if (exception is ServerError) {
-      return '[${exception.error}] ${exception.errorDescription}';
+      return '[${exception.error}] ${exception.message}';
     } else if (exception is TemporarilyUnavailable) {
-      return '[${exception.error}] ${exception.errorDescription}';
+      return '[${exception.error}] ${exception.message}';
     } else if (exception is AutoRedirectToAppAfterStoreAuthorizeDestinationUrlException) {
       return '';
     }
@@ -226,6 +231,11 @@ class ToastManager {
           );
     } else if (failure is DeleteALabelFailure) {
       message = message ?? appLocalizations.deleteALabelFailure;
+    } else if (failure is AddListLabelsToListEmailsFailure) {
+      message =
+          message ?? appLocalizations.addListLabelToListEmailFailureMessage;
+    } else if (failure is DrivePickFailure) {
+      message = failure.message ?? appLocalizations.unknownError;
     }
     log('ToastManager::showMessageFailure: Message: $message');
     if (message?.trim().isNotEmpty == true) {
@@ -317,6 +327,12 @@ class ToastManager {
       message = appLocalizations.deleteLabelSuccessfullyMessage(
         success.deletedLabel.safeDisplayName,
       );
+    } else if (success is AddListLabelsToListEmailsHasSomeFailure) {
+      message = appLocalizations.addListLabelToListEmailHasSomeFailureMessage;
+    } else if (success is AddListLabelsToListEmailsSuccess) {
+      message = appLocalizations.addListLabelToListEmailSuccessfullyMessage;
+    } else if (success is DrivePickSuccess) {
+      message = success.message ?? appLocalizations.driveAttachmentAddedSuccessfully;
     }
     log('ToastManager::showMessageSuccess: Message: $message');
     if (message?.trim().isNotEmpty == true) {

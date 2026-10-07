@@ -392,7 +392,6 @@ class SearchMailboxController extends BaseMailboxController
         break;
       case MailboxActions.move:
         moveMailboxAction(
-          context,
           mailbox,
           dashboardController,
           onMovingMailboxAction: (mailboxSelected, destinationMailbox) =>
@@ -406,8 +405,6 @@ class SearchMailboxController extends BaseMailboxController
       case MailboxActions.delete:
         openConfirmationDialogDeleteMailboxAction(
           context,
-          responsiveUtils,
-          imagePaths,
           mailbox,
           onDeleteMailboxAction: _deleteMailboxAction,
         );
@@ -521,7 +518,9 @@ class SearchMailboxController extends BaseMailboxController
       );
     } else {
       handleSubAddressingFailure(
-        SubaddressingFailure.withException(NullSessionOrAccountIdException()),
+        SubaddressingFailure.withException(
+          const NullSessionOrAccountIdException(),
+        ),
       );
     }
 
@@ -626,11 +625,9 @@ class SearchMailboxController extends BaseMailboxController
   void _deleteMailboxAction(PresentationMailbox presentationMailbox) {
     if (session != null && accountId != null) {
       consumeState(
-        _deleteMultipleMailboxInteractor.execute(
-          session!,
-          accountId!,
-          [presentationMailbox.id],
-        ),
+        _deleteMultipleMailboxInteractor.execute(session!, accountId!, [
+          presentationMailbox.id,
+        ]),
       );
     } else {
       _deleteMailboxFailure(DeleteMultipleMailboxFailure(null));

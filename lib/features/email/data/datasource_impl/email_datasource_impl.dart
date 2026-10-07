@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:core/data/model/preview_attachment.dart';
 import 'package:core/data/network/download/downloaded_response.dart';
 import 'package:core/domain/extensions/datetime_extension.dart';
-import 'package:core/presentation/extensions/html_extension.dart';
+import 'package:core/presentation/extensions/string_extension.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:core/presentation/utils/html_transformer/transform_configuration.dart';
 import 'package:core/utils/app_logger.dart';
@@ -28,6 +28,7 @@ import 'package:tmail_ui_user/features/composer/domain/model/email_request.dart'
 import 'package:tmail_ui_user/features/email/data/datasource/email_datasource.dart';
 import 'package:tmail_ui_user/features/email/data/local/html_analyzer.dart';
 import 'package:tmail_ui_user/features/email/data/network/email_api.dart';
+import 'package:tmail_ui_user/features/email/domain/extensions/email_attachment_classifier_extension.dart';
 import 'package:tmail_ui_user/features/email/domain/model/detailed_email.dart';
 import 'package:tmail_ui_user/features/email/domain/model/move_to_mailbox_request.dart';
 import 'package:tmail_ui_user/features/email/domain/model/preview_email_eml_request.dart';
@@ -37,8 +38,8 @@ import 'package:tmail_ui_user/features/email/presentation/extensions/attachment_
 import 'package:tmail_ui_user/features/email/presentation/model/eml_previewer.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/create_new_mailbox_request.dart';
 import 'package:tmail_ui_user/features/sending_queue/domain/model/sending_email.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
-import 'package:tmail_ui_user/main/exceptions/send_email_exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/send_email_exception_thrower.dart';
 
 class EmailDataSourceImpl extends EmailDataSource {
 
@@ -193,7 +194,10 @@ class EmailDataSourceImpl extends EmailDataSource {
     AccountId accountId,
     Email newEmail,
     EmailId oldEmailId,
-    {CancelToken? cancelToken}
+    {
+      CancelToken? cancelToken,
+      bool isUpdateDraftToClose = false,
+    }
   ) {
     return Future.sync(() async {
       return await emailAPI.updateEmailDrafts(
@@ -201,7 +205,8 @@ class EmailDataSourceImpl extends EmailDataSource {
         accountId,
         newEmail,
         oldEmailId,
-        cancelToken: cancelToken
+        cancelToken: cancelToken,
+        isUpdateDraftToClose: isUpdateDraftToClose,
       );
     }).catchError(_exceptionThrower.throwException);
   }
@@ -398,13 +403,9 @@ class EmailDataSourceImpl extends EmailDataSource {
       final appLocalizations = previewEmailEMLRequest.appLocalizations;
       final locale = previewEmailEMLRequest.locale.toLanguageTag();
 
-      final listAttachments = email
-        .allAttachments
-        .getListAttachmentsDisplayedOutside(email.htmlBodyAttachments);
-
-      final listInlineImages = email
-        .allAttachments
-        .listAttachmentsDisplayedInContent;
+      final presentationAttachments = email.toPresentationAttachments();
+      final listAttachments = presentationAttachments.attachments;
+      final listInlineImages = presentationAttachments.inlineImages;
 
       final mapCidImageDownloadUrl = listInlineImages.toMapCidImageDownloadUrl(
         accountId: previewEmailEMLRequest.accountId,
@@ -439,7 +440,7 @@ class EmailDataSourceImpl extends EmailDataSource {
 
           final previewAttachment = PreviewAttachment(
             iconBase64Data: iconBase64Data,
-            name: attachment.name.escapeLtGtHtmlString(),
+            name: (attachment.name ?? '').sanitizedBidiForDisplay,
             size: filesize(attachment.size?.value),
             link: attachment.hyperLink,
           );
@@ -456,9 +457,9 @@ class EmailDataSourceImpl extends EmailDataSource {
         appName: appLocalizations.app_name,
         ownEmailAddress: previewEmailEMLRequest.ownEmailAddress,
         subjectPrefix: appLocalizations.subject,
-        subject: previewEmailEMLRequest.email.subject?.escapeLtGtHtmlString() ?? '',
+        subject: previewEmailEMLRequest.email.subject ?? '',
         emailContent: emailContentEscaped,
-        senderName: sender?.name.escapeLtGtHtmlString() ?? '',
+        senderName: sender?.name ?? '',
         senderEmailAddress: sender?.email ?? '',
         dateTime: receiveTime.isNotEmpty ? receiveTime : sentTime,
         fromPrefix: appLocalizations.from_email_address_prefix,
@@ -624,6 +625,26 @@ class EmailDataSourceImpl extends EmailDataSource {
         accountId,
         emailIds,
         labelKeyword,
+      );
+    }).catchError(_exceptionThrower.throwException);
+  }
+
+  @override
+  Future<({
+    List<EmailId> emailIdsSuccess,
+    Map<Id, SetError> mapErrors,
+  })> addListLabelToListEmail(
+    Session session,
+    AccountId accountId,
+    List<EmailId> emailIds,
+    List<KeyWordIdentifier> labelKeywords,
+  ) {
+    return Future.sync(() async {
+      return await emailAPI.addListLabelToListEmail(
+        session,
+        accountId,
+        emailIds,
+        labelKeywords,
       );
     }).catchError(_exceptionThrower.throwException);
   }

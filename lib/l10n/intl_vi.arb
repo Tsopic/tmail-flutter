@@ -162,6 +162,18 @@
       "emailAddress": {}
     }
   },
+  "header_email_quoted_date_time": "{date} lúc {time}",
+  "@header_email_quoted_date_time": {
+    "type": "text",
+    "placeholders_order": [
+      "date",
+      "time"
+    ],
+    "placeholders": {
+      "date": {},
+      "time": {}
+    }
+  },
   "prefix_reply_email": "Re:",
   "@prefix_reply_email": {
     "type": "text",
@@ -2590,6 +2602,16 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "sendMessageFailureWithInvalidRecipients": "Không thể gửi thư của bạn vì những người nhận sau không hợp lệ: {invalidRecipients}",
+  "@sendMessageFailureWithInvalidRecipients": {
+    "type": "text",
+    "placeholders_order": [
+      "invalidRecipients"
+    ],
+    "placeholders": {
+      "invalidRecipients": {}
+    }
+  },
   "saveEmailAsDraftFailure": "Không thể lưu tin nhắn của bạn vào mục nháp.",
   "@saveEmailAsDraftFailure": {
     "type": "text",
@@ -2640,6 +2662,12 @@
   },
   "languageItalian": "Tiếng Ý",
   "@languageItalian": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "languageBrazilianPortuguese": "Tiếng Bồ Đào Nha (Brazil)",
+  "@languageBrazilianPortuguese": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -2776,6 +2804,30 @@
   },
   "organizer": "Người tổ chức",
   "@organizer": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "attending": "Tham dự?",
+  "@attending": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "joinTheVideoConference": "Tham gia hội nghị video",
+  "@joinTheVideoConference": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "copyLink": "Sao chép liên kết",
+  "@copyLink": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkCopiedToClipboard": "Liên kết đã được sao chép",
+  "@linkCopiedToClipboard": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -4264,6 +4316,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "languageMongolian": "Tiếng Mông Cổ",
+  "@languageMongolian": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "descriptionWelcomeTo": "Tiêu chuẩn nguồn mở mới cho\ne-mail an toàn và chuyên nghiệp",
   "@descriptionWelcomeTo": {
     "type": "text",
@@ -4476,6 +4534,12 @@
   },
   "cannotOpenNewWindow": "Không thể mở cửa sổ mới",
   "@cannotOpenNewWindow": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkCannotBeOpened": "Không thể mở liên kết này",
+  "@linkCannotBeOpened": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -4836,6 +4900,12 @@
   },
   "youAreNotInvitedToThisEventPleaseContactTheOrganizer": "Bạn không được mời vào sự kiện này. Hãy liên hệ người tổ chức.",
   "@youAreNotInvitedToThisEventPleaseContactTheOrganizer": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "seeInYourCalendar": "Xem trong Lịch của bạn",
+  "@seeInYourCalendar": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -5366,42 +5436,6 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "mailComposer": "Trình soạn thư",
-  "@mailComposer": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "focusOnSearch": "Tìm kiếm",
-  "@focusOnSearch": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "openedModal": "Hộp thoại đã mở",
-  "@openedModal": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailboxList": "Danh sách thư",
-  "@mailboxList": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "openedMailView": "Thư đã mở",
-  "@openedMailView": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailboxListWithSelectedMail": "Danh sách thư (đã lựa chọn)",
-  "@mailboxListWithSelectedMail": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
   "replyToAll": "Trả lời tất cả",
   "@replyToAll": {
     "type": "text",
@@ -5660,7 +5694,7 @@
       "labelName": {}
     }
   },
-  "addLabelToEmailSuccessfullyMessage": "Đã thêm email vào nhãn \"{labelName}\"",
+  "addLabelToEmailSuccessfullyMessage": "Nhãn \"{labelName}\" đã được thêm vào email",
   "@addLabelToEmailSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5670,7 +5704,7 @@
       "labelName": {}
     }
   },
-  "addLabelToEmailFailureMessage": "Không thể thêm email vào nhãn \"{labelName}\"",
+  "addLabelToEmailFailureMessage": "Không thể thêm nhãn \"{labelName}\" vào email",
   "@addLabelToEmailFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5680,7 +5714,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromEmailSuccessfullyMessage": "Đã gỡ email khỏi nhãn \"{labelName}\"",
+  "removeLabelFromEmailSuccessfullyMessage": "Nhãn \"{labelName}\" đã được gỡ khỏi email",
   "@removeLabelFromEmailSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5690,7 +5724,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromEmailFailureMessage": "Không thể gỡ email khỏi nhãn \"{labelName}\"",
+  "removeLabelFromEmailFailureMessage": "Không thể gỡ nhãn \"{labelName}\" khỏi email",
   "@removeLabelFromEmailFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5700,7 +5734,7 @@
       "labelName": {}
     }
   },
-  "addLabelToThreadSuccessfullyMessage": "Tất cả email trong chuỗi đã được thêm vào nhãn \"{labelName}\"",
+  "addLabelToThreadSuccessfullyMessage": "Nhãn \"{labelName}\" đã được thêm vào tất cả email trong chuỗi",
   "@addLabelToThreadSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5710,7 +5744,7 @@
       "labelName": {}
     }
   },
-  "addLabelToThreadFailureMessage": "Không thể thêm tất cả email trong chuỗi vào nhãn \"{labelName}\"",
+  "addLabelToThreadFailureMessage": "Không thể thêm nhãn \"{labelName}\" vào tất cả email trong chuỗi",
   "@addLabelToThreadFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5720,7 +5754,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromThreadSuccessfullyMessage": "Tất cả email trong chuỗi đã được gỡ khỏi nhãn \"{labelName}\"",
+  "removeLabelFromThreadSuccessfullyMessage": "Nhãn \"{labelName}\" đã được gỡ khỏi tất cả email trong chuỗi",
   "@removeLabelFromThreadSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5730,7 +5764,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromThreadFailureMessage": "Không thể gỡ tất cả email trong chuỗi khỏi nhãn \"{labelName}\"",
+  "removeLabelFromThreadFailureMessage": "Không thể gỡ nhãn \"{labelName}\" khỏi tất cả email trong chuỗi",
   "@removeLabelFromThreadFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5739,5 +5773,279 @@
     "placeholders": {
       "labelName": {}
     }
+  },
+  "pleaseEnterNameYourNewLabel": "Vui lòng nhập tên nhãn mới của bạn",
+  "@pleaseEnterNameYourNewLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseALabelColor": "Chọn màu nhãn",
+  "@chooseALabelColor": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "tagNameAlreadyExists": "Một nhãn với tên này đã tồn tại. Vui lòng chọn tên khác.",
+  "@tagNameAlreadyExists": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseCustomColour": "Chọn màu tùy chỉnh",
+  "@chooseCustomColour": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "createNewLabelFailure": "Tạo nhãn mới thất bại",
+  "@createNewLabelFailure": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelVisibilitySettingExplanation": "Hiển thị các nhãn được gán cho email trực tiếp trong danh sách tin nhắn để phân loại dễ dàng hơn.",
+  "@labelVisibilitySettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelVisibilityToggleDescription": "Hiển thị nhãn",
+  "@labelVisibilityToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "updateTheLabelName": "Cập nhật tên nhãn",
+  "@updateTheLabelName": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "areYouSureYouWantToDeleteTheLabel": "Bạn có chắc chắn muốn xóa nhãn \"{labelName}\" không?",
+  "@areYouSureYouWantToDeleteTheLabel": {
+    "type": "text",
+    "placeholders_order": [
+      "labelName"
+    ],
+    "placeholders": {
+      "labelName": {}
+    }
+  },
+  "labelDescription": "Mô tả (tuỳ chọn)",
+  "@labelDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelDescriptionHintText": "Thêm thông tin mô tả cho Nhãn",
+  "@labelDescriptionHintText": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "notIncludeEvents": "Không bao gồm các sự kiện",
+  "@notIncludeEvents": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "closeMailDetailView": "Đóng",
+  "@closeMailDetailView": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "allEmail": "Tất cả thư",
+  "@allEmail": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "allEmailTrashAndSpam": "Tất cả thư, thư rác và spam",
+  "@allEmailTrashAndSpam": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseLabel": "Chọn nhãn",
+  "@chooseLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "selectLabel": "Chọn nhãn",
+  "@selectLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailSuccessfullyMessage": "Nhãn đã được thêm vào thư.",
+  "@addListLabelToListEmailSuccessfullyMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailHasSomeFailureMessage": "Nhãn đã được thêm vào một số thư.",
+  "@addListLabelToListEmailHasSomeFailureMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailFailureMessage": "Nhãn không được thêm thành công",
+  "@addListLabelToListEmailFailureMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "noLabelsYet": "Không có nhãn",
+  "@noLabelsYet": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "noLabelsYetMessageDescriptions": "Tạo nhãn để tổ chức thư dễ dàng hơn.",
+  "@noLabelsYetMessageDescriptions": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "createALabel": "Tạo nhãn",
+  "@createALabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "confirm": "Xác nhận",
+  "@confirm": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "titleConfirmRuleWithRejectAction": "Từ chối tất cả thư với điều kiện này?",
+  "@titleConfirmRuleWithRejectAction": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "messageConfirmationRuleWithRejectAction": "Hành động này là không thể khôi phục. Bạn có chắc chắn muốn tiếp tục?",
+  "@messageConfirmationRuleWithRejectAction": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorization": "Nhãn phân loại tự động",
+  "@aiLabelCategorization": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorizationToggleDescription": "Kích hoạt nhãn phân loại tự động",
+  "@aiLabelCategorizationToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorizationSettingExplanation": "Gán nhãn tự động dựa trên nội dung mô tả của nhãn",
+  "@aiLabelCategorizationSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "ssoRedirectFailedMessage": "Chúng tôi không thể hoàn tất việc chuyển hướng đăng nhập một lần (SSO). Vui lòng thử lại.",
+  "@ssoRedirectFailedMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "cannotPreviewPdf": "Không thể xem trước tệp PDF",
+  "@cannotPreviewPdf": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "openInDrive": "Mở trong Drive",
+  "@openInDrive": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachment": "Tệp đính kèm Drive",
+  "@driveAttachment": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentSettingExplanation": "Hiển thị hoặc ẩn nút đính kèm Twake Drive trong trình soạn thư",
+  "@driveAttachmentSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentToggleDescription": "Bật nút đính kèm Drive",
+  "@driveAttachmentToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReporting": "Báo cáo lỗi",
+  "@errorReporting": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReportingSettingExplanation": "Gửi báo cáo sự cố và lỗi để đội ngũ hỗ trợ có thể chẩn đoán các vấn đề bạn gặp phải. Email, nội dung và người nhận của chúng không bao giờ được đưa vào.",
+  "@errorReportingSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReportingToggleDescription": "Gửi báo cáo lỗi",
+  "@errorReportingToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentAddedSuccessfully": "Đã đính kèm tệp từ Drive.",
+  "@driveAttachmentAddedSuccessfully": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentTransferFailed": "Không thể đính kèm tệp từ Drive.",
+  "@driveAttachmentTransferFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveNoValidAttachment": "Không có tệp đính kèm hợp lệ",
+  "@driveNoValidAttachment": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersSuccess": "Đã xoá các thư mục con trong Thùng rác",
+  "@clearTrashSubfoldersSuccess": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersPartialSuccess": "Một số thư mục con trong Thùng rác không thể xoá được",
+  "@clearTrashSubfoldersPartialSuccess": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersFailed": "Xoá các thư mục con trong Thùng rác không thành công",
+  "@clearTrashSubfoldersFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "deepLinkCannotBeOpened": "Liên kết đăng nhập này không phải từ Twake. Vui lòng đăng nhập từ ứng dụng.",
+  "@deepLinkCannotBeOpened": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
   }
 }

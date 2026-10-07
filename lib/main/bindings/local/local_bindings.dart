@@ -1,5 +1,6 @@
 
 import 'package:core/utils/file_utils.dart';
+import 'package:core/utils/platform_info.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,9 +20,12 @@ import 'package:tmail_ui_user/features/caching/clients/recent_login_url_cache_cl
 import 'package:tmail_ui_user/features/caching/clients/recent_login_username_cache_client.dart';
 import 'package:tmail_ui_user/features/caching/clients/recent_search_cache_client.dart';
 import 'package:tmail_ui_user/features/caching/clients/sending_email_hive_cache_client.dart';
+import 'package:tmail_ui_user/features/caching/clients/sentry_configuration_cache_client.dart';
+import 'package:tmail_ui_user/features/caching/clients/sentry_user_cache_client.dart';
 import 'package:tmail_ui_user/features/caching/clients/session_hive_cache_client.dart';
 import 'package:tmail_ui_user/features/caching/clients/state_cache_client.dart';
 import 'package:tmail_ui_user/features/caching/clients/token_oidc_cache_client.dart';
+import 'package:tmail_ui_user/features/caching/manager/sentry_configuration_cache_manager.dart';
 import 'package:tmail_ui_user/features/caching/manager/session_cache_manger.dart';
 import 'package:tmail_ui_user/features/cleanup/data/local/recent_login_url_cache_manager.dart';
 import 'package:tmail_ui_user/features/cleanup/data/local/recent_login_username_cache_manager.dart';
@@ -33,10 +37,10 @@ import 'package:tmail_ui_user/features/login/data/local/oidc_configuration_cache
 import 'package:tmail_ui_user/features/login/data/local/token_oidc_cache_manager.dart';
 import 'package:tmail_ui_user/features/mailbox/data/local/mailbox_cache_manager.dart';
 import 'package:tmail_ui_user/features/mailbox/data/local/state_cache_manager.dart';
+import 'package:tmail_ui_user/features/mailbox_creator/domain/usecases/verify_name_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/data/local/local_sort_order_manager.dart';
 import 'package:tmail_ui_user/features/manage_account/data/local/language_cache_manager.dart';
 import 'package:tmail_ui_user/features/manage_account/data/local/preferences_setting_manager.dart';
-import 'package:tmail_ui_user/features/manage_account/data/local/setting_cache_manager.dart';
 import 'package:tmail_ui_user/features/offline_mode/manager/new_email_cache_manager.dart';
 import 'package:tmail_ui_user/features/offline_mode/manager/new_email_cache_worker_queue.dart';
 import 'package:tmail_ui_user/features/offline_mode/manager/opened_email_cache_manager.dart';
@@ -45,7 +49,7 @@ import 'package:tmail_ui_user/features/offline_mode/manager/sending_email_cache_
 import 'package:tmail_ui_user/features/push_notification/data/keychain/keychain_sharing_manager.dart';
 import 'package:tmail_ui_user/features/push_notification/data/local/fcm_cache_manager.dart';
 import 'package:tmail_ui_user/features/thread/data/local/email_cache_manager.dart';
-import 'package:tmail_ui_user/main/exceptions/cache_exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/cache_exception_thrower.dart';
 
 class LocalBindings extends Bindings {
 
@@ -55,17 +59,31 @@ class LocalBindings extends Bindings {
     _bindingKeychainSharing();
     _bindingCaching();
     _bindingWorkerQueue();
+    _bindingVerifyLogicInteractor();
   }
 
   void _bindingCaching() {
+    _bindingMailDataCache();
+    _bindingAccountCache();
+    _bindingRecentDataCache();
+    _bindingFcmCache();
+    _bindingOfflineCache();
+    if (PlatformInfo.isMobile) _bindingSentryCache();
+    _bindingCachingManager();
+  }
+
+  void _bindingMailDataCache() {
     Get.put(MailboxCacheClient());
+    Get.put(MailboxCacheManager(Get.find<MailboxCacheClient>()));
     Get.put(StateCacheClient());
     Get.put(StateCacheManager(Get.find<StateCacheClient>()));
-    Get.put(MailboxCacheManager(Get.find<MailboxCacheClient>()));
     Get.put(EmailCacheClient());
     Get.put(EmailCacheManager(Get.find<EmailCacheClient>()));
-    Get.put(RecentSearchCacheClient());
-    Get.put(RecentSearchCacheManager(Get.find<RecentSearchCacheClient>()));
+    Get.put(HiveCacheVersionClient(Get.find<SharedPreferences>(), Get.find<CacheExceptionThrower>()));
+    Get.put(LocalSortOrderManager(Get.find<SharedPreferences>()));
+  }
+
+  void _bindingAccountCache() {
     Get.put(TokenOidcCacheClient());
     Get.put(TokenOidcCacheManager(Get.find<TokenOidcCacheClient>()));
     Get.put(AccountCacheClient());
@@ -78,14 +96,24 @@ class LocalBindings extends Bindings {
     Get.put(OidcConfigurationCacheManager(Get.find<SharedPreferences>(), Get.find<OidcConfigurationCacheClient>()));
     Get.put(LanguageCacheManager(Get.find<SharedPreferences>()));
     Get.put(PreferencesSettingManager(Get.find<SharedPreferences>()));
+  }
+
+  void _bindingRecentDataCache() {
+    Get.put(RecentSearchCacheClient());
+    Get.put(RecentSearchCacheManager(Get.find<RecentSearchCacheClient>()));
     Get.put(RecentLoginUrlCacheClient());
-    Get.put(RecentLoginUrlCacheManager((Get.find<RecentLoginUrlCacheClient>())));
+    Get.put(RecentLoginUrlCacheManager(Get.find<RecentLoginUrlCacheClient>()));
     Get.put(RecentLoginUsernameCacheClient());
     Get.put(RecentLoginUsernameCacheManager(Get.find<RecentLoginUsernameCacheClient>()));
+  }
+
+  void _bindingFcmCache() {
     Get.put(FirebaseRegistrationCacheClient());
     Get.put(FcmCacheClient());
-    Get.put(FCMCacheManager(Get.find<FcmCacheClient>(),Get.find<FirebaseRegistrationCacheClient>()));
-    Get.put(HiveCacheVersionClient(Get.find<SharedPreferences>(), Get.find<CacheExceptionThrower>()));
+    Get.put(FCMCacheManager(Get.find<FcmCacheClient>(), Get.find<FirebaseRegistrationCacheClient>()));
+  }
+
+  void _bindingOfflineCache() {
     Get.put(NewEmailHiveCacheClient());
     Get.put(NewEmailCacheManager(Get.find<NewEmailHiveCacheClient>(), Get.find<FileUtils>()));
     Get.put(OpenedEmailHiveCacheClient());
@@ -94,8 +122,18 @@ class LocalBindings extends Bindings {
     Get.put(SendingEmailCacheManager(Get.find<SendingEmailHiveCacheClient>()));
     Get.put(SessionHiveCacheClient());
     Get.put(SessionCacheManager(Get.find<SessionHiveCacheClient>()));
-    Get.put(LocalSortOrderManager(Get.find<SharedPreferences>()));
-    Get.put(SettingCacheManager(Get.find<SharedPreferences>()));
+  }
+
+  void _bindingSentryCache() {
+    Get.put(SentryConfigurationCacheClient());
+    Get.put(SentryUserCacheClient());
+    Get.put(SentryConfigurationCacheManager(
+      Get.find<SentryConfigurationCacheClient>(),
+      Get.find<SentryUserCacheClient>(),
+    ));
+  }
+
+  void _bindingCachingManager() {
     Get.put(CachingManager(
       Get.find<MailboxCacheManager>(),
       Get.find<StateCacheManager>(),
@@ -116,6 +154,9 @@ class LocalBindings extends Bindings {
       Get.find<OidcConfigurationCacheManager>(),
       Get.find<EncryptionKeyCacheManager>(),
       Get.find<AuthenticationInfoCacheManager>(),
+      sentryConfigurationCacheManager: PlatformInfo.isMobile
+          ? Get.find<SentryConfigurationCacheManager>()
+          : null,
     ));
   }
 
@@ -130,5 +171,9 @@ class LocalBindings extends Bindings {
 
   void _bindingKeychainSharing() {
     Get.put(KeychainSharingManager(Get.find<FlutterSecureStorage>()));
+  }
+
+  void _bindingVerifyLogicInteractor() {
+    Get.put(VerifyNameInteractor());
   }
 }

@@ -2,19 +2,40 @@ import 'package:core/presentation/views/search/search_bar_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:labels/extensions/label_extension.dart';
-import 'package:tmail_ui_user/features/base/widget/compose_floating_button.dart';
+import 'package:patrol/patrol.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/thread/presentation/thread_view.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_builder.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/scroll_to_top_button_widget.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 import '../base/core_robot.dart';
+import '../utils/wait_for_condition.dart';
+import 'abstract/abstract_thread_assertion_robot.dart';
+import 'abstract/abstract_thread_empty_trash_robot.dart';
+import 'thread_assertion_robot.dart';
+import 'thread_empty_trash_robot.dart';
 
 class ThreadRobot extends CoreRobot {
-  ThreadRobot(super.$);
+  final AbstractThreadAssertionRobot assertion;
+  final AbstractThreadEmptyTrashRobot emptyTrash;
+
+  ThreadRobot(
+    PatrolIntegrationTester $, {
+    AbstractThreadEmptyTrashRobot? emptyTrashRobot,
+  })  : assertion = ThreadAssertionRobot($),
+        emptyTrash = emptyTrashRobot ?? ThreadEmptyTrashRobot($),
+        super($);
 
   Future<void> openComposer() async {
-    await $(ComposeFloatingButton).$(InkWell).tap();
+    final composeAction = find.byWidgetPredicate(
+      (widget) =>
+          widget.key == const Key(UiKeys.composeEmailPrimaryAction) ||
+          widget.key == const Key('compose_email_button_collapsed') ||
+          widget.key == const Key(UiKeys.composeEmailButton),
+      description: 'visible sidebar or floating compose action',
+    ).hitTestable();
+    await $(composeAction).tap();
   }
 
   Future<void> openSearchView() async {
@@ -46,10 +67,8 @@ class ThreadRobot extends CoreRobot {
   }
 
   Future<void> openMailbox() async {
-    await $(#mobile_mailbox_menu_button).tap();
+    await $(const ValueKey(UiKeys.mobileMailboxMenuButton)).tap();
   }
-
-  Future<void> tapEmptyTrashBanner() => $(' ${AppLocalizations().empty_trash_now}').tap();
 
   Future<void> tapDeleteAllButtonOnEmptyTrashConfirmDialog(
     AppLocalizations appLocalizations,
@@ -96,10 +115,6 @@ class ThreadRobot extends CoreRobot {
     await $.pumpAndSettle();
   }
 
-  Future<void> confirmEmptyTrash() async {
-    await $(AppLocalizations().delete_all).tap();
-  }
-
   Future<void> tapEmptySpamBanner() async {
     await $(' ${AppLocalizations().deleteAllSpamEmailsNow}').tap();
   }
@@ -117,23 +132,29 @@ class ThreadRobot extends CoreRobot {
     await $.pumpAndSettle(duration: const Duration(seconds: 2));
   }
 
+  Future<void> tapLabelAsButton() async {
+    await $(#moreAction_selected_email_button).tap();
+    await $.pumpAndTrySettle();
+    await $(#labelAs_action).tap();
+  }
+
   Future<void> tapEmptySpamAfterLongPress() async {
     await $(AppLocalizations().deleteAllSpamEmails).tap();
   }
 
-  Future<void> longPressEmailWithSubject(String subject) async {
-    await $(subject).longPress();
-  }
+  Future<void> longPressEmailWithSubject(String subject) => waitForCondition(
+        () async {
+          await $(subject).longPress();
+          return $(#moreAction_selected_email_button).exists;
+        },
+      );
 
   Future<void> moveEmailToMailboxWithName(String mailboxName) async {
     await $(#moreAction_selected_email_button).tap();
-    await $.pumpAndTrySettle();
 
     await $(#moveToMailbox_action).tap();
-    await $.pumpAndTrySettle();
 
     await $(mailboxName).tap();
-    await $.pumpAndTrySettle();
   }
 
   Future<void> moveEmailToTrash() async {

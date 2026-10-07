@@ -10,10 +10,12 @@ import '../robots/composer_robot.dart';
 import '../robots/thread_robot.dart';
 
 class SendEmailWithMarkAsImportantScenario extends BaseTestScenario {
-  const SendEmailWithMarkAsImportantScenario(super.$);
+  const SendEmailWithMarkAsImportantScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
+    await robots.commonRobot().waitForMailboxReady();
+
     const emailUser = String.fromEnvironment('BASIC_AUTH_EMAIL');
     const emailContent = 'Mark email as important';
 

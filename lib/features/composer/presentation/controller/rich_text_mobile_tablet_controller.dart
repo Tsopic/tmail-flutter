@@ -19,14 +19,39 @@ class RichTextMobileTabletController extends GetxController {
 
   Future<bool> get isEditorFocused async => await htmlEditorApi?.hasFocus() ?? false;
 
-  void insertImage(InlineImage inlineImage) async {
-    final isFocused = await isEditorFocused;
-    log('RichTextMobileTabletController::insertImage: isEditorFocused = $isFocused');
-    if (!isFocused) {
-      await htmlEditorApi?.requestFocusLastChild();
+  Future<void> focus() async {
+    try {
+      await htmlEditorApi?.webViewController.evaluateJavascript(source: '''
+      (() => {
+        const editor = document.getElementById('editor');
+        if (editor && typeof editor.focus === 'function') {
+          editor.focus();
+        }
+      })();''');
+    } catch (e) {
+      logWarning('RichTextMobileTabletController::focus:Exception: $e');
     }
+  }
+
+  Future<void> insertImage(InlineImage inlineImage) async {
+    await restoreMobileEditorFocus();
     if (inlineImage.base64Uri?.isNotEmpty == true) {
       await htmlEditorApi?.insertHtml('${inlineImage.base64Uri ?? ''}<br/><br/>');
+    }
+  }
+
+  Future<void> restoreMobileEditorFocus() async {
+    if (!PlatformInfo.isMobile) return;
+    try {
+      final selectionRangeAvailable =
+          await htmlEditorApi?.isSelectionRangeAvailable();
+      if (selectionRangeAvailable == true) {
+        await htmlEditorApi?.restoreSelectionRange();
+      } else {
+        await htmlEditorApi?.requestFocusFirstChild();
+      }
+    } catch (e) {
+      log('RichTextMobileTabletController::restoreMobileEditorFocus(): $e');
     }
   }
 

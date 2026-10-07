@@ -23,5 +23,11 @@ class GetTokenOIDCSuccess extends UIState {
 
 class GetTokenOIDCFailure extends FeatureFailure {
 
-  GetTokenOIDCFailure(dynamic exception) : super(exception: exception);
+  /// Mirrors the attempted config's `OIDCConfiguration.ssoConfirmed`.
+  final bool ssoConfirmed;
+
+  GetTokenOIDCFailure(
+    dynamic exception, {
+    this.ssoConfirmed = false,
+  }) : super(exception: exception);
 }

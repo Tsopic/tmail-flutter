@@ -88,6 +88,7 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_ai_needs_action_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_create_new_rule_filter.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/open_and_close_composer_extension.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/restore_mailbox_email_list_after_search_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/dashboard_routes.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/websocket/web_socket_message.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/websocket/web_socket_queue_handler.dart';
@@ -126,8 +127,6 @@ class MailboxController extends BaseMailboxController
   IOSSharingManager? _iosSharingManager;
   late MailboxActionReactor mailboxActionReactor;
 
-  final _activeScrollTop = RxBool(false);
-  final _activeScrollBottom = RxBool(true);
   final foldersExpandMode = Rx(ExpandMode.EXPAND);
 
   MailboxId? _newFolderId;
@@ -187,9 +186,6 @@ class MailboxController extends BaseMailboxController
           _handleOpenMailbox(event.buildContext, event.presentationMailbox);
         });
     _initCollapseMailboxCategories();
-    mailboxListScrollController.addListener(
-      _mailboxListScrollControllerListener,
-    );
     super.onReady();
   }
 
@@ -280,11 +276,10 @@ class MailboxController extends BaseMailboxController
       (failure) {
         if (failure is GetAllMailboxFailure) {
           updateMailboxTree(
-            mailboxCollection: updateMailboxCollection(currentMailboxCollection),
+            mailboxCollection: updateMailboxCollection(
+              currentMailboxCollection,
+            ),
             isRefreshTrigger: false,
-          );
-          mailboxDashBoardController.updateRefreshAllMailboxState(
-            Left(RefreshAllMailboxFailure()),
           );
           showRetryToast(failure);
         }
@@ -298,7 +293,7 @@ class MailboxController extends BaseMailboxController
             mailboxDashBoardController.mapDefaultMailboxIdByRole,
           );
           _handleDataFromNavigationRouter();
-          mailboxDashBoardController.getSpamReportBanner();
+          mailboxDashBoardController.refreshSpamReportBanner();
           if (PlatformInfo.isIOS) {
             _updateMailboxIdsBlockNotificationToKeychain(success.mailboxList);
           }
@@ -321,6 +316,9 @@ class MailboxController extends BaseMailboxController
         mailboxDashBoardController.routerParameters,
         _handleNavigationRouteParameters,
       ),
+    );
+    trackWorker(
+      ever(mailboxDashBoardController.mailboxUIAction, _handleMailboxUIAction),
     );
 
     trackWorker(
@@ -461,8 +459,7 @@ class MailboxController extends BaseMailboxController
     } else if (action is OpenMailboxAction) {
       _onOpenMailboxAction(action);
     } else if (action is SystemBackToInboxAction) {
-      _disableAllSearchEmail();
-      _switchBackToMailboxDefault();
+      _backToInboxLeavingSearch();
       mailboxDashBoardController.clearMailboxUIAction();
     } else if (action is RefreshAllMailboxAction) {
       refreshAllMailbox();
@@ -593,10 +590,8 @@ class MailboxController extends BaseMailboxController
         currentContext != null &&
         (responsiveUtils.isMobile(currentContext!) ||
             responsiveUtils.isTablet(currentContext!))) {
-      mailboxCategoriesExpandMode.value = MailboxCategoriesExpandMode(
-        defaultMailbox: ExpandMode.COLLAPSE,
-        personalFolders: ExpandMode.COLLAPSE,
-        teamMailboxes: ExpandMode.COLLAPSE,
+      mailboxCategoriesExpandMode.value = MailboxCategoriesExpandMode.all(
+        ExpandMode.COLLAPSE,
       );
     } else {
       mailboxCategoriesExpandMode.value = MailboxCategoriesExpandMode.initial();
@@ -904,7 +899,10 @@ class MailboxController extends BaseMailboxController
         break;
       case DashboardType.normal:
         if (_navigationRouter!.labelId != null) {
-          handleLabelNavigation(_navigationRouter!, _navigationRouter!.labelId!);
+          handleLabelNavigation(
+            _navigationRouter!,
+            _navigationRouter!.labelId!,
+          );
         } else if (_navigationRouter!.mailboxId != null) {
           final matchedMailboxNode = findMailboxNodeById(
             _navigationRouter!.mailboxId!,
@@ -935,7 +933,7 @@ class MailboxController extends BaseMailboxController
 
   void openEmailInsideMailboxFromLocationBar(
     PresentationMailbox presentationMailbox,
-    EmailId emailId
+    EmailId emailId,
   ) => _openEmailInsideMailboxFromLocationBar(presentationMailbox, emailId);
 
   void _openEmailInsideMailboxFromLocationBar(
@@ -1009,6 +1007,8 @@ class MailboxController extends BaseMailboxController
     );
     KeyboardUtils.hideKeyboard(context);
     mailboxDashBoardController.clearSelectedEmail();
+    final shouldRestoreMailboxEmailList = mailboxDashBoardController
+        .shouldRestoreMailboxEmailListAfterSearch(presentationMailboxSelected);
     if (presentationMailboxSelected.id !=
         mailboxDashBoardController.selectedMailbox.value?.id) {
       mailboxDashBoardController.clearFilterMessageOption();
@@ -1016,6 +1016,9 @@ class MailboxController extends BaseMailboxController
     _disableAllSearchEmail();
     mailboxDashBoardController.closeMailboxMenuDrawer();
     mailboxDashBoardController.setSelectedMailbox(presentationMailboxSelected);
+    if (shouldRestoreMailboxEmailList) {
+      mailboxDashBoardController.restoreMailboxEmailListAfterSearch();
+    }
     mailboxDashBoardController.dispatchRoute(DashboardRoutes.thread);
     _replaceBrowserHistory();
   }
@@ -1188,11 +1191,9 @@ class MailboxController extends BaseMailboxController
   void _deleteMailboxAction(PresentationMailbox presentationMailbox) {
     if (session != null && accountId != null) {
       consumeState(
-        _deleteMultipleMailboxInteractor.execute(
-          session!,
-          accountId!,
-          [presentationMailbox.id],
-        ),
+        _deleteMultipleMailboxInteractor.execute(session!, accountId!, [
+          presentationMailbox.id,
+        ]),
       );
     } else {
       _deleteMailboxFailure(DeleteMultipleMailboxFailure(null));
@@ -1223,6 +1224,22 @@ class MailboxController extends BaseMailboxController
     mailboxDashBoardController.setSelectedMailbox(inboxMailbox?.item);
     _replaceBrowserHistory();
     _autoScrollToTopMailboxList();
+  }
+
+  /// Returns to the inbox on a system Back, restoring its list. A search run
+  /// from the inbox re-selects the already-selected inbox, firing no mailbox
+  /// change, so the list must be restored explicitly. Searches from another
+  /// folder change the selection and reload on their own. The decision is read
+  /// before disabling search, which clears the flags it checks.
+  void _backToInboxLeavingSearch() {
+    final restoreNeeded =
+        mailboxDashBoardController.searchController.isSearchEmailRunning &&
+        mailboxDashBoardController.selectedMailbox.value?.isInbox == true;
+    _disableAllSearchEmail();
+    _switchBackToMailboxDefault();
+    if (restoreNeeded) {
+      mailboxDashBoardController.restoreMailboxEmailListAfterSearch();
+    }
   }
 
   void _deleteMailboxFailure(DeleteMultipleMailboxFailure failure) {
@@ -1336,8 +1353,6 @@ class MailboxController extends BaseMailboxController
       case MailboxActions.delete:
         openConfirmationDialogDeleteMailboxAction(
           context,
-          responsiveUtils,
-          imagePaths,
           mailbox,
           onDeleteMailboxAction: _deleteMailboxAction,
         );
@@ -1352,7 +1367,6 @@ class MailboxController extends BaseMailboxController
         break;
       case MailboxActions.move:
         moveMailboxAction(
-          context,
           mailbox,
           mailboxDashBoardController,
           onMovingMailboxAction: (mailboxSelected, destinationMailbox) =>
@@ -1471,23 +1485,26 @@ class MailboxController extends BaseMailboxController
 
   void _replaceBrowserHistory() {
     final currentMailbox = selectedMailbox;
-    log('MailboxController::_replaceBrowserHistory:selectedMailbox: ${currentMailbox?.id.asString}');
-    if (PlatformInfo.isWeb && Get.currentRoute.startsWith(AppRoutes.dashboard)) {
+    log(
+      'MailboxController::_replaceBrowserHistory:selectedMailbox: ${currentMailbox?.id.asString}',
+    );
+    if (PlatformInfo.isWeb &&
+        Get.currentRoute.startsWith(AppRoutes.dashboard)) {
+      final isSearchRunning =
+          mailboxDashBoardController.searchController.isSearchEmailRunning;
       final route = RouteUtils.createUrlWebLocationBar(
         AppRoutes.dashboard,
-        router: NavigationRouter(
-          mailboxId: currentMailbox?.browserRouteMailboxId,
-          labelId: currentMailbox?.labelId,
-          searchQuery: mailboxDashBoardController.searchController.isSearchEmailRunning
-            ? mailboxDashBoardController.searchController.searchQuery
-            : null,
-          dashboardType: mailboxDashBoardController.searchController.isSearchEmailRunning
-            ? DashboardType.search
-            : DashboardType.normal
-        )
+        router: RouteUtils.dashboardRouterForMailboxOrSearch(
+          isSearchRunning: isSearchRunning,
+          selectedMailbox: currentMailbox,
+          searchQuery: mailboxDashBoardController.searchController.searchQuery,
+        ),
       );
       RouteUtils.replaceBrowserHistory(
-        title: currentMailbox?.browserRouteTitle ?? '',
+        title: RouteUtils.dashboardBrowserRouteTitle(
+          isSearchRunning: isSearchRunning,
+          selectedMailbox: currentMailbox,
+        ),
         url: route,
       );
     }
@@ -1495,30 +1512,6 @@ class MailboxController extends BaseMailboxController
 
   void closeMailboxScreen(BuildContext context) {
     mailboxDashBoardController.closeMailboxMenuDrawer();
-  }
-
-  void autoScrollTop() {
-    mailboxListScrollController.animateTo(
-      mailboxListScrollController.position.minScrollExtent,
-      duration: const Duration(seconds: 1),
-      curve: Curves.easeInToLinear,
-    );
-  }
-
-  void autoScrollBottom() {
-    mailboxListScrollController.animateTo(
-      mailboxListScrollController.position.maxScrollExtent,
-      duration: const Duration(seconds: 1),
-      curve: Curves.easeInToLinear,
-    );
-  }
-
-  void stopAutoScroll() {
-    mailboxListScrollController.animateTo(
-      mailboxListScrollController.offset,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.fastOutSlowIn,
-    );
   }
 
   Future<void> _handleGetAllMailboxSuccess(GetAllMailboxSuccess success) async {
@@ -1751,45 +1744,14 @@ class MailboxController extends BaseMailboxController
       );
     } else {
       handleSubAddressingFailure(
-        SubaddressingFailure.withException(NullSessionOrAccountIdException()),
+        SubaddressingFailure.withException(
+          const NullSessionOrAccountIdException(),
+        ),
       );
     }
 
     popBack();
   }
-
-  void _mailboxListScrollControllerListener() {
-    _handleScrollTop();
-    _handleScrollBottom();
-  }
-
-  void _handleScrollTop() {
-    if (mailboxListScrollController.position.pixels == 0) {
-      _activeScrollTop.value = false;
-    }
-
-    if (mailboxListScrollController.position.pixels > 40) {
-      _activeScrollTop.value = true;
-    }
-  }
-
-  void _handleScrollBottom() {
-    if (mailboxListScrollController.position.pixels -
-            mailboxListScrollController.position.maxScrollExtent ==
-        0) {
-      _activeScrollBottom.value = false;
-    }
-
-    if (mailboxListScrollController.position.maxScrollExtent -
-            mailboxListScrollController.position.pixels >
-        40) {
-      _activeScrollBottom.value = true;
-    }
-  }
-
-  bool get activeScrollTop => _activeScrollTop.value;
-
-  bool get activeScrollBottom => _activeScrollBottom.value;
 
   void openSendingQueueViewAction(BuildContext context) {
     KeyboardUtils.hideKeyboard(context);
@@ -1837,8 +1799,7 @@ class MailboxController extends BaseMailboxController
     );
     if (presentationMailbox.isTrash) {
       mailboxDashBoardController.emptyTrashFolderAction(
-        trashFolderId: presentationMailbox.id,
-        totalEmails: presentationMailbox.countTotalEmails,
+        trashMailbox: presentationMailbox,
       );
     } else if (presentationMailbox.isSpam) {
       mailboxDashBoardController.emptySpamFolderAction(
