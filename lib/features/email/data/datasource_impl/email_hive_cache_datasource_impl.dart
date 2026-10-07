@@ -48,7 +48,7 @@ import 'package:tmail_ui_user/features/sending_queue/domain/model/sending_email.
 import 'package:tmail_ui_user/features/thread/data/extensions/email_cache_extension.dart';
 import 'package:tmail_ui_user/features/thread/data/extensions/email_extension.dart';
 import 'package:tmail_ui_user/features/thread/data/local/email_cache_manager.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 class EmailHiveCacheDataSourceImpl extends EmailDataSource {
 
@@ -327,7 +327,10 @@ class EmailHiveCacheDataSourceImpl extends EmailDataSource {
     AccountId accountId,
     Email newEmail,
     EmailId oldEmailId,
-    {CancelToken? cancelToken}
+    {
+      CancelToken? cancelToken,
+      bool isUpdateDraftToClose = false,
+    }
   ) async {
     await _emailCacheManager.update(
       accountId,
@@ -599,6 +602,19 @@ class EmailHiveCacheDataSourceImpl extends EmailDataSource {
     List<EmailId> emailIdsSuccess,
     Map<Id, SetError> mapErrors,
   })> removeLabelFromThread(Session session, AccountId accountId, List<EmailId> emailIds, KeyWordIdentifier labelKeyword) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<({
+    List<EmailId> emailIdsSuccess,
+    Map<Id, SetError> mapErrors,
+  })> addListLabelToListEmail(
+    Session session,
+    AccountId accountId,
+    List<EmailId> emailIds,
+    List<KeyWordIdentifier> labelKeywords,
+  ) {
     throw UnimplementedError();
   }
 }

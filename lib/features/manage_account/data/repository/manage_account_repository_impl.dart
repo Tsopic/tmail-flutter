@@ -33,17 +33,17 @@ class ManageAccountRepositoryImpl extends ManageAccountRepository {
   }
 
   @override
-  Future<bool> getLabelVisibility() {
-    return dataSource.getLabelVisibility();
-  }
-
-  @override
-  Future<void> saveLabelVisibility(bool visible) {
-    return dataSource.saveLabelVisibility(visible);
-  }
-
-  @override
   Future<bool> getLabelSettingState() {
     return dataSource.getLabelSettingState();
+  }
+
+  @override
+  Future<void> saveExperimentalPreferencesRevealed() {
+    return dataSource.saveExperimentalPreferencesRevealed();
+  }
+
+  @override
+  Future<bool> getExperimentalPreferencesRevealed() {
+    return dataSource.getExperimentalPreferencesRevealed();
   }
 }

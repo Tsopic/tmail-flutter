@@ -1,4 +1,5 @@
 import UserNotifications
+import Sentry
 import SwiftUI
 
 class NotificationService: UNNotificationServiceExtension {
@@ -13,6 +14,10 @@ class NotificationService: UNNotificationServiceExtension {
                                                              accessGroup: InfoPlistReader.main.keychainAccessGroupIdentifier)
     
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
+        
+        SentryManager.shared.configure(with: keychainController)
+        SentryManager.shared.clearUser()
+
         handler = contentHandler
         modifiedContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
         
@@ -22,10 +27,14 @@ class NotificationService: UNNotificationServiceExtension {
         if isAppActive == true {
             self.modifiedContent?.userInfo = request.content.userInfo.merging(["data": request.content.userInfo], uniquingKeysWith: {(_, new) in new})
             contentHandler(self.modifiedContent ?? request.content)
+            return
         }
-        
+
+        SentryManager.shared.addBreadcrumb(message: "NSE: Received push notification", level: .info)
+
         guard let payloadData = request.content.userInfo as? [String: Any],
               !keychainController.retrieveSharingSessions().isEmpty else {
+            SentryManager.shared.capture(message: "NSE: Payload invalid or No Session found in Keychain")
             self.showDefaultNotification(message: NSLocalizedString(self.newNotificationDefaultMessageKey, comment: "Localizable"))
             return self.notify()
         }
@@ -42,6 +51,7 @@ class NotificationService: UNNotificationServiceExtension {
     override func serviceExtensionTimeWillExpire() {
         // Called just before the extension will be terminated by the system.
         // Use this as an opportunity to deliver your "best attempt" at modified content, otherwise the original push payload will be used.
+        SentryManager.shared.capture(message: "NSE: Service Extension Time Expired (Timeout)", flushTimeout: 0.3)
         self.showDefaultNotification(message: NSLocalizedString(self.newNotificationDefaultMessageKey, comment: "Localizable"))
         self.notify()
     }
@@ -55,20 +65,35 @@ class NotificationService: UNNotificationServiceExtension {
         let mapStateChanges: [String: [TypeName: String]] = PayloadParser.shared.parsingPayloadNotification(payloadData: payloadData)
         
         if (mapStateChanges.isEmpty) {
+            SentryManager.shared.capture(message: "NSE: Payload parsing returned empty state changes")
             self.showDefaultNotification(message: NSLocalizedString(self.newNotificationDefaultMessageKey, comment: "Localizable"))
             return self.notify()
         } else {
             guard let currentAccountId = mapStateChanges.keys.first,
                   let keychainSharingSession = keychainController.retrieveSharingSessionFromKeychain(accountId: currentAccountId),
-                  keychainSharingSession.tokenOIDC != nil || keychainSharingSession.basicAuth != nil,
-                  let listStateOfAccount = mapStateChanges[currentAccountId],
-                  let newEmailDeliveryState = listStateOfAccount[TypeName.emailDelivery] else {
+                  keychainSharingSession.tokenOIDC != nil || keychainSharingSession.basicAuth != nil else {
+                SentryManager.shared.capture(message: "NSE: Session missing or invalid credential for account: \(mapStateChanges.keys.first ?? "unknown")")
                 self.showDefaultNotification(message: NSLocalizedString(self.newNotificationDefaultMessageKey, comment: "Localizable"))
                 return self.notify()
             }
-            
-            guard let oldEmailDeliveryState = keychainSharingSession.emailDeliveryState ?? keychainSharingSession.emailState,
-                  newEmailDeliveryState != oldEmailDeliveryState else {
+
+            SentryManager.shared.setSentryUser(keychainSharingSession.sentryUser)
+
+            guard let listStateOfAccount = mapStateChanges[currentAccountId],
+                  let newEmailDeliveryState = listStateOfAccount[TypeName.emailDelivery] else {
+                SentryManager.shared.capture(message: "NSE: Missing emailDelivery state in payload")
+                self.showDefaultNotification(message: NSLocalizedString(self.newNotificationDefaultMessageKey, comment: "Localizable"))
+                return self.notify()
+            }
+
+            guard let oldEmailDeliveryState = keychainSharingSession.emailDeliveryState ?? keychainSharingSession.emailState else {
+                SentryManager.shared.capture(message: "NSE: No stored email state for account: \(currentAccountId)")
+                self.showDefaultNotification(message: NSLocalizedString(self.newEmailDefaultMessageKey, comment: "Localizable"))
+                return self.notify()
+            }
+
+            guard newEmailDeliveryState != oldEmailDeliveryState else {
+                SentryManager.shared.capture(message: "NSE: Email delivery state unchanged, skipping fetch")
                 self.showDefaultNotification(message: NSLocalizedString(self.newEmailDefaultMessageKey, comment: "Localizable"))
                 return self.notify()
             }
@@ -84,31 +109,28 @@ class NotificationService: UNNotificationServiceExtension {
                 oidcScopes: keychainSharingSession.oidcScopes,
                 isTWP: keychainSharingSession.isTWP,
                 onComplete: { (emails, errors) in
-                    do {
-                        if emails.isEmpty {
-                            self.showDefaultNotification(message: NSLocalizedString(self.newEmailDefaultMessageKey, comment: "Localizable"))
-                            return self.notify()
-                        } else {
-                            self.keychainController.updateEmailDeliveryStateToKeychain(
-                                accountId: keychainSharingSession.accountId,
-                                newEmailDeliveryState: newEmailDeliveryState
-                            )
+                    errors.forEach { SentryManager.shared.capture(error: $0) }
 
-                            let mailboxIdsBlockNotification = keychainSharingSession.mailboxIdsBlockNotification ?? []
-
-                            if (mailboxIdsBlockNotification.isEmpty) {
-                                return self.showListNotification(emails: emails)
-                            } else {
-                                let emailFiltered = self.filterEmailsToPushNotification(
-                                    emails: emails,
-                                    mailboxIdsBlockNotification: mailboxIdsBlockNotification)
-                                return self.showListNotification(emails: emailFiltered)
-                            }
-                        }
-                    } catch {
-                        TwakeLogger.shared.log(message: "JmapClient.shared.getNewEmails: \(error)")
+                    if emails.isEmpty {
+                        SentryManager.shared.capture(message: "NSE: getNewEmails returned empty list")
                         self.showDefaultNotification(message: NSLocalizedString(self.newEmailDefaultMessageKey, comment: "Localizable"))
                         return self.notify()
+                    }
+
+                    self.keychainController.updateEmailDeliveryStateToKeychain(
+                        accountId: keychainSharingSession.accountId,
+                        newEmailDeliveryState: newEmailDeliveryState
+                    )
+
+                    let mailboxIdsBlockNotification = keychainSharingSession.mailboxIdsBlockNotification ?? []
+
+                    if mailboxIdsBlockNotification.isEmpty {
+                        return self.showListNotification(emails: emails)
+                    } else {
+                        let emailFiltered = self.filterEmailsToPushNotification(
+                            emails: emails,
+                            mailboxIdsBlockNotification: mailboxIdsBlockNotification)
+                        return self.showListNotification(emails: emailFiltered)
                     }
                 }
             )
@@ -128,6 +150,11 @@ class NotificationService: UNNotificationServiceExtension {
     }
     
     private func showListNotification(emails: [Email]) {
+        guard !emails.isEmpty else {
+            SentryManager.shared.capture(message: "NSE: All emails filtered by block list, no notification shown")
+            return self.notify()
+        }
+
         for email in emails {
             if (email.id == emails.last?.id) {
                 self.showModifiedNotification(title: email.getSenderName(),
@@ -183,7 +210,7 @@ class NotificationService: UNNotificationServiceExtension {
         content.userInfo = userInfo
 
         // Create a notification trigger
-         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
         // Create a notification request
         let request = UNNotificationRequest(identifier: notificationId, content: content, trigger: trigger)
 
@@ -191,6 +218,7 @@ class NotificationService: UNNotificationServiceExtension {
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 TwakeLogger.shared.log(message: "Error scheduling notification: \(error.localizedDescription)")
+                SentryManager.shared.capture(error: error)
             } else {
                 TwakeLogger.shared.log(message: "Notification scheduled successfully")
             }
@@ -207,11 +235,13 @@ class NotificationService: UNNotificationServiceExtension {
     }
     
     private func discard() {
+        SentryManager.shared.capture(message: "NSE: modifiedContent nil, notification discarded")
         handler?(UNNotificationContent())
         cleanUp()
     }
     
     private func cleanUp() {
+        SentryManager.shared.clearUser()
         handler = nil
         modifiedContent = nil
     }

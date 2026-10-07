@@ -1,23 +1,39 @@
 import 'package:core/data/network/config/dynamic_url_interceptors.dart';
 import 'package:core/presentation/resources/image_paths.dart';
+import 'package:core/presentation/views/button/default_close_button_widget.dart';
 import 'package:core/presentation/utils/app_toast.dart';
 import 'package:core/presentation/utils/responsive_utils.dart';
+import 'package:core/utils/platform_info.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide SearchController, State;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:jmap_dart_client/jmap/core/account/account.dart';
+import 'package:jmap_dart_client/jmap/core/session/session.dart';
+import 'package:jmap_dart_client/jmap/core/state.dart' as jmap;
+import 'package:jmap_dart_client/jmap/core/user_name.dart';
 import 'package:jmap_dart_client/jmap/core/id.dart';
+import 'package:jmap_dart_client/jmap/core/unsigned_int.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email.dart';
+import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
+import 'package:jmap_dart_client/jmap/quotas/data_types.dart';
+import 'package:jmap_dart_client/jmap/quotas/quota.dart';
+import 'package:linagora_design_flutter/linagora_design_flutter.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:model/email/presentation_email.dart';
 import 'package:model/extensions/email_extension.dart';
 import 'package:model/extensions/email_id_extensions.dart';
 import 'package:model/extensions/mailbox_extension.dart';
+import 'package:model/mailbox/expand_mode.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
+import 'package:model/saas/saas_account_capability.dart';
 import 'package:rxdart/subjects.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/caching/caching_manager.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/send_email_interactor.dart';
 import 'package:tmail_ui_user/features/composer/presentation/manager/composer_manager.dart';
@@ -32,6 +48,7 @@ import 'package:tmail_ui_user/features/email/domain/usecases/restore_deleted_mes
 import 'package:tmail_ui_user/features/email/domain/usecases/unsubscribe_email_interactor.dart';
 import 'package:tmail_ui_user/features/home/domain/usecases/get_session_interactor.dart';
 import 'package:tmail_ui_user/features/home/domain/usecases/store_session_interactor.dart';
+import 'package:tmail_ui_user/features/home/domain/extensions/session_extensions.dart';
 import 'package:tmail_ui_user/features/identity_creator/domain/usecase/get_identity_cache_on_web_interactor.dart';
 import 'package:tmail_ui_user/features/labels/presentation/label_controller.dart';
 import 'package:tmail_ui_user/features/login/data/network/interceptors/authorization_interceptors.dart';
@@ -59,20 +76,25 @@ import 'package:tmail_ui_user/features/mailbox/domain/usecases/subaddressing_int
 import 'package:tmail_ui_user/features/mailbox/domain/usecases/subscribe_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/usecases/subscribe_multiple_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/mailbox_controller.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/mailbox_view.dart'
+    as mobile_mailbox_view;
 import 'package:tmail_ui_user/features/mailbox/presentation/mailbox_view_web.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_categories.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_collection.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_node.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_tree.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_tree_builder.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/mailbox_item_widget.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/widgets/sidebar/sidebar_mailbox_item.dart';
 import 'package:tmail_ui_user/features/mailbox_creator/domain/usecases/verify_name_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/model/spam_report_state.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/domain/linagora_ecosystem/linagora_ecosystem.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/get_all_composer_cache_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/get_all_recent_search_latest_interactor.dart';
-import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/get_composer_cache_on_web_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/get_stored_email_sort_order_interactor.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/providers/active_ecosystem_provider.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/quick_search_email_interactor.dart';
-import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/remove_all_composer_cache_on_web_interactor.dart';
-import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/remove_composer_cache_by_id_on_web_interactor.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/remove_all_composer_cache_interactor.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/remove_composer_cache_by_id_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/remove_email_drafts_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/save_recent_search_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/store_email_sort_order_interactor.dart';
@@ -82,23 +104,28 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/search_controller.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/spam_report_controller.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/mailbox_dashboard_view_web.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/dashboard_routes.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/desktop_dashboard_route_body.dart';
 import 'package:tmail_ui_user/features/manage_account/data/local/language_cache_manager.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/get_all_identities_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/log_out_oidc_interactor.dart';
 import 'package:tmail_ui_user/features/network_connection/presentation/network_connection_controller.dart'
  if (dart.library.html) 'package:tmail_ui_user/features/network_connection/presentation/web_network_connection_controller.dart';
+import 'package:tmail_ui_user/features/paywall/presentation/paywall_launcher.dart';
+import 'package:tmail_ui_user/features/paywall/presentation/providers/premium_cta_provider.dart';
 import 'package:tmail_ui_user/features/quotas/domain/use_case/get_quotas_interactor.dart';
 import 'package:tmail_ui_user/features/quotas/presentation/quotas_controller.dart';
+import 'package:tmail_ui_user/features/quotas/presentation/widget/quotas_banner_widget.dart';
 import 'package:tmail_ui_user/features/sending_queue/domain/usecases/delete_sending_email_interactor.dart';
 import 'package:tmail_ui_user/features/sending_queue/domain/usecases/get_all_sending_email_interactor.dart';
 import 'package:tmail_ui_user/features/sending_queue/domain/usecases/store_sending_email_interactor.dart';
 import 'package:tmail_ui_user/features/sending_queue/domain/usecases/update_sending_email_interactor.dart';
+import 'package:tmail_ui_user/features/thread/domain/constants/thread_constants.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/filter_message_option.dart';
 import 'package:tmail_ui_user/features/thread/domain/state/get_all_email_state.dart';
 import 'package:tmail_ui_user/features/thread/domain/state/load_more_emails_state.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/clean_and_get_emails_in_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/empty_spam_folder_interactor.dart';
-import 'package:tmail_ui_user/features/thread/domain/usecases/empty_trash_folder_interactor.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/get_email_by_id_interactor.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/get_emails_in_mailbox_interactor.dart';
 import 'package:tmail_ui_user/features/thread/domain/usecases/load_more_emails_in_mailbox_interactor.dart';
@@ -114,6 +141,8 @@ import 'package:tmail_ui_user/main/bindings/network/binding_tag.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations_delegate.dart';
 import 'package:tmail_ui_user/main/localizations/localization_service.dart';
+import 'package:tmail_ui_user/main/providers/cozy/inside_cozy_provider.dart';
+import 'package:tmail_ui_user/main/providers/workplace/fqdn/workplace_fqdn_user_info_notifier.dart';
 import 'package:tmail_ui_user/main/utils/email_receive_manager.dart';
 import 'package:tmail_ui_user/main/utils/toast_manager.dart';
 import 'package:tmail_ui_user/main/utils/twake_app_manager.dart';
@@ -122,6 +151,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../fixtures/account_fixtures.dart';
 import '../../../../fixtures/email_fixtures.dart';
 import '../../../../fixtures/mailbox_fixtures.dart';
+import '../../../../fixtures/recording_paywall_launcher.dart';
 import '../../../../fixtures/session_fixtures.dart';
 import '../../../../fixtures/widget_fixtures.dart';
 import 'mailbox_dashboard_view_widget_test.mocks.dart';
@@ -132,17 +162,29 @@ const fallbackGenerators = {
   #onDelete: mockControllerCallback,
 };
 
+class _TestEcosystemNotifier extends Notifier<LinagoraEcosystem?> {
+  final LinagoraEcosystem? Function() _initialValue;
+
+  _TestEcosystemNotifier(this._initialValue);
+
+  @override
+  LinagoraEcosystem? build() => _initialValue();
+
+  void setEcosystem(LinagoraEcosystem? ecosystem) {
+    state = ecosystem;
+  }
+}
+
 @GenerateNiceMocks([
   MockSpec<MoveToMailboxInteractor>(),
   MockSpec<MarkAsStarEmailInteractor>(),
   MockSpec<MarkAsEmailReadInteractor>(),
   MockSpec<DeleteEmailPermanentlyInteractor>(),
   MockSpec<MarkAsMailboxReadInteractor>(),
-  MockSpec<GetComposerCacheOnWebInteractor>(),
+  MockSpec<GetAllComposerCacheInteractor>(),
   MockSpec<MarkAsMultipleEmailReadInteractor>(),
   MockSpec<MarkAsStarMultipleEmailInteractor>(),
   MockSpec<MoveMultipleEmailToMailboxInteractor>(),
-  MockSpec<EmptyTrashFolderInteractor>(),
   MockSpec<DeleteMultipleEmailsPermanentlyInteractor>(),
   MockSpec<GetEmailByIdInteractor>(),
   MockSpec<SendEmailInteractor>(),
@@ -200,8 +242,8 @@ const fallbackGenerators = {
   MockSpec<Uuid>(),
   MockSpec<CachingManager>(),
   MockSpec<LanguageCacheManager>(),
-  MockSpec<RemoveAllComposerCacheOnWebInteractor>(),
-  MockSpec<RemoveComposerCacheByIdOnWebInteractor>(),
+  MockSpec<RemoveAllComposerCacheInteractor>(),
+  MockSpec<RemoveComposerCacheByIdInteractor>(),
   MockSpec<GetAllIdentitiesInteractor>(),
   MockSpec<GetQuotasInteractor>(),
   MockSpec<ToastManager>(),
@@ -218,14 +260,13 @@ void main() {
   final moveToMailboxInteractor = MockMoveToMailboxInteractor();
   final deleteEmailPermanentlyInteractor = MockDeleteEmailPermanentlyInteractor();
   final markAsMailboxReadInteractor = MockMarkAsMailboxReadInteractor();
-  final getEmailCacheOnWebInteractor = MockGetComposerCacheOnWebInteractor();
+  final getAllComposerCacheInteractor = MockGetAllComposerCacheInteractor();
   final getIdentityCacheOnWebInteractor = MockGetIdentityCacheOnWebInteractor();
   final markAsEmailReadInteractor = MockMarkAsEmailReadInteractor();
   final markAsStarEmailInteractor = MockMarkAsStarEmailInteractor();
   final markAsMultipleEmailReadInteractor = MockMarkAsMultipleEmailReadInteractor();
   final markAsStarMultipleEmailInteractor = MockMarkAsStarMultipleEmailInteractor();
   final moveMultipleEmailToMailboxInteractor = MockMoveMultipleEmailToMailboxInteractor();
-  final emptyTrashFolderInteractor = MockEmptyTrashFolderInteractor();
   final deleteMultipleEmailsPermanentlyInteractor = MockDeleteMultipleEmailsPermanentlyInteractor();
   final getEmailByIdInteractor = MockGetEmailByIdInteractor();
   final cleanAndGetEmailsInMailboxInteractor = MockCleanAndGetEmailsInMailboxInteractor();
@@ -286,8 +327,8 @@ void main() {
   final verifyNameInteractor = MockVerifyNameInteractor();
   final getAllMailboxInteractor = MockGetAllMailboxInteractor();
   final refreshAllMailboxInteractor = MockRefreshAllMailboxInteractor();
-  final removeAllComposerCacheOnWebInteractor = MockRemoveAllComposerCacheOnWebInteractor();
-  final removeComposerCacheByIdOnWebInteractor = MockRemoveComposerCacheByIdOnWebInteractor();
+  final removeAllComposerCacheInteractor = MockRemoveAllComposerCacheInteractor();
+  final removeComposerCacheByIdInteractor = MockRemoveComposerCacheByIdInteractor();
   final getAllIdentitiesInteractor = MockGetAllIdentitiesInteractor();
   final clearMailboxInteractor = MockClearMailboxInteractor();
   final composerManager = MockComposerManager();
@@ -308,25 +349,129 @@ void main() {
   late MailboxController mailboxController;
   late ThreadController threadController;
   late QuotasController quotasController;
+  LinagoraEcosystem? initialTestEcosystem;
+  ProviderContainer? currentTestProviderContainer;
+  var testPaywallLauncher = RecordingPaywallLauncher();
+  late final NotifierProvider<_TestEcosystemNotifier, LinagoraEcosystem?>
+      testEcosystemProvider;
+
+  testEcosystemProvider = NotifierProvider(
+    () => _TestEcosystemNotifier(() => initialTestEcosystem),
+  );
 
   Widget makeTestableWidget({required Widget child}) {
-    return GetMaterialApp(
-      localizationsDelegates: const [
-        AppLocalizationsDelegate(),
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
+    return ProviderScope(
+      overrides: [
+        paywallLauncherProvider.overrideWithValue(testPaywallLauncher),
+        insideCozyProvider.overrideWith((ref) => true),
+        activeEcosystemProvider.overrideWith((ref, _) {
+          final ecosystem = ref.watch(testEcosystemProvider);
+          return ecosystem == null
+              ? const EcosystemUnavailable(
+                  EcosystemUnavailableReason.loadFailed,
+                )
+              : EcosystemAvailable(ecosystem);
+        }),
       ],
-      supportedLocales: LocalizationService.supportedLocales,
-      locale: LocalizationService.defaultLocale,
-      home: Scaffold(body: child),
+      child: GetMaterialApp(
+        localizationsDelegates: const [
+          AppLocalizationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: LocalizationService.supportedLocales,
+        locale: LocalizationService.defaultLocale,
+        home: Scaffold(body: child),
+      ),
     );
   }
 
-  group('MailboxDashboardView', () {
-    setUp(() {
-      Get.testMode = true;
+  void arrangeSidebarMenu() {
+    when(
+      mailboxDashboardController
+          .appGridDashboardController.listLinagoraApp,
+    ).thenReturn(RxList([]));
+    when(
+      createDefaultMailboxInteractor.execute(any, any, any),
+    ).thenAnswer(
+      (_) => Stream.value(Right(CreateDefaultMailboxAllSuccess([]))),
+    );
+    when(uuid.v1()).thenReturn('dab123456789');
+  }
 
+  Session createPremiumSession() {
+    final saasCapability = SaaSAccountCapability(canUpgrade: true);
+    return Session(
+      {SessionExtensions.linagoraSaaSCapability: saasCapability},
+      {
+        AccountFixtures.aliceAccountId: Account(
+          AccountName('alice@domain.tld'),
+          true,
+          false,
+          {SessionExtensions.linagoraSaaSCapability: saasCapability},
+        ),
+      },
+      {
+        SessionExtensions.linagoraSaaSCapability:
+            AccountFixtures.aliceAccountId,
+      },
+      UserName('alice@domain.tld'),
+      Uri.parse('https://domain.tld/jmap'),
+      Uri.parse('https://domain.tld/download'),
+      Uri.parse('https://domain.tld/upload'),
+      Uri.parse('https://domain.tld/events'),
+      jmap.State('premium-session'),
+    );
+  }
+
+  void arrangeIncreaseSpaceAvailable() {
+    arrangeSidebarMenu();
+    mailboxDashboardController.sessionCurrent = createPremiumSession();
+    mailboxDashboardController.accountId.value =
+        AccountFixtures.aliceAccountId;
+    mailboxDashboardController.ownEmailAddress.value = 'alice@domain.tld';
+    mailboxDashboardController.octetsQuota.value = _storageQuota(
+      used: 1,
+      hardLimit: 100,
+      warnLimit: 90,
+    );
+  }
+
+  void cachePaywallUrlTemplate(String? template) {
+    initialTestEcosystem = template == null
+        ? null
+        : LinagoraEcosystem.deserialize({'paywallUrlTemplate': template});
+    currentTestProviderContainer
+        ?.read(testEcosystemProvider.notifier)
+        .setEcosystem(initialTestEcosystem);
+  }
+
+  Future<ProviderContainer> pumpWebMailbox(WidgetTester tester) async {
+    PlatformInfo.isTestingForWeb = true;
+    addTearDown(() => PlatformInfo.isTestingForWeb = false);
+    if (!dotenv.isInitialized) {
+      dotenv.loadFromString(isOptional: true, mergeWith: {'PLATFORM': 'other'});
+    }
+    addTearDown(() => WidgetFixtures.resetResponsive(tester));
+    await WidgetFixtures.pumpResponsiveWidget(
+      tester,
+      makeTestableWidget(child: MailboxView()),
+      logicalSize: const Size(1920, 1080),
+      platform: TargetPlatform.macOS,
+    );
+
+    final providerContainer = ProviderScope.containerOf(
+      tester.element(find.byType(MailboxView)),
+    );
+    currentTestProviderContainer = providerContainer;
+    providerContainer.read(workplaceFqdnUserInfoProvider.notifier).setFqdn(null);
+    await tester.pump();
+    return providerContainer;
+  }
+
+  group('MailboxDashboardView', () {
+    void registerMockDependencies() {
       Get.put<RemoveEmailDraftsInteractor>(removeEmailDraftsInteractor);
       Get.put<EmailReceiveManager>(emailReceiveManager);
       Get.put<DownloadController>(downloadController);
@@ -357,8 +502,8 @@ void main() {
       Get.put<GetOidcUserInfoInteractor>(getOidcUserInfoInteractor);
       Get.put<GetAllIdentitiesInteractor>(getAllIdentitiesInteractor);
       Get.put<ClearMailboxInteractor>(clearMailboxInteractor);
-      Get.put<RemoveAllComposerCacheOnWebInteractor>(removeAllComposerCacheOnWebInteractor);
-      Get.put<RemoveComposerCacheByIdOnWebInteractor>(removeComposerCacheByIdOnWebInteractor);
+      Get.put<RemoveAllComposerCacheInteractor>(removeAllComposerCacheInteractor);
+      Get.put<RemoveComposerCacheByIdInteractor>(removeComposerCacheByIdInteractor);
       Get.put<ComposerManager>(composerManager);
       Get.put<GetAuthenticationInfoInteractor>(getAuthenticationInfoInteractor);
       Get.put<GetStoredOidcConfigurationInteractor>(getStoredOidcConfigurationInteractor);
@@ -366,6 +511,8 @@ void main() {
 
       when(emailReceiveManager.pendingSharedFileInfo).thenAnswer((_) => BehaviorSubject.seeded([]));
       when(downloadController.downloadUIAction).thenAnswer((_) => Rxn(DownloadUIAction.idle));
+      final isLabelSettingEnabled = RxBool(false);
+      when(labelController.isLabelSettingEnabled).thenReturn(isLabelSettingEnabled);
 
       searchController = SearchController(
         quickSearchEmailInteractor,
@@ -373,19 +520,20 @@ void main() {
         getAllRecentSearchLatestInteractor
       );
       Get.put(searchController);
+    }
 
+    void createDashboardController() {
       mailboxDashboardController = MailboxDashBoardController(
         moveToMailboxInteractor,
         deleteEmailPermanentlyInteractor,
         markAsMailboxReadInteractor,
-        getEmailCacheOnWebInteractor,
+        getAllComposerCacheInteractor,
         getIdentityCacheOnWebInteractor,
         markAsEmailReadInteractor,
         markAsStarEmailInteractor,
         markAsMultipleEmailReadInteractor,
         markAsStarMultipleEmailInteractor,
         moveMultipleEmailToMailboxInteractor,
-        emptyTrashFolderInteractor,
         deleteMultipleEmailsPermanentlyInteractor,
         getEmailByIdInteractor,
         sendEmailInteractor,
@@ -398,8 +546,8 @@ void main() {
         unsubscribeEmailInteractor,
         restoreDeletedMessageInteractor,
         getRestoredDeletedMessageInteractor,
-        removeAllComposerCacheOnWebInteractor,
-        removeComposerCacheByIdOnWebInteractor,
+        removeAllComposerCacheInteractor,
+        removeComposerCacheByIdInteractor,
         getAllIdentitiesInteractor,
         clearMailboxInteractor,
         storeEmailSortOrderInteractor,
@@ -407,7 +555,9 @@ void main() {
       );
       Get.put(mailboxDashboardController);
       mailboxDashboardController.onReady();
+    }
 
+    void createScreenControllers() {
       mailboxController = MailboxController(
         createNewMailboxInteractor,
         deleteMultipleMailboxInteractor,
@@ -426,12 +576,12 @@ void main() {
       Get.put(mailboxController);
       // mailboxController.onReady();
 
+      Get.put<SearchEmailInteractor>(searchEmailInteractor);
+      Get.put<SearchMoreEmailInteractor>(searchMoreEmailInteractor);
       threadController = ThreadController(
         getEmailsInMailboxInteractor,
         refreshChangesEmailsInMailboxInteractor,
         loadMoreEmailsInMailboxInteractor,
-        searchEmailInteractor,
-        searchMoreEmailInteractor,
         getEmailByIdInteractor,
         cleanAndGetEmailsInMailboxInteractor,
       );
@@ -439,10 +589,236 @@ void main() {
 
       quotasController = QuotasController(getQuotasInteractor);
       Get.put(quotasController);
+    }
+
+    setUp(() {
+      Get.testMode = true;
+      initialTestEcosystem = null;
+      currentTestProviderContainer = null;
+      testPaywallLauncher = RecordingPaywallLauncher();
+
+      registerMockDependencies();
+      createDashboardController();
+      createScreenControllers();
 
       mailboxDashboardController.sessionCurrent = SessionFixtures.aliceSession;
       mailboxDashboardController.filterMessageOption.value = FilterMessageOption.all;
       mailboxDashboardController.accountId.value = AccountFixtures.aliceAccountId;
+    });
+
+    testWidgets('mailbox selection is hidden while email search is active',
+        (tester) async {
+      // Flush the MailboxController.onReady scheduled by Get.put in setUp so it
+      // runs on the live controller instead of leaking a post-frame callback
+      // that fires (on a disposed ScrollController) inside the next widget test.
+      await tester.pumpWidget(const SizedBox());
+
+      final inbox = MailboxFixtures.inboxMailbox.toPresentationMailbox();
+      mailboxDashboardController.selectedMailbox.value = inbox;
+
+      expect(mailboxDashboardController.selectedMailboxForDisplay, inbox);
+
+      searchController.activateSimpleSearch();
+
+      expect(mailboxDashboardController.selectedMailboxForDisplay, isNull);
+      expect(mailboxDashboardController.selectedMailbox.value, inbox);
+
+      searchController.disableAllSearchEmail();
+      // resetSearchResultSession invalidates Riverpod providers, which the
+      // ProviderScheduler refreshes via a zero-duration Timer. Pump with a
+      // duration so the fake clock elapses and fires it before the test
+      // framework verifies no timers are pending.
+      await tester.pump(const Duration(milliseconds: 1));
+
+      expect(mailboxDashboardController.selectedMailboxForDisplay, inbox);
+      expect(mailboxDashboardController.selectedMailbox.value, inbox);
+    });
+
+    group('Quota banner premium CTA', () {
+      void arrangeQuotaBanner() {
+        arrangeIncreaseSpaceAvailable();
+        mailboxDashboardController.octetsQuota.value = _storageQuota(
+          used: 91,
+          hardLimit: 100,
+          warnLimit: 90,
+        );
+        quotasController.isBannerEnabled.value = true;
+      }
+
+      Future<ProviderContainer> pumpQuotaBanner(
+        WidgetTester tester, {
+        bool isWeb = true,
+      }) async {
+        await tester.pumpWidget(const SizedBox());
+        PlatformInfo.isTestingForWeb = isWeb;
+        await tester.pumpWidget(
+          makeTestableWidget(child: QuotasBannerWidget()),
+        );
+        await tester.pump();
+        final providerContainer = ProviderScope.containerOf(
+          tester.element(find.byType(QuotasBannerWidget)),
+        );
+        currentTestProviderContainer = providerContainer;
+        return providerContainer;
+      }
+
+      String manageMyStorageLabel(WidgetTester tester) {
+        return AppLocalizations.of(
+          tester.element(find.byType(QuotasBannerWidget)),
+        ).manageMyStorage;
+      }
+
+      tearDown(() => PlatformInfo.isTestingForWeb = false);
+
+      testWidgets('hides CTA when no paywall is available', (tester) async {
+        arrangeQuotaBanner();
+        await pumpQuotaBanner(tester);
+
+        expect(find.text(manageMyStorageLabel(tester)), findsNothing);
+      });
+
+      testWidgets('hides the banner as soon as it is dismissed',
+          (tester) async {
+        arrangeQuotaBanner();
+        cachePaywallUrlTemplate('https://domain.tld/premium');
+        await pumpQuotaBanner(tester);
+
+        expect(find.byType(DefaultCloseButtonWidget), findsOneWidget);
+
+        await tester.tap(find.byType(DefaultCloseButtonWidget));
+        await tester.pump();
+
+        expect(find.byType(DefaultCloseButtonWidget), findsNothing);
+        expect(find.text(manageMyStorageLabel(tester)), findsNothing);
+      });
+
+      testWidgets('keeps CTA hidden on non-web platforms', (tester) async {
+        arrangeQuotaBanner();
+        cachePaywallUrlTemplate('https://domain.tld/premium');
+        await pumpQuotaBanner(tester, isWeb: false);
+
+        expect(find.text(manageMyStorageLabel(tester)), findsNothing);
+      });
+
+      testWidgets('reacts to Workplace FQDN changes', (tester) async {
+        arrangeQuotaBanner();
+        final container = await pumpQuotaBanner(tester);
+
+        expect(find.text(manageMyStorageLabel(tester)), findsNothing);
+
+        container
+            .read(workplaceFqdnUserInfoProvider.notifier)
+            .setFqdn('workplace.domain.tld');
+        await tester.pump();
+
+        expect(find.text(manageMyStorageLabel(tester)), findsOneWidget);
+
+        container.read(workplaceFqdnUserInfoProvider.notifier).setFqdn(null);
+        await tester.pump();
+
+        expect(find.text(manageMyStorageLabel(tester)), findsNothing);
+      });
+
+      testWidgets('uses the visible ecosystem paywall and rechecks on click',
+          (tester) async {
+        arrangeQuotaBanner();
+        final paywallLauncher = RecordingPaywallLauncher();
+        testPaywallLauncher = paywallLauncher;
+        await pumpQuotaBanner(tester);
+
+        expect(find.text(manageMyStorageLabel(tester)), findsNothing);
+
+        cachePaywallUrlTemplate('https://domain.tld/premium');
+        await tester.pump();
+
+        expect(find.text(manageMyStorageLabel(tester)), findsOneWidget);
+
+        await tester.tap(find.text(manageMyStorageLabel(tester)));
+        await tester.pump();
+
+        expect(paywallLauncher.launchCount, 1);
+        expect(
+          paywallLauncher.launchedDestination,
+          Uri.parse('https://domain.tld/premium'),
+        );
+
+        cachePaywallUrlTemplate(null);
+        await tester.tap(find.text(manageMyStorageLabel(tester)));
+
+        expect(paywallLauncher.launchCount, 1);
+
+        await tester.pump();
+        expect(find.text(manageMyStorageLabel(tester)), findsNothing);
+      });
+
+      testWidgets('re-resolves the destination with the current identity',
+          (tester) async {
+        arrangeQuotaBanner();
+        final paywallLauncher = RecordingPaywallLauncher();
+        testPaywallLauncher = paywallLauncher;
+        cachePaywallUrlTemplate(
+          'https://domain.tld/{localPart}/premium',
+        );
+        await pumpQuotaBanner(tester);
+
+        expect(find.text(manageMyStorageLabel(tester)), findsOneWidget);
+
+        mailboxDashboardController.ownEmailAddress.value =
+            'bob@domain.tld';
+        await tester.tap(find.text(manageMyStorageLabel(tester)));
+
+        expect(
+          paywallLauncher.launchedDestination,
+          Uri.parse('https://domain.tld/bob/premium'),
+        );
+      });
+    });
+
+    group('DesktopDashboardRouteBody', () {
+      const threadListKey = Key('desktop_thread_list_stub');
+
+      Future<void> pumpRouteBody(
+        WidgetTester tester,
+        DashboardRoutes route,
+      ) async {
+        await tester.pumpWidget(
+          makeTestableWidget(
+            child: DesktopDashboardRouteBody(
+              route: route,
+              threadListBuilder: (_) =>
+                  const SizedBox(key: threadListKey),
+            ),
+          ),
+        );
+        await tester.pump();
+      }
+
+      testWidgets(
+        'renders the inline thread list for the residual searchEmail route',
+        (tester) async {
+          await pumpRouteBody(tester, DashboardRoutes.searchEmail);
+
+          expect(find.byKey(threadListKey), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'renders the inline thread list for the thread route',
+        (tester) async {
+          await pumpRouteBody(tester, DashboardRoutes.thread);
+
+          expect(find.byKey(threadListKey), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'does not render the thread list for non-list routes',
+        (tester) async {
+          await pumpRouteBody(tester, DashboardRoutes.waiting);
+
+          expect(find.byKey(threadListKey), findsNothing);
+        },
+      );
     });
 
     group('ThreadView', () {
@@ -479,7 +855,7 @@ void main() {
         final threadViewFinder = find.byType(ThreadView);
         expect(threadViewFinder, findsOneWidget);
 
-        final emptyEmailWidgetFinder = find.byKey(const Key('empty_thread_view'));
+        final emptyEmailWidgetFinder = find.byKey(const Key(UiKeys.emptyThreadView));
         expect(emptyEmailWidgetFinder, findsNothing);
 
         final listViewEmailWidgetFinder = find.byKey(const PageStorageKey('list_presentation_email_in_threads'));
@@ -504,7 +880,7 @@ void main() {
 
         await tester.pump();
 
-        final folder1EmptyEmailWidgetFinder = find.byKey(const Key('empty_thread_view'));
+        final folder1EmptyEmailWidgetFinder = find.byKey(const Key(UiKeys.emptyThreadView));
         expect(folder1EmptyEmailWidgetFinder, findsNothing);
 
         final folder1ListViewEmailWidgetFinder = find.byKey(const PageStorageKey('list_presentation_email_in_threads'));
@@ -557,7 +933,7 @@ void main() {
 
         await tester.pump();
 
-        final emptyEmailWidgetFinder = find.byKey(const Key('empty_thread_view'));
+        final emptyEmailWidgetFinder = find.byKey(const Key(UiKeys.emptyThreadView));
         expect(emptyEmailWidgetFinder, findsOneWidget);
 
         final listViewEmailWidgetFinder = find.byKey(const PageStorageKey('list_presentation_email_in_threads'));
@@ -573,7 +949,7 @@ void main() {
 
         await tester.pump();
 
-        final folder1EmptyEmailWidgetFinder = find.byKey(const Key('empty_thread_view'));
+        final folder1EmptyEmailWidgetFinder = find.byKey(const Key(UiKeys.emptyThreadView));
         expect(folder1EmptyEmailWidgetFinder, findsNothing);
 
         final folder1ListViewEmailWidgetFinder = find.byKey(const PageStorageKey('list_presentation_email_in_threads'));
@@ -625,7 +1001,7 @@ void main() {
 
         await tester.pump();
 
-        final emptyEmailWidgetFinder = find.byKey(const Key('empty_thread_view'));
+        final emptyEmailWidgetFinder = find.byKey(const Key(UiKeys.emptyThreadView));
         expect(emptyEmailWidgetFinder, findsNothing);
 
         // Switch to mailbox Folder 1
@@ -642,7 +1018,7 @@ void main() {
 
         await tester.pump();
 
-        final folder1EmptyEmailWidgetFinder = find.byKey(const Key('empty_thread_view'));
+        final folder1EmptyEmailWidgetFinder = find.byKey(const Key(UiKeys.emptyThreadView));
         expect(folder1EmptyEmailWidgetFinder, findsOneWidget);
 
         final folder1ListViewEmailWidgetFinder = find.byKey(const PageStorageKey('list_presentation_email_in_threads'));
@@ -654,7 +1030,7 @@ void main() {
 
       testWidgets(
         'LoadMoreButton SHOULD be displayed\n'
-        'WHEN the load more action returns a non-empty list',
+        'WHEN the load more action returns a full page',
       (tester) async {
         debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
         final dpi = tester.view.devicePixelRatio;
@@ -682,22 +1058,20 @@ void main() {
         mailboxDashboardController.setSelectedMailbox(MailboxFixtures.inboxMailbox.toPresentationMailbox());
         mailboxDashboardController.updateEmailList(listEmailsOfInbox);
 
-        // Perform load more action
-        final emailList = <PresentationEmail>[
-          PresentationEmail(
-            id: EmailId(Id('id_4')),
+        // A full page response signals more emails may exist on the server
+        final emailList = List.generate(
+          ThreadConstants.maxCountEmails,
+          (index) => PresentationEmail(
+            id: EmailId(Id('load_more_$index')),
             mailboxIds: {
               MailboxFixtures.inboxMailbox.id!: true
             }
           ),
-          PresentationEmail(
-            id: EmailId(Id('id_5')),
-            mailboxIds: {
-              MailboxFixtures.inboxMailbox.id!: true
-            }
-          ),
-        ];
-        threadController.consumeState(Stream.value(Right(LoadMoreEmailsSuccess(emailList))));
+        );
+        threadController.consumeState(Stream.value(Right(LoadMoreEmailsSuccess(
+          emailList,
+          serverEmailCount: emailList.length,
+        ))));
 
         await tester.pump();
 
@@ -742,7 +1116,10 @@ void main() {
 
         // Perform load more action
         final emailList = <PresentationEmail>[];
-        threadController.consumeState(Stream.value(Right(LoadMoreEmailsSuccess(emailList))));
+        threadController.consumeState(Stream.value(Right(LoadMoreEmailsSuccess(
+          emailList,
+          serverEmailCount: emailList.length,
+        ))));
 
         await tester.pump();
 
@@ -801,16 +1178,7 @@ void main() {
           final currentSession = SessionFixtures.aliceSessionWithAICapability;
 
           // Arrange
-          when(
-            mailboxDashboardController
-                .appGridDashboardController.listLinagoraApp,
-          ).thenReturn(RxList([]));
-
-          when(
-            createDefaultMailboxInteractor.execute(any, any, any),
-          ).thenAnswer(
-            (_) => Stream.value(Right(CreateDefaultMailboxAllSuccess([]))),
-          );
+          arrangeSidebarMenu();
 
           when(
             treeBuilder.generateMailboxTreeInUI(
@@ -828,12 +1196,11 @@ void main() {
             ),
           );
 
-          when(uuid.v1()).thenReturn('dab123456789');
-
           mailboxDashboardController.isAINeedsActionSettingEnabled.value = true;
           mailboxDashboardController.sessionCurrent = currentSession;
 
           // Act
+          addTearDown(() => WidgetFixtures.resetResponsive(tester));
           await WidgetFixtures.pumpResponsiveWidget(
             tester,
             WidgetFixtures.makeTestableWidget(
@@ -873,12 +1240,12 @@ void main() {
           ).called(1);
 
           expect(find.byType(MailboxView), findsOneWidget);
-          expect(find.byType(MailboxItemWidget), findsAtLeastNWidgets(1));
+          expect(find.byType(SidebarMailboxItem), findsAtLeastNWidgets(1));
 
           expect(
             find.byWidgetPredicate(
               (widget) =>
-                  widget is MailboxItemWidget &&
+                  widget is SidebarMailboxItem &&
                   widget.mailboxNode.item.id ==
                       PresentationMailbox.actionRequiredFolder.id,
             ),
@@ -939,16 +1306,7 @@ void main() {
               SessionFixtures.aliceSessionWithoutAICapability;
 
           // Arrange
-          when(
-            mailboxDashboardController
-                .appGridDashboardController.listLinagoraApp,
-          ).thenReturn(RxList([]));
-
-          when(
-            createDefaultMailboxInteractor.execute(any, any, any),
-          ).thenAnswer(
-            (_) => Stream.value(Right(CreateDefaultMailboxAllSuccess([]))),
-          );
+          arrangeSidebarMenu();
 
           when(
             treeBuilder.generateMailboxTreeInUI(
@@ -966,13 +1324,12 @@ void main() {
             ),
           );
 
-          when(uuid.v1()).thenReturn('dab123456789');
-
           mailboxDashboardController.isAINeedsActionSettingEnabled.value =
               false;
           mailboxDashboardController.sessionCurrent = currentSession;
 
           // Act
+          addTearDown(() => WidgetFixtures.resetResponsive(tester));
           await WidgetFixtures.pumpResponsiveWidget(
             tester,
             WidgetFixtures.makeTestableWidget(
@@ -1012,12 +1369,12 @@ void main() {
           ).called(1);
 
           expect(find.byType(MailboxView), findsOneWidget);
-          expect(find.byType(MailboxItemWidget), findsAtLeastNWidgets(1));
+          expect(find.byType(SidebarMailboxItem), findsAtLeastNWidgets(1));
 
           expect(
             find.byWidgetPredicate(
               (widget) =>
-                  widget is MailboxItemWidget &&
+                  widget is SidebarMailboxItem &&
                   widget.mailboxNode.item.id ==
                       PresentationMailbox.actionRequiredFolder.id,
             ),
@@ -1032,8 +1389,422 @@ void main() {
           WidgetFixtures.resetResponsive(tester);
         },
       );
+
+      testWidgets(
+        'GIVEN the sidebar is wrapped in a scroll behavior '
+        'WHEN the sidebar list is built '
+        'THEN it uses the bouncing physics of that behavior',
+        (tester) async {
+          // Arrange
+          arrangeSidebarMenu();
+
+          // Act: Android defaults to clamping physics, so bouncing can only
+          // come from the scroll behavior the view installs around the sidebar.
+          addTearDown(() => WidgetFixtures.resetResponsive(tester));
+          await WidgetFixtures.pumpResponsiveWidget(
+            tester,
+            WidgetFixtures.makeTestableWidget(
+              child: MailboxView(),
+            ),
+            logicalSize: const Size(1920, 1080),
+            platform: TargetPlatform.android,
+          );
+
+          // Assert
+          final scrollable = tester.widget<Scrollable>(
+            _verticalScrollableIn(find.byType(MailboxView)),
+          );
+          expect(scrollable.physics, isA<AlwaysScrollableScrollPhysics>());
+          expect(scrollable.physics?.parent, isA<BouncingScrollPhysics>());
+
+          WidgetFixtures.resetResponsive(tester);
+        },
+      );
+
+      testWidgets(
+        'GIVEN personal folders are collapsed '
+        'WHEN the sidebar expand controls are pressed '
+        'THEN the visible tree follows the folder and category state',
+        (tester) async {
+          arrangeSidebarMenu();
+
+          final childMailbox = MailboxNode(
+            PresentationMailbox(
+              MailboxId(Id('personal-child')),
+              name: MailboxName('Personal child'),
+              parentId: MailboxId(Id('personal-parent')),
+            ),
+          );
+          final parentMailbox = MailboxNode(
+            PresentationMailbox(
+              MailboxId(Id('personal-parent')),
+              name: MailboxName('Personal parent'),
+            ),
+            childrenItems: [childMailbox],
+            expandMode: ExpandMode.COLLAPSE,
+          );
+          final personalRoot = MailboxNode.root()
+            ..addChildNode(parentMailbox);
+          mailboxController.updateMailboxTree(
+            mailboxCollection: MailboxCollection(
+              allMailboxes: [parentMailbox.item, childMailbox.item],
+              defaultTree: MailboxTree(MailboxNode.root()),
+              personalTree: MailboxTree(personalRoot),
+              teamMailboxTree: MailboxTree(MailboxNode.root()),
+            ),
+          );
+          mailboxController.toggleMailboxCategories(MailboxCategories.personalFolders);
+
+          addTearDown(() => WidgetFixtures.resetResponsive(tester));
+          await WidgetFixtures.pumpResponsiveWidget(
+            tester,
+            WidgetFixtures.makeTestableWidget(child: MailboxView()),
+            logicalSize: const Size(1920, 1080),
+            platform: TargetPlatform.macOS,
+          );
+
+          Finder mailboxById(String id) => find.byWidgetPredicate(
+            (widget) =>
+                widget is SidebarMailboxItem && widget.mailboxNode.item.id == MailboxId(Id(id)),
+          );
+          final context = tester.element(find.byType(MailboxView));
+          final personalCategory = find.byWidgetPredicate(
+            (widget) =>
+                widget is LinagoraSidebarItem &&
+                widget.label == MailboxCategories.personalFolders.getTitle(context),
+          );
+
+          expect(find.byType(LinagoraSidebarMenu), findsOneWidget);
+          expect(find.byType(LinagoraSidebarFooter), findsOneWidget);
+          expect(mailboxById('personal-parent'), findsNothing);
+          expect(mailboxById('personal-child'), findsNothing);
+
+          await tester.tap(personalCategory);
+          await tester.pump();
+
+          expect(
+            MailboxCategories.personalFolders.getExpandMode(
+              mailboxController.mailboxCategoriesExpandMode.value,
+            ),
+            ExpandMode.EXPAND,
+          );
+          expect(mailboxById('personal-parent'), findsOneWidget);
+          expect(mailboxById('personal-child'), findsNothing);
+
+          await tester.tap(
+            find.descendant(
+              of: mailboxById('personal-parent'),
+              matching: find.byType(LinagoraSidebarControl),
+            ),
+          );
+          await tester.pump();
+
+          expect(mailboxById('personal-child'), findsOneWidget);
+
+          final foldersHeader = find.byWidgetPredicate(
+            (widget) =>
+                widget is LinagoraSidebarSectionHeader &&
+                widget.label == AppLocalizations.of(context).folders,
+          );
+          await tester.tap(
+            find.descendant(
+              of: foldersHeader,
+              matching: find.byType(LinagoraSidebarControl),
+            ),
+          );
+          await tester.pump();
+
+          expect(mailboxController.foldersExpandMode.value, ExpandMode.COLLAPSE);
+          expect(mailboxById('personal-parent'), findsNothing);
+          expect(find.byType(LinagoraSidebarFooter), findsOneWidget);
+
+          WidgetFixtures.resetResponsive(tester);
+        },
+      );
+
+      testWidgets(
+        'GIVEN the mobile drawer '
+        'WHEN the sidebar is built '
+        'THEN its footer is pinned outside the always-scrollable body',
+        (tester) async {
+          arrangeSidebarMenu();
+
+          addTearDown(() => WidgetFixtures.resetResponsive(tester));
+          await WidgetFixtures.pumpResponsiveWidget(
+            tester,
+            WidgetFixtures.makeTestableWidget(
+              child: mobile_mailbox_view.MailboxView(),
+            ),
+            logicalSize: const Size(375, 720),
+            platform: TargetPlatform.android,
+          );
+
+          final sidebarScrollable = _verticalScrollableIn(
+            find.byType(mobile_mailbox_view.MailboxView),
+          );
+          final refreshIndicator = tester.widget<RefreshIndicator>(
+            find.byType(RefreshIndicator),
+          );
+          final refreshContext = tester.element(find.byType(RefreshIndicator));
+
+          expect(find.byType(LinagoraSidebarMenu), findsOneWidget);
+          expect(find.byType(LinagoraSidebarFooter), findsOneWidget);
+          expect(
+            find.descendant(
+              of: sidebarScrollable,
+              matching: find.byType(LinagoraSidebarFooter),
+            ),
+            findsNothing,
+          );
+          expect(
+            tester.widget<Scrollable>(sidebarScrollable).physics,
+            isA<AlwaysScrollableScrollPhysics>(),
+          );
+          expect(
+            refreshIndicator.notificationPredicate(
+              _scrollNotification(refreshContext, AxisDirection.down),
+            ),
+            isTrue,
+          );
+          expect(
+            refreshIndicator.notificationPredicate(
+              _scrollNotification(refreshContext, AxisDirection.right),
+            ),
+            isFalse,
+          );
+
+          WidgetFixtures.resetResponsive(tester);
+        },
+      );
+
+      testWidgets(
+        'GIVEN premium and storage are available on web '
+        'WHEN ecosystem paywall loads and clears after the first render '
+        'THEN increase-space CTA follows its availability',
+        (tester) async {
+          arrangeIncreaseSpaceAvailable();
+          await pumpWebMailbox(tester);
+
+          expect(find.byType(LinagoraSidebarUpsellButton), findsNothing);
+
+          cachePaywallUrlTemplate('javascript:alert(1)');
+          await tester.pump();
+
+          expect(find.byType(LinagoraSidebarUpsellButton), findsNothing);
+
+          cachePaywallUrlTemplate('https://domain.tld/#/premium');
+          await tester.pump();
+
+          expect(find.byType(LinagoraSidebarUpsellButton), findsOneWidget);
+
+          cachePaywallUrlTemplate(null);
+          await tester.pump();
+
+          expect(find.byType(LinagoraSidebarUpsellButton), findsNothing);
+
+          WidgetFixtures.resetResponsive(tester);
+        },
+      );
+
+      testWidgets(
+        'GIVEN premium and storage are available on web '
+        'WHEN Workplace FQDN loads and clears after the first render '
+        'THEN increase-space CTA follows its availability',
+        (tester) async {
+          arrangeIncreaseSpaceAvailable();
+          final providerContainer = await pumpWebMailbox(tester);
+
+          providerContainer
+              .read(workplaceFqdnUserInfoProvider.notifier)
+              .setFqdn('workplace.domain.tld');
+          await tester.pumpAndSettle();
+
+          expect(find.byType(LinagoraSidebarUpsellButton), findsOneWidget);
+
+          providerContainer
+              .read(workplaceFqdnUserInfoProvider.notifier)
+              .setFqdn(null);
+          await tester.pump();
+
+          expect(find.byType(LinagoraSidebarUpsellButton), findsNothing);
+
+          WidgetFixtures.resetResponsive(tester);
+        },
+      );
+
+      testWidgets(
+        'GIVEN increase-space CTA is visible '
+        'WHEN paywall becomes unavailable before the button rebuilds '
+        'THEN the stale tap does not navigate',
+        (tester) async {
+          arrangeIncreaseSpaceAvailable();
+          final paywallLauncher = RecordingPaywallLauncher();
+          testPaywallLauncher = paywallLauncher;
+          cachePaywallUrlTemplate('https://domain.tld/premium');
+          await pumpWebMailbox(tester);
+
+          expect(find.byType(LinagoraSidebarUpsellButton), findsOneWidget);
+
+          cachePaywallUrlTemplate(null);
+          await tester.tap(find.byType(LinagoraSidebarUpsellButton));
+
+          expect(paywallLauncher.launchCount, 0);
+
+          await tester.pump();
+          expect(find.byType(LinagoraSidebarUpsellButton), findsNothing);
+
+          WidgetFixtures.resetResponsive(tester);
+        },
+      );
+
+      testWidgets(
+        'GIVEN all increase-space conditions are available '
+        'WHEN the mobile drawer is built '
+        'THEN increase-space CTA remains hidden',
+        (tester) async {
+          arrangeIncreaseSpaceAvailable();
+          cachePaywallUrlTemplate('https://domain.tld/paywall');
+
+          addTearDown(() => WidgetFixtures.resetResponsive(tester));
+          await WidgetFixtures.pumpResponsiveWidget(
+            tester,
+            WidgetFixtures.makeTestableWidget(
+              child: mobile_mailbox_view.MailboxView(),
+            ),
+            logicalSize: const Size(375, 720),
+            platform: TargetPlatform.android,
+          );
+
+          expect(find.byType(LinagoraSidebarUpsellButton), findsNothing);
+
+          WidgetFixtures.resetResponsive(tester);
+        },
+      );
+
+      testWidgets(
+        'GIVEN storage quotas cross display thresholds '
+        'WHEN the sidebar footer rebuilds '
+        'THEN it maps normal, warning and full states correctly',
+        (tester) async {
+          arrangeSidebarMenu();
+
+          mailboxDashboardController.octetsQuota.value = _storageQuota(
+            used: 80,
+            hardLimit: 100,
+            warnLimit: 90,
+          );
+
+          addTearDown(() => WidgetFixtures.resetResponsive(tester));
+          await WidgetFixtures.pumpResponsiveWidget(
+            tester,
+            WidgetFixtures.makeTestableWidget(child: MailboxView()),
+            logicalSize: const Size(1920, 1080),
+            platform: TargetPlatform.macOS,
+          );
+
+          expect(find.byType(LinagoraSidebarStorage), findsNothing);
+
+          mailboxDashboardController.octetsQuota.value = _storageQuota(
+            used: 81,
+            hardLimit: 100,
+            warnLimit: 90,
+          );
+          await tester.pump();
+
+          var storage = tester.widget<LinagoraSidebarStorage>(
+            find.byType(LinagoraSidebarStorage),
+          );
+          expect(storage.progress, 0.81);
+          expect(
+            storage.progressState,
+            LinagoraSidebarStorageProgressState.normal,
+          );
+          expect(
+            storage.statusState,
+            LinagoraSidebarStorageStatusState.normal,
+          );
+
+          mailboxDashboardController.octetsQuota.value = _storageQuota(
+            used: 90,
+            hardLimit: 100,
+            warnLimit: 90,
+          );
+          await tester.pump();
+
+          storage = tester.widget<LinagoraSidebarStorage>(
+            find.byType(LinagoraSidebarStorage),
+          );
+          expect(
+            storage.progressState,
+            LinagoraSidebarStorageProgressState.warning,
+          );
+          expect(
+            storage.statusState,
+            LinagoraSidebarStorageStatusState.normal,
+          );
+
+          mailboxDashboardController.octetsQuota.value = _storageQuota(
+            used: 100,
+            hardLimit: 100,
+            warnLimit: 90,
+          );
+          await tester.pump();
+
+          storage = tester.widget<LinagoraSidebarStorage>(
+            find.byType(LinagoraSidebarStorage),
+          );
+          expect(
+            storage.progressState,
+            LinagoraSidebarStorageProgressState.full,
+          );
+          expect(
+            storage.statusState,
+            LinagoraSidebarStorageStatusState.error,
+          );
+
+          WidgetFixtures.resetResponsive(tester);
+        },
+      );
     });
 
     tearDown(Get.deleteAll);
   });
 }
+
+Finder _verticalScrollableIn(Finder parent) => find.descendant(
+  of: parent,
+  matching: find.byWidgetPredicate(
+    (widget) =>
+        widget is Scrollable && widget.axisDirection == AxisDirection.down,
+  ),
+).first;
+
+ScrollUpdateNotification _scrollNotification(
+  BuildContext context,
+  AxisDirection axisDirection,
+) => ScrollUpdateNotification(
+  context: context,
+  depth: 1,
+  metrics: FixedScrollMetrics(
+    axisDirection: axisDirection,
+    devicePixelRatio: 1,
+    maxScrollExtent: 48,
+    minScrollExtent: 0,
+    pixels: 0,
+    viewportDimension: 240,
+  ),
+);
+
+Quota _storageQuota({
+  required int used,
+  required int hardLimit,
+  required int warnLimit,
+}) => Quota(
+  Id('storage'),
+  ResourceType.octets,
+  Scope.account,
+  'Storage',
+  used: UnsignedInt(used),
+  hardLimit: UnsignedInt(hardLimit),
+  warnLimit: UnsignedInt(warnLimit),
+);

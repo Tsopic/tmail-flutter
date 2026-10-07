@@ -11,6 +11,8 @@ extension LabelExtension on Label {
 
   String get safeDisplayName => displayName ?? '';
 
+  String get safeDescription => description ?? '';
+
   Color? get backgroundColor {
     if (id?.value == moreLabelId) {
       return AppColor.grayBackgroundColor;

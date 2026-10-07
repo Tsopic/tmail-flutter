@@ -24,9 +24,14 @@ class DeleteMultipleMailboxInteractor {
     try {
       yield Right<Failure, Success>(LoadingDeleteMultipleMailboxAll());
 
-      final currentMailboxState = await _mailboxRepository.getMailboxState(session, accountId);
+      final currentMailboxState = await _mailboxRepository.getMailboxState(
+        session,
+        accountId,
+      );
 
-      final mailboxResponses = await _mailboxRepository.getAllMailbox(session, accountId).toList();
+      final mailboxResponses = await _mailboxRepository
+          .getAllMailbox(session, accountId)
+          .toList();
 
       final Set<MailboxId> seenIds = {};
       final List<PresentationMailbox> allMailboxes = [];
@@ -57,17 +62,21 @@ class DeleteMultipleMailboxInteractor {
       final allFailed = listResult.every((result) => result.isNotEmpty);
 
       if (allSuccess) {
-        yield Right<Failure, Success>(DeleteMultipleMailboxAllSuccess(
-          listMailboxIdToDelete,
-          currentMailboxState: currentMailboxState,
-        ));
+        yield Right<Failure, Success>(
+          DeleteMultipleMailboxAllSuccess(
+            listMailboxIdToDelete,
+            currentMailboxState: currentMailboxState,
+          ),
+        );
       } else if (allFailed) {
         yield Left<Failure, Success>(DeleteMultipleMailboxAllFailure());
       } else {
-        yield Right<Failure, Success>(DeleteMultipleMailboxHasSomeSuccess(
-          listMailboxIdToDelete,
-          currentMailboxState: currentMailboxState,
-        ));
+        yield Right<Failure, Success>(
+          DeleteMultipleMailboxHasSomeSuccess(
+            listMailboxIdToDelete,
+            currentMailboxState: currentMailboxState,
+          ),
+        );
       }
     } catch (e) {
       logWarning('DeleteMultipleMailboxInteractor::execute(): exception: $e');
@@ -75,11 +84,11 @@ class DeleteMultipleMailboxInteractor {
     }
   }
 
-  /// Builds the map of [MailboxId] to ordered delete list for each selected root,
+  /// Builds the map of [MailboxId] → ordered delete list for each selected root,
   /// plus a flat list of all IDs to delete.
   ///
   /// Uses [allMailboxes] (subscribed and unsubscribed) so hidden subfolders are
-  /// automatically included; no separate unsubscribed-tree pass is needed.
+  /// automatically included — no separate unsubscribed-tree pass is needed.
   Tuple2<Map<MailboxId, List<MailboxId>>, List<MailboxId>> _buildDeleteMap(
     List<MailboxId> selectedMailboxIds,
     List<PresentationMailbox> allMailboxes,
@@ -92,8 +101,11 @@ class DeleteMultipleMailboxInteractor {
       if (processedIds.contains(mailboxId)) continue;
 
       // Collect all descendants (pre-order DFS), then reverse so deepest children
-      // come first. The server requires children to be deleted before parents.
-      final descendants = _collectDescendantsPreOrder(mailboxId, parentToChildren);
+      // come first — the server requires children to be deleted before parents.
+      final descendants = _collectDescendantsPreOrder(
+        mailboxId,
+        parentToChildren,
+      );
       final deleteOrder = descendants.reversed.toList();
 
       mapDescendantIds[mailboxId] = deleteOrder;

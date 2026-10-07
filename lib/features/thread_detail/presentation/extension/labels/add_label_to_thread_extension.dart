@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:flutter/material.dart';
 import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:jmap_dart_client/jmap/core/session/session.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email.dart';
@@ -19,20 +20,20 @@ import 'package:tmail_ui_user/main/routes/dialog_router.dart';
 
 extension AddLabelToThreadExtension on ThreadDetailController {
   Future<void> openAddLabelToEmailDialogModal() async {
-    if (!mailboxDashBoardController.isLabelAvailable) return;
-
-    final labels = mailboxDashBoardController.labelController.labels;
-    if (emailsInThreadDetailInfo.isEmpty || labels.isEmpty) {
+    if (!mailboxDashBoardController.isLabelAvailable ||
+        emailsInThreadDetailInfo.isEmpty) {
       return;
     }
-
+    final labelController = mailboxDashBoardController.labelController;
+    final labels = labelController.labels;
     final threadLabels =
         emailsInThreadDetailInfo.findCommonLabelsInThread(labels: labels);
 
     final emailIds = emailsInThreadDetailInfo.emailIdsToDisplay(true);
 
-    await DialogRouter().openDialogModal(
+    final newLabel = await DialogRouter().openDialogModal(
       child: AddLabelToEmailModal(
+        key: const Key('add_label_to_thread_modal'),
         labels: labels,
         emailLabels: threadLabels,
         emailIds: emailIds,
@@ -43,9 +44,17 @@ extension AddLabelToThreadExtension on ThreadDetailController {
             currentEmailIds: emailIds,
           );
         },
+        onCreateANewLabelAction: () => labelController.onCreateALabelAction(
+          accountId: accountId,
+          shouldPop: true,
+        ),
       ),
       dialogLabel: 'add-label-to-thread-modal',
     );
+
+    if (newLabel is Label) {
+      toggleLabelToThread(newLabel, isSelected: true);
+    }
   }
 
   void toggleLabelToThread(
@@ -112,7 +121,7 @@ extension AddLabelToThreadExtension on ThreadDetailController {
       consumeState(
         Stream.value(Left(
           AddALabelToAThreadFailure(
-            exception: LabelKeywordIsNull(),
+            exception: const LabelKeywordIsNull(),
             labelDisplay: labelDisplay,
           ),
         )),
@@ -212,7 +221,7 @@ extension AddLabelToThreadExtension on ThreadDetailController {
     mailboxDashBoardController.updateEmailFlagByEmailIds(
       emailIds,
       isLabelAdded: !remove,
-      labelKeyword: labelKeyword,
+      labelKeywords: [labelKeyword],
     );
   }
 

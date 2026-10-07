@@ -1,8 +1,8 @@
-
 import 'package:core/presentation/extensions/color_extension.dart';
 import 'package:core/presentation/extensions/html_extension.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:flutter/material.dart';
+import 'package:jmap_dart_client/jmap/core/utc_date.dart';
 import 'package:model/email/email_action_type.dart';
 import 'package:model/email/presentation_email.dart';
 import 'package:model/extensions/list_email_address_extension.dart';
@@ -12,42 +12,55 @@ import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 extension EmailActionTypeExtension on EmailActionType {
   String getSubjectComposer(BuildContext? context, String subject) {
+    if (_isIdentitySubjectAction) return subject;
     final l10n = context != null ? AppLocalizations.of(context) : null;
-
-    switch (this) {
-      case EmailActionType.reply:
-      case EmailActionType.replyToList:
-      case EmailActionType.replyAll:
-        return EmailUtils.applyPrefix(
-          subject: subject,
-          defaultPrefix: EmailUtils.defaultReplyPrefix,
-          localizedPrefix: l10n?.prefix_reply_email,
-        );
-      case EmailActionType.forward:
-        return EmailUtils.applyPrefix(
-          subject: subject,
-          defaultPrefix: EmailUtils.defaultForwardPrefix,
-          localizedPrefix: l10n?.prefix_forward_email,
-        );
-      case EmailActionType.editDraft:
-      case EmailActionType.editSendingEmail:
-      case EmailActionType.reopenComposerBrowser:
-      case EmailActionType.editAsNewEmail:
-      case EmailActionType.composeFromMailtoUri:
-      case EmailActionType.composeFromUnsubscribeMailtoLink:
-        return subject;
-      default:
-        return '';
+    if (_isPrefixReplyAction) {
+      return EmailUtils.applyPrefix(
+        subject: subject,
+        defaultPrefix: EmailUtils.defaultReplyPrefix,
+        localizedPrefix: l10n?.prefix_reply_email,
+      );
     }
+    if (this == EmailActionType.forward) {
+      return EmailUtils.applyPrefix(
+        subject: subject,
+        defaultPrefix: EmailUtils.defaultForwardPrefix,
+        localizedPrefix: l10n?.prefix_forward_email,
+      );
+    }
+    return '';
   }
 
-  String getToastMessageMoveToMailboxSuccess(BuildContext context, {String? destinationPath}) {
-    switch(this) {
+  bool get _isPrefixReplyAction => const {
+    EmailActionType.reply,
+    EmailActionType.replyToList,
+    EmailActionType.replyAll,
+  }.contains(this);
+
+  bool get _isIdentitySubjectAction => const {
+    EmailActionType.editDraft,
+    EmailActionType.editSendingEmail,
+    EmailActionType.reopenComposerBrowser,
+    EmailActionType.restoreComposerFromPersistentCache,
+    EmailActionType.editAsNewEmail,
+    EmailActionType.composeFromMailtoUri,
+    EmailActionType.composeFromUnsubscribeMailtoLink,
+  }.contains(this);
+
+  String getToastMessageMoveToMailboxSuccess(
+    BuildContext context, {
+    String? destinationPath,
+  }) {
+    switch (this) {
       case EmailActionType.archiveMessage:
       case EmailActionType.moveToMailbox:
-        return AppLocalizations.of(context).movedToFolder(destinationPath ?? '');
+        return AppLocalizations.of(
+          context,
+        ).movedToFolder(destinationPath ?? '');
       case EmailActionType.moveToTrash:
-        return AppLocalizations.of(context).moved_to_trash;
+        return destinationPath?.trim().isNotEmpty == true
+            ? AppLocalizations.of(context).movedToFolder(destinationPath!)
+            : AppLocalizations.of(context).moved_to_trash;
       case EmailActionType.moveToSpam:
         return AppLocalizations.of(context).marked_as_spam;
       case EmailActionType.unSpam:
@@ -60,65 +73,79 @@ extension EmailActionTypeExtension on EmailActionType {
   String? getHeaderEmailQuoted({
     required Locale locale,
     required AppLocalizations appLocalizations,
-    required PresentationEmail presentationEmail
+    required PresentationEmail presentationEmail,
   }) {
     final languageTag = locale.toLanguageTag();
-    switch(this) {
+    switch (this) {
       case EmailActionType.reply:
       case EmailActionType.replyToList:
       case EmailActionType.replyAll:
         final receivedAt = presentationEmail.receivedAt;
-        final emailAddress = presentationEmail.from.toEscapeHtmlStringUseCommaSeparator();
+        final emailAddress = presentationEmail.from
+            .toEscapeHtmlStringUseCommaSeparator();
         return appLocalizations.header_email_quoted(
-          receivedAt.formatDateToLocal(pattern: 'MMM d, y h:mm a', locale: languageTag),
-          emailAddress
+          _formatQuotedDateTime(receivedAt, appLocalizations, languageTag),
+          emailAddress,
         );
       case EmailActionType.forward:
-        var headerQuoted = '------- ${appLocalizations.forwarded_message} -------'.addNewLineTag();
+        var headerQuoted =
+            '------- ${appLocalizations.forwarded_message} -------'
+                .addNewLineTag();
 
         final subject = presentationEmail.subject?.escapeLtGtHtmlString() ?? '';
         final receivedAt = presentationEmail.receivedAt;
-        final fromEmailAddress = presentationEmail.from.toEscapeHtmlStringUseCommaSeparator();
-        final toEmailAddress = presentationEmail.to.toEscapeHtmlStringUseCommaSeparator();
-        final ccEmailAddress = presentationEmail.cc.toEscapeHtmlStringUseCommaSeparator();
-        final bccEmailAddress = presentationEmail.bcc.toEscapeHtmlStringUseCommaSeparator();
-        final replyToEmailAddress = presentationEmail.replyTo.toEscapeHtmlStringUseCommaSeparator();
+        final fromEmailAddress = presentationEmail.from
+            .toEscapeHtmlStringUseCommaSeparator();
+        final toEmailAddress = presentationEmail.to
+            .toEscapeHtmlStringUseCommaSeparator();
+        final ccEmailAddress = presentationEmail.cc
+            .toEscapeHtmlStringUseCommaSeparator();
+        final bccEmailAddress = presentationEmail.bcc
+            .toEscapeHtmlStringUseCommaSeparator();
+        final replyToEmailAddress = presentationEmail.replyTo
+            .toEscapeHtmlStringUseCommaSeparator();
 
         if (subject.isNotEmpty) {
           headerQuoted = headerQuoted
-            .append('${appLocalizations.subject_email}: ')
-            .append(subject)
-            .addNewLineTag();
+              .append('${appLocalizations.subject_email}: ')
+              .append(subject)
+              .addNewLineTag();
         }
         if (receivedAt != null) {
           headerQuoted = headerQuoted
-            .append('${appLocalizations.date}: ')
-            .append(receivedAt.formatDateToLocal(pattern: 'MMM d, y h:mm a', locale: languageTag))
-            .addNewLineTag();
+              .append('${appLocalizations.date}: ')
+              .append(
+                _formatQuotedDateTime(
+                  receivedAt,
+                  appLocalizations,
+                  languageTag,
+                ),
+              )
+              .addNewLineTag();
         }
         if (fromEmailAddress.isNotEmpty) {
           headerQuoted = headerQuoted
-            .append('${appLocalizations.from_email_address_prefix}: ')
-            .append(fromEmailAddress)
-            .addNewLineTag();
+              .append('${appLocalizations.from_email_address_prefix}: ')
+              .append(fromEmailAddress)
+              .addNewLineTag();
         }
         if (toEmailAddress.isNotEmpty) {
           headerQuoted = headerQuoted
-            .append('${appLocalizations.to_email_address_prefix}: ')
-            .append(toEmailAddress)
-            .addNewLineTag();
+              .append('${appLocalizations.to_email_address_prefix}: ')
+              .append(toEmailAddress)
+              .addNewLineTag();
         }
         if (ccEmailAddress.isNotEmpty) {
           headerQuoted = headerQuoted
-            .append('${appLocalizations.cc_email_address_prefix}: ')
-            .append(ccEmailAddress)
-            .addNewLineTag();
+              .append('${appLocalizations.cc_email_address_prefix}: ')
+              .append(ccEmailAddress)
+              .addNewLineTag();
         }
         if (bccEmailAddress.isNotEmpty) {
           headerQuoted = headerQuoted
-            .append('${appLocalizations.bcc_email_address_prefix}: ')
-            .append(bccEmailAddress)
-            .addNewLineTag();
+              .append('${appLocalizations.bcc_email_address_prefix}: ')
+              .append(bccEmailAddress)
+              .addNewLineTag();
         }
         if (replyToEmailAddress.isNotEmpty) {
           headerQuoted = headerQuoted
@@ -133,8 +160,20 @@ extension EmailActionTypeExtension on EmailActionType {
     }
   }
 
+  String _formatQuotedDateTime(
+    UTCDate? dateTime,
+    AppLocalizations appLocalizations,
+    String languageTag,
+  ) {
+    if (dateTime == null) return '';
+    return appLocalizations.header_email_quoted_date_time(
+      dateTime.formatDateToLocal(pattern: 'yMMMd', locale: languageTag),
+      dateTime.formatDateToLocal(pattern: 'jm', locale: languageTag),
+    );
+  }
+
   String getIcon(ImagePaths imagePaths) {
-    switch(this) {
+    switch (this) {
       case EmailActionType.markAsRead:
         return imagePaths.icRead;
       case EmailActionType.markAsUnread:
@@ -148,7 +187,7 @@ extension EmailActionTypeExtension on EmailActionType {
       case EmailActionType.unsubscribe:
         return imagePaths.icUnsubscribe;
       case EmailActionType.archiveMessage:
-        return imagePaths.icMailboxArchived;
+        return imagePaths.icMailboxArchivedAction;
       case EmailActionType.downloadMessageAsEML:
         return imagePaths.icDownloadAttachment;
       case EmailActionType.editAsNewEmail:
@@ -182,7 +221,7 @@ extension EmailActionTypeExtension on EmailActionType {
   }
 
   String getTitle(AppLocalizations appLocalizations) {
-    switch(this) {
+    switch (this) {
       case EmailActionType.markAsRead:
         return appLocalizations.mark_as_read;
       case EmailActionType.markAsUnread:
@@ -231,7 +270,7 @@ extension EmailActionTypeExtension on EmailActionType {
   }
 
   Color getPopupMenuIconColor() {
-    switch(this) {
+    switch (this) {
       case EmailActionType.deletePermanently:
         return AppColor.redFF3347;
       default:
@@ -240,7 +279,7 @@ extension EmailActionTypeExtension on EmailActionType {
   }
 
   Color getPopupMenuTitleColor() {
-    switch(this) {
+    switch (this) {
       case EmailActionType.deletePermanently:
         return AppColor.redFF3347;
       default:
@@ -249,7 +288,7 @@ extension EmailActionTypeExtension on EmailActionType {
   }
 
   Color getContextMenuIconColor() {
-    switch(this) {
+    switch (this) {
       case EmailActionType.deletePermanently:
         return AppColor.redFF3347;
       default:
@@ -258,7 +297,7 @@ extension EmailActionTypeExtension on EmailActionType {
   }
 
   Color getContextMenuTitleColor() {
-    switch(this) {
+    switch (this) {
       case EmailActionType.deletePermanently:
         return AppColor.redFF3347;
       default:

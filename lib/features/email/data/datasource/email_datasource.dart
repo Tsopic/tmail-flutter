@@ -99,7 +99,10 @@ abstract class EmailDataSource {
     AccountId accountId,
     Email newEmail,
     EmailId oldEmailId,
-    {CancelToken? cancelToken}
+    {
+      CancelToken? cancelToken,
+      bool isUpdateDraftToClose = false,
+    }
   );
 
   Future<Email> saveEmailAsTemplate(
@@ -237,5 +240,15 @@ abstract class EmailDataSource {
     AccountId accountId,
     List<EmailId> emailIds,
     KeyWordIdentifier labelKeyword,
+  );
+
+  Future<({
+    List<EmailId> emailIdsSuccess,
+    Map<Id, SetError> mapErrors,
+  })> addListLabelToListEmail(
+    Session session,
+    AccountId accountId,
+    List<EmailId> emailIds,
+    List<KeyWordIdentifier> labelKeywords,
   );
 }

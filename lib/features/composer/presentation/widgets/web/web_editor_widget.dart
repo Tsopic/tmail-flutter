@@ -4,12 +4,15 @@ import 'package:collection/collection.dart';
 import 'package:core/utils/app_logger.dart';
 import 'package:core/utils/html/html_template.dart';
 import 'package:core/utils/html/html_utils.dart';
+import 'package:core/utils/platform_info.dart';
 import 'package:flutter/material.dart';
 import 'package:html_editor_enhanced/html_editor.dart';
 import 'package:tmail_ui_user/features/composer/presentation/mixin/text_selection_mixin.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/web/signature_tooltip_widget.dart';
+import 'package:tmail_ui_user/features/composer/presentation/widgets/web/web_editor_script_plan.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:universal_html/html.dart' hide VoidCallback;
+import 'package:workplace/presentation/utils/workplace_scripts.dart';
 
 typedef OnChangeContentEditorAction = Function(String? text);
 typedef OnInitialContentEditorAction = Function(String text);
@@ -104,7 +107,7 @@ class _WebEditorState extends State<WebEditorWidget> with TextSelectionMixin {
     _editorController = widget.editorController;
 
     final registerSelectionChange =
-      HtmlUtils.registerSelectionChangeListener(_createdViewId);
+      HtmlUtils.registerSelectionChangeListener(_createdViewId, isWebPlatform: PlatformInfo.isWeb);
     _selectionChangeScript = WebScript(
       name: registerSelectionChange.name,
       script: registerSelectionChange.script,
@@ -113,13 +116,16 @@ class _WebEditorState extends State<WebEditorWidget> with TextSelectionMixin {
     _editorListener = (event) {
       try {
         if (event is MessageEvent) {
-          final data = jsonDecode(event.data);
+          final data = event.data is Map ? event.data : jsonDecode(event.data);
 
           if (data['name'] == HtmlUtils.registerDropListener.name) {
             _editorController.evaluateJavascriptWeb(HtmlUtils.removeLineHeight1px.name);
           } else if (data['name'] == _selectionChangeScript.name
               && data['viewId'] == _createdViewId) {
             handleSelectionChange(data);
+          } else if (data['type'] == 'toDart: driveCardDeleted'
+              && data['viewId'] == _createdViewId) {
+            _syncContentAfterDriveCardDeleted();
           }
         }
       } catch (e) {
@@ -145,6 +151,8 @@ class _WebEditorState extends State<WebEditorWidget> with TextSelectionMixin {
   void dispose() {
     _editorController.evaluateJavascriptWeb(
       HtmlUtils.unregisterDropListener.name);
+    _editorController.evaluateJavascriptWeb(
+      WorkplaceScripts.unregisterDriveCardDeleteOverlay.name);
     if (_editorListener != null) {
       window.removeEventListener("message", _editorListener!);
       _editorListener = null;
@@ -156,6 +164,13 @@ class _WebEditorState extends State<WebEditorWidget> with TextSelectionMixin {
   @override
   Widget build(BuildContext context) {
     final maxHeight = widget.height ?? _defaultHtmlEditorHeight;
+    final editorScriptPlan = WebEditorScriptPlan(
+      maxHeight: maxHeight,
+      selectionChangeScript: _selectionChangeScript,
+      driveCardDeleteOverlayRemoveLabel: AppLocalizations.of(context).remove,
+      driveCardDeleteOverlayViewId: _createdViewId,
+    );
+
     return HtmlEditor(
       controller: _editorController,
       htmlEditorOptions: HtmlEditorOptions(
@@ -179,36 +194,9 @@ class _WebEditorState extends State<WebEditorWidget> with TextSelectionMixin {
         disableDragAndDrop: true,
         normalizeHtmlTextWhenDropping: true,
         normalizeHtmlTextWhenPasting: true,
-        webInitialScripts: UnmodifiableListView([
-          WebScript(
-            name: HtmlUtils.removeLineHeight1px.name,
-            script: HtmlUtils.removeLineHeight1px.script,
-          ),
-          WebScript(
-            name: HtmlUtils.registerDropListener.name,
-            script: HtmlUtils.registerDropListener.script,
-          ),
-          WebScript(
-            name: HtmlUtils.unregisterDropListener.name,
-            script: HtmlUtils.unregisterDropListener.script,
-          ),
-          WebScript(
-            name: _selectionChangeScript.name,
-            script: _selectionChangeScript.script,
-          ),
-          WebScript(
-            name: HtmlUtils.collapseSelectionToEnd.name,
-            script: HtmlUtils.collapseSelectionToEnd.script,
-          ),
-          WebScript(
-            name: HtmlUtils.deleteSelectionContent.name,
-            script: HtmlUtils.deleteSelectionContent.script,
-          ),
-          WebScript(
-            name: HtmlUtils.recalculateEditorHeight(maxHeight: maxHeight).name,
-            script: HtmlUtils.recalculateEditorHeight(maxHeight: maxHeight).script,
-          ),
-        ])
+        webInitialScripts: UnmodifiableListView(
+          editorScriptPlan.initialScripts,
+        )
       ),
       htmlToolbarOptions: const HtmlToolbarOptions(
         toolbarType: ToolbarType.hide,
@@ -220,13 +208,7 @@ class _WebEditorState extends State<WebEditorWidget> with TextSelectionMixin {
         onChangeContent: widget.onChangeContent,
         onInit: () {
           widget.onInitial?.call(widget.content);
-          if (!_editorListenerRegistered) {
-            _editorController.evaluateJavascriptWeb(
-              HtmlUtils.registerDropListener.name);
-            _editorController.evaluateJavascriptWeb(
-              HtmlUtils.registerSelectionChangeListener(_createdViewId).name);
-            _editorListenerRegistered = true;
-          }
+          _registerEditorScripts(editorScriptPlan.initializationScriptNames);
         },
         onFocus: widget.onFocus,
         onUnFocus: widget.onUnFocus,
@@ -259,6 +241,24 @@ class _WebEditorState extends State<WebEditorWidget> with TextSelectionMixin {
         onKeyDown: widget.onKeyDownEditorAction,
       ),
     );
+  }
+
+  /// Syncs draft content after a Drive card is removed, bypassing
+  /// Summernote's `onChangeContent` pipeline (which triggers
+  /// html_editor_enhanced's scroll-to-top `ensureVisible()`).
+  Future<void> _syncContentAfterDriveCardDeleted() async {
+    final text = await _editorController.getText();
+    widget.onChangeContent?.call(text);
+  }
+
+  void _registerEditorScripts(List<String> scriptNames) {
+    if (_editorListenerRegistered) return;
+
+    for (final scriptName in scriptNames) {
+      _editorController.evaluateJavascriptWeb(scriptName);
+    }
+
+    _editorListenerRegistered = true;
   }
 
   void _showSignatureTooltipAtPosition(

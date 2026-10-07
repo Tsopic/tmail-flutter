@@ -1,3 +1,4 @@
+import 'package:core/presentation/resources/image_paths.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -117,6 +118,7 @@ void main() {
     await tester.pumpWidget(
       WidgetFixtures.makeTestableWidget(
         child: PDFViewer(
+          imagePaths: ImagePaths(),
           attachment: attachment,
           accountId: accountId,
           downloadUrl: 'https://example.invalid/download',

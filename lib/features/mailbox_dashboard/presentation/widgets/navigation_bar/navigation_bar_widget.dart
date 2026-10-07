@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:model/support/contact_support_capability.dart';
 import 'package:tmail_ui_user/features/base/mixin/contact_support_mixin.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/base/widget/application_logo_with_text_widget.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/app_grid_dashboard_controller.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/profile_setting/profile_setting_action_type.dart';
@@ -30,6 +31,7 @@ class NavigationBarWidget extends StatelessWidget {
   final VoidCallback? onTapApplicationLogoAction;
   final OnTapContactSupportAction? onTapContactSupportAction;
   final OnProfileSettingActionTypeClick onProfileSettingActionTypeClick;
+  final double leadingWidth;
 
   const NavigationBarWidget({
     super.key,
@@ -43,6 +45,7 @@ class NavigationBarWidget extends StatelessWidget {
     this.settingActionTypes = const [],
     this.onTapApplicationLogoAction,
     this.onTapContactSupportAction,
+    this.leadingWidth = ResponsiveUtils.defaultSizeMenu,
   });
 
   @override
@@ -53,7 +56,7 @@ class NavigationBarWidget extends StatelessWidget {
       padding: const EdgeInsetsDirectional.symmetric(horizontal: NavigationBarStyle.horizontalMargin),
       child: Row(children: [
         SizedBox(
-          width: ResponsiveUtils.defaultSizeMenu - NavigationBarStyle.horizontalMargin,
+          width: leadingWidth - NavigationBarStyle.horizontalMargin,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -88,6 +91,7 @@ class NavigationBarWidget extends StatelessWidget {
                   Obx(() {
                     if (appGridController!.listLinagoraApp.isNotEmpty) {
                       return AppGridDashboardIcon(
+                        key: const ValueKey(UiKeys.toggleAppGridButton),
                         imagePaths: imagePaths,
                         linagoraApps: appGridController!.listLinagoraApp,
                       );
@@ -96,6 +100,7 @@ class NavigationBarWidget extends StatelessWidget {
                   }),
                 const SizedBox(width: 16),
                 ProfileSettingIcon(
+                  key: const ValueKey(UiKeys.userAvatar),
                   ownEmailAddress: ownEmailAddress,
                   settingActionTypes: settingActionTypes,
                   onProfileSettingActionTypeClick: onProfileSettingActionTypeClick,
@@ -119,6 +124,7 @@ class NavigationBarWidget extends StatelessWidget {
               Obx(() {
                 if (appGridController!.listLinagoraApp.isNotEmpty) {
                   return AppGridDashboardIcon(
+                    key: const ValueKey(UiKeys.toggleAppGridButton),
                     imagePaths: imagePaths,
                     linagoraApps: appGridController!.listLinagoraApp,
                   );

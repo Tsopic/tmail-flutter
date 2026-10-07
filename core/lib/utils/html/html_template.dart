@@ -1,4 +1,5 @@
 
+import 'package:core/presentation/constants/constants_ui.dart';
 import 'package:flutter/material.dart';
 
 class HtmlTemplate {
@@ -7,7 +8,7 @@ class HtmlTemplate {
       $fontFaceStyle 
       
       body,td,div,p,a,input {
-        font-family: 'Inter', sans-serif;
+        font-family: '$fontFamilyApp', sans-serif;
       }
     
       body, td {
@@ -48,37 +49,53 @@ class HtmlTemplate {
      </style>
   ''';
 
+  /// HTML content is rendered outside Flutter, so the font can only be reached
+  /// by URL and the design system asset path has to be spelled out here. Keep
+  /// it aligned with the family resolved by `ThemeUtils`.
+  ///
+  /// Relative (no leading `/`) so it resolves against `<base href>` on web,
+  /// including non-root preview deploys. On mobile this alone is not enough:
+  /// `InAppWebView.loadData()` has no base URL by default (resolves against
+  /// `about:blank`), so a relative path still 404s there. Fixing that needs
+  /// wiring a base URL into `HtmlContentViewer` / `IosHtmlContentViewerWidget`
+  /// (`WebViewAssetLoader` on Android, `allowingReadAccessTo` on iOS) — not
+  /// done yet, tracked as a follow-up.
+  static const String _fontAssetDirectory =
+      'assets/packages/linagora_design_flutter/assets/fonts';
+
+  static const String fontFamilyApp = ConstantsUI.fontApp;
+
   static const String fontFaceStyle = '''
     @font-face {
-      font-family: 'Inter';
-      src: url("/assets/fonts/Inter/Inter-Regular.ttf") format("truetype");
+      font-family: '$fontFamilyApp';
+      src: url("$_fontAssetDirectory/${ConstantsUI.fontFileRegular}.ttf") format("truetype");
       font-weight: 400;
       font-style: normal;
     }
-    
+
     @font-face {
-      font-family: 'Inter';
-      src: url("/assets/fonts/Inter/Inter-Medium.ttf") format("truetype");
+      font-family: '$fontFamilyApp';
+      src: url("$_fontAssetDirectory/${ConstantsUI.fontFileMedium}.ttf") format("truetype");
       font-weight: 500;
-      font-style: medium;
+      font-style: normal;
     }
-    
+
     @font-face {
-      font-family: 'Inter';
-      src: url("/assets/fonts/Inter/Inter-SemiBold.ttf") format("truetype");
+      font-family: '$fontFamilyApp';
+      src: url("$_fontAssetDirectory/${ConstantsUI.fontFileSemiBold}.ttf") format("truetype");
       font-weight: 600;
-      font-style: semi-bold;
+      font-style: normal;
     }
-    
+
     @font-face {
-      font-family: 'Inter';
-      src: url("/assets/fonts/Inter/Inter-Bold.ttf") format("truetype");
+      font-family: '$fontFamilyApp';
+      src: url("$_fontAssetDirectory/${ConstantsUI.fontFileBold}.ttf") format("truetype");
       font-weight: 700;
-      font-style: bold;
+      font-style: normal;
     }
-    
+
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: '$fontFamilyApp', sans-serif;
     }
   ''';
 

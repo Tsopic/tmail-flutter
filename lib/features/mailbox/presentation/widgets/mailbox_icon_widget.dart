@@ -26,7 +26,7 @@ class MailboxIconWidget extends StatelessWidget {
         icon,
         width: MailboxIconWidgetStyles.iconSize,
         height: MailboxIconWidgetStyles.iconSize,
-        colorFilter: color?.asFilter(),
+        colorFilter: (color ?? AppColor.primaryLinShare).asFilter(),
         fit: BoxFit.fill,
       ),
     );

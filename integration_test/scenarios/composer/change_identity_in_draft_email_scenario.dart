@@ -12,9 +12,11 @@ import '../../robots/composer_robot.dart';
 import '../../robots/identities_list_menu_robot.dart';
 import '../../robots/mailbox_menu_robot.dart';
 import '../../robots/thread_robot.dart';
+import '../../utils/test_timeouts.dart';
+import '../../utils/wait_for_condition.dart';
 
 class ChangeIdentityInDraftEmailScenario extends BaseTestScenario {
-  const ChangeIdentityInDraftEmailScenario(super.$);
+  const ChangeIdentityInDraftEmailScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -68,13 +70,15 @@ class ChangeIdentityInDraftEmailScenario extends BaseTestScenario {
     await _expectSaveAsDraftOptionPopupMenuVisible();
 
     await composerRobot.tapSaveAsDraftPopupItemOnMenu();
-    await _expectSaveAsDraftEmailSuccessToast(appLocalizations);
-
+    // The "saving to drafts" modal (barrierDismissible:false / canPop:false) covers
+    // the close button until the save commits, so tapCloseComposer naturally blocks
+    // until the button is hit-testable again — no extra wait needed. The draft's
+    // existence is asserted durably below by reopening it from the Drafts folder.
     await composerRobot.tapCloseComposer(imagePaths);
 
     await threadRobot.openMailbox();
     await mailboxMenuRobot
-        .openFolderByName(appLocalizations.draftsMailboxDisplayName);
+        .navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.draftsMailboxDisplayName));
 
     await threadRobot.openEmailWithSubject(subject);
     await _expectComposerViewVisible();
@@ -92,17 +96,13 @@ class ChangeIdentityInDraftEmailScenario extends BaseTestScenario {
   Future<void> _expectSaveAsDraftOptionPopupMenuVisible() =>
       expectViewVisible($(#save_as_draft_popup_item));
 
-  Future<void> _expectSaveAsDraftEmailSuccessToast(
-    AppLocalizations appLocalizations,
-  ) =>
-      expectViewVisible($(appLocalizations.drafts_saved));
-
   Future<void> _expectIdentityVisible(Identity identity) async {
-    expect(
-      $(FromComposerMobileWidget).which<FromComposerMobileWidget>(
-        (widget) => widget.selectedIdentity?.name == identity.name
-      ).visible,
-      isTrue,
+    await waitForCondition(
+      () => $(FromComposerMobileWidget)
+          .which<FromComposerMobileWidget>(
+              (widget) => widget.selectedIdentity?.name == identity.name)
+          .visible,
+      timeout: TestTimeouts.medium,
     );
   }
 }

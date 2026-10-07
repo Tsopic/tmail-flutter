@@ -1,18 +1,22 @@
 import 'package:core/presentation/extensions/color_extension.dart';
+import 'package:core/presentation/extensions/composer_toolbar_button_style.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:core/presentation/views/button/tmail_button_widget.dart';
 import 'package:core/utils/platform_info.dart';
 import 'package:custom_pop_up_menu/custom_pop_up_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:scribe/scribe/ai/presentation/widgets/button/ai_assistant_button.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/base/widget/highlight_svg_icon_on_hover.dart';
 import 'package:tmail_ui_user/features/base/widget/popup_item_widget.dart';
 import 'package:tmail_ui_user/features/base/widget/popup_menu_overlay_widget.dart';
 import 'package:tmail_ui_user/features/composer/presentation/styles/web/bottom_bar_composer_widget_style.dart';
+import 'package:tmail_ui_user/features/composer/presentation/widgets/web/external_attachment_composer_button.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 class BottomBarComposerWidget extends StatelessWidget {
 
+  final String composerId;
   final ImagePaths imagePaths;
   final bool isCodeViewEnabled;
   final bool isEmailChanged;
@@ -37,6 +41,7 @@ class BottomBarComposerWidget extends StatelessWidget {
 
   const BottomBarComposerWidget({
     super.key,
+    required this.composerId,
     required this.imagePaths,
     required this.isCodeViewEnabled,
     required this.isEmailChanged,
@@ -98,6 +103,20 @@ class BottomBarComposerWidget extends StatelessWidget {
             tooltipMessage: AppLocalizations.of(context).attach_file,
             onTapActionCallback: attachFileAction,
           ),
+          ExternalAttachmentComposerButton(
+            composerId: composerId,
+            imagePaths: imagePaths,
+            style: ComposerToolbarButtonStyle(
+              tooltipLabel: AppLocalizations.of(context).browse,
+              iconColor: BottomBarComposerWidgetStyle.iconColor,
+              iconSize: BottomBarComposerWidgetStyle.iconSize,
+              borderRadius: BottomBarComposerWidgetStyle.iconRadius,
+              padding: BottomBarComposerWidgetStyle.iconPadding,
+              margin: const EdgeInsetsDirectional.only(
+                start: BottomBarComposerWidgetStyle.space,
+              ),
+            ),
+          ),
           const SizedBox(width: BottomBarComposerWidgetStyle.space),
           AbsorbPointer(
             absorbing: isCodeViewEnabled,
@@ -148,6 +167,7 @@ class BottomBarComposerWidget extends StatelessWidget {
           PopupMenuOverlayWidget(
             controller: menuMoreOptionController,
             iconButton: HighlightSVGIconOnHover(
+              key: const Key(UiKeys.composerMoreButton),
               icon: imagePaths.icMore,
               size: BottomBarComposerWidgetStyle.iconSize,
               iconColor: BottomBarComposerWidgetStyle.iconColor,
@@ -206,6 +226,7 @@ class BottomBarComposerWidget extends StatelessWidget {
                   },
                 ),
               PopupItemWidget(
+                key: const Key(UiKeys.saveTemplatePopupItem),
                 iconAction: imagePaths.icSaveToDraft,
                 nameAction: AppLocalizations.of(context).saveAsTemplate,
                 colorIcon: BottomBarComposerWidgetStyle.iconColor,
@@ -234,6 +255,7 @@ class BottomBarComposerWidget extends StatelessWidget {
           ),
           const SizedBox(width: BottomBarComposerWidgetStyle.space),
           TMailButtonWidget.fromIcon(
+            key: const Key(UiKeys.saveDraftButton),
             icon: imagePaths.icSaveToDraft,
             borderRadius: BottomBarComposerWidgetStyle.iconRadius,
             padding: BottomBarComposerWidgetStyle.iconPadding,
@@ -245,6 +267,7 @@ class BottomBarComposerWidget extends StatelessWidget {
           ),
           const SizedBox(width: BottomBarComposerWidgetStyle.sendButtonSpace),
           TMailButtonWidget(
+            key: const ValueKey(UiKeys.sendEmailButton),
             text: AppLocalizations.of(context).send,
             icon: imagePaths.icSend,
             iconAlignment: TextDirection.rtl,

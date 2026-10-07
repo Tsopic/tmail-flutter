@@ -3,6 +3,8 @@ description: Core Module
 
 # As we are not publishing this Installer in pub.dev, we can add publish_to: 'none'
 publish_to: none
+
+resolution: workspace
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
 # followed by an optional build number separated by a +.
@@ -20,7 +22,7 @@ publish_to: none
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.8.0 <4.0.0"
+  sdk: ">=3.9.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -35,6 +37,8 @@ dependencies:
       url: https://github.com/linagora/dart-neats.git
       ref: support_mail
       path: sanitize_html
+
+  linagora_design_flutter:
 
   ### Dependencies from pub.dev ###
   cupertino_icons: 1.0.8
@@ -72,6 +76,8 @@ dependencies:
   flutter_image_compress: 2.1.0
 
   http_parser: 4.1.2
+
+  mime: 1.0.4
 
   path_provider: 2.1.5
 
@@ -119,9 +125,9 @@ dev_dependencies:
 
   plugin_platform_interface: 2.1.8
 
-  build_runner: 2.10.5
+  build_runner: ^2.15.0
 
-  mockito: 5.6.3
+  mockito: 5.6.4
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

@@ -108,24 +108,18 @@ class SearchEmailFromLocationBar extends DashBoardAction {
 }
 
 class SelectDateRangeToAdvancedSearch extends DashBoardAction {
-
   final DateTime? startDate;
   final DateTime? endDate;
-
-  SelectDateRangeToAdvancedSearch(this.startDate, this.endDate);
-
-  @override
-  List<Object?> get props => [startDate, endDate];
-}
-
-class ClearDateRangeToAdvancedSearch extends DashBoardAction {
-
   final EmailReceiveTimeType receiveTime;
 
-  ClearDateRangeToAdvancedSearch(this.receiveTime);
+  SelectDateRangeToAdvancedSearch({
+    required this.receiveTime,
+    this.startDate,
+    this.endDate,
+  });
 
   @override
-  List<Object?> get props => [receiveTime];
+  List<Object?> get props => [startDate, endDate, receiveTime];
 }
 
 class QuickSearchEmailByFromAction extends DashBoardAction {
@@ -139,6 +133,15 @@ class QuickSearchEmailByFromAction extends DashBoardAction {
 }
 
 class CloseSearchEmailViewAction extends DashBoardAction {}
+
+class RestoreMailboxEmailListAfterSearchAction extends DashBoardAction {
+  final bool force;
+
+  RestoreMailboxEmailListAfterSearchAction({this.force = false});
+
+  @override
+  List<Object?> get props => [force];
+}
 
 class CancelSelectionSearchEmailAction extends DashBoardAction {}
 

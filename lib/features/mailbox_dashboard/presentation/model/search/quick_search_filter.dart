@@ -20,6 +20,7 @@ enum QuickSearchFilter {
   fromMe,
   starred,
   unread,
+  events,
   sortBy,
   dateTime,
   from,
@@ -58,7 +59,7 @@ enum QuickSearchFilter {
       case QuickSearchFilter.from:
         return AppLocalizations.of(context).from_email_address_prefix;
       case QuickSearchFilter.folder:
-        return mailbox?.getDisplayName(context) ?? AppLocalizations.of(context).all;
+        return mailbox?.getFolderNameForQuickSearch(AppLocalizations.of(context)) ?? AppLocalizations.of(context).allEmail;
       case QuickSearchFilter.to:
         return AppLocalizations.of(context).to_email_address_prefix;
       case QuickSearchFilter.starred:
@@ -67,6 +68,8 @@ enum QuickSearchFilter {
         return AppLocalizations.of(context).unread;
       case QuickSearchFilter.labels:
         return label?.safeDisplayName ?? AppLocalizations.of(context).allLabels;
+      case QuickSearchFilter.events:
+        return AppLocalizations.of(context).notIncludeEvents;
     }
   }
 
@@ -94,6 +97,8 @@ enum QuickSearchFilter {
         return isSelected ? imagePaths.icSelectedSB : imagePaths.icUnread;
       case QuickSearchFilter.labels:
         return imagePaths.icTag;
+      case QuickSearchFilter.events:
+        return imagePaths.icCalendarEvent;
     }
   }
 
@@ -143,9 +148,8 @@ enum QuickSearchFilter {
       case QuickSearchFilter.last7Days:
         return searchFilter.emailReceiveTimeType == EmailReceiveTimeType.last7Days;
       case QuickSearchFilter.fromMe:
-        return searchFilter.from.length == 1 &&
-          currentUserEmail?.isNotEmpty == true &&
-          currentUserEmail == searchFilter.from.first;
+        return currentUserEmail != null &&
+          searchFilter.isOnlySender(currentUserEmail);
       case QuickSearchFilter.sortBy:
         return sortOrderType != SearchEmailFilter.defaultSortOrder;
       case QuickSearchFilter.dateTime:
@@ -162,6 +166,8 @@ enum QuickSearchFilter {
         return searchFilter.unread;
       case QuickSearchFilter.labels:
         return searchFilter.label != null;
+      case QuickSearchFilter.events:
+        return searchFilter.notIncludeEvents;
     }
   }
 

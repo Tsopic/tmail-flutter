@@ -1,5 +1,5 @@
-
-import 'package:tmail_ui_user/main/exceptions/remote_exception.dart';
+import 'package:core/domain/exceptions/app_base_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/remote_exception.dart';
 
 abstract class AuthenticationException extends RemoteException {
   static const wrongCredential = 'Credential is wrong';
@@ -11,40 +11,106 @@ abstract class AuthenticationException extends RemoteException {
 
 class BadCredentials extends AuthenticationException {
   BadCredentials() : super(AuthenticationException.wrongCredential);
+
+  @override
+  String get exceptionName => 'BadCredentials';
 }
 
 class BadGateway extends AuthenticationException {
   BadGateway() : super(AuthenticationException.badGateway);
+
+  @override
+  String get exceptionName => 'BadGateway';
 }
-
-class NotFoundAuthenticatedAccountException implements Exception {}
-
-class NotFoundStoredTokenException implements Exception {}
 
 class InvalidBaseUrl extends AuthenticationException {
   InvalidBaseUrl() : super(AuthenticationException.invalidBaseUrl);
+
+  @override
+  String get exceptionName => 'InvalidBaseUrl';
 }
 
-class AccessTokenInvalidException implements Exception {}
+class NotFoundAuthenticatedAccountException extends AppBaseException {
+  NotFoundAuthenticatedAccountException([super.message]);
 
-class DownloadAttachmentHasTokenExpiredException implements Exception {
+  @override
+  String get exceptionName => 'NotFoundAuthenticatedAccountException';
+}
 
+class NotFoundStoredTokenException extends AppBaseException {
+  NotFoundStoredTokenException([super.message]);
+
+  @override
+  String get exceptionName => 'NotFoundStoredTokenException';
+}
+
+class AccessTokenInvalidException extends AppBaseException {
+  AccessTokenInvalidException([super.message]);
+
+  @override
+  String get exceptionName => 'AccessTokenInvalidException';
+}
+
+class DownloadAttachmentHasTokenExpiredException extends AppBaseException {
   final String refreshToken;
 
-  DownloadAttachmentHasTokenExpiredException(this.refreshToken);
+  DownloadAttachmentHasTokenExpiredException(this.refreshToken)
+    : super('Token expired for refresh token');
+
+  @override
+  String get exceptionName => 'DownloadAttachmentHasTokenExpiredException';
 }
 
-class CanNotFoundBaseUrl implements Exception {}
+class CanNotFoundBaseUrl extends AppBaseException {
+  CanNotFoundBaseUrl([super.message]);
 
-class CanNotFoundUserName implements Exception {}
+  @override
+  String get exceptionName => 'CanNotFoundBaseUrl';
+}
 
-class CanNotFoundPassword implements Exception {}
+class CanNotFoundUserName extends AppBaseException {
+  CanNotFoundUserName([super.message]);
 
-class NotFoundAuthenticationInfoCache implements Exception {}
+  @override
+  String get exceptionName => 'CanNotFoundUserName';
+}
 
-class CanNotFoundSaasServerUrl implements Exception {}
+class CanNotFoundPassword extends AppBaseException {
+  CanNotFoundPassword([super.message]);
 
-class SaasServerUriIsNull implements Exception {}
+  @override
+  String get exceptionName => 'CanNotFoundPassword';
+}
+
+class NotFoundAuthenticationInfoCache extends AppBaseException {
+  NotFoundAuthenticationInfoCache([super.message]);
+
+  @override
+  String get exceptionName => 'NotFoundAuthenticationInfoCache';
+}
+
+class CanNotFoundSaasServerUrl extends AppBaseException {
+  CanNotFoundSaasServerUrl([super.message]);
+
+  @override
+  String get exceptionName => 'CanNotFoundSaasServerUrl';
+}
+
+class SaasServerUriIsNull extends AppBaseException {
+  SaasServerUriIsNull([super.message]);
+
+  @override
+  String get exceptionName => 'SaasServerUriIsNull';
+}
+
+class AutoRedirectToAppAfterStoreAuthorizeDestinationUrlException
+    extends AppBaseException {
+  AutoRedirectToAppAfterStoreAuthorizeDestinationUrlException([super.message]);
+
+  @override
+  String get exceptionName =>
+      'AutoRedirectToAppAfterStoreAuthorizeDestinationUrlException';
+}
 
 /// OIDC Configuration Exceptions
 /// These exceptions provide detailed error information for OIDC-related issues
@@ -56,43 +122,35 @@ class OidcConfigurationException implements Exception {
   OidcConfigurationException(this.message, {this.technicalDetails});
 
   @override
-  String toString() => 'OidcConfigurationException: $message${technicalDetails != null ? ' ($technicalDetails)' : ''}';
+  String toString() =>
+      'OidcConfigurationException: $message${technicalDetails != null ? ' ($technicalDetails)' : ''}';
 }
 
 class MissingEndSessionEndpointException extends OidcConfigurationException {
   MissingEndSessionEndpointException()
-      : super(
-          'OIDC logout endpoint not configured',
-          technicalDetails: 'end_session_endpoint missing from OIDC discovery',
-        );
+    : super(
+        'OIDC logout endpoint not configured',
+        technicalDetails: 'end_session_endpoint missing from OIDC discovery',
+      );
 }
 
 class MissingAuthorizationEndpointException extends OidcConfigurationException {
   MissingAuthorizationEndpointException()
-      : super(
-          'OIDC authorization endpoint not configured',
-          technicalDetails: 'authorization_endpoint missing from OIDC discovery',
-        );
+    : super(
+        'OIDC authorization endpoint not configured',
+        technicalDetails: 'authorization_endpoint missing from OIDC discovery',
+      );
 }
 
 class MissingTokenEndpointException extends OidcConfigurationException {
   MissingTokenEndpointException()
-      : super(
-          'OIDC token endpoint not configured',
-          technicalDetails: 'token_endpoint missing from OIDC discovery',
-        );
+    : super(
+        'OIDC token endpoint not configured',
+        technicalDetails: 'token_endpoint missing from OIDC discovery',
+      );
 }
 
 class OidcDiscoveryFailedException extends OidcConfigurationException {
   OidcDiscoveryFailedException(String details)
-      : super(
-          'Failed to retrieve OIDC configuration',
-          technicalDetails: details,
-        );
+    : super('Failed to retrieve OIDC configuration', technicalDetails: details);
 }
-
-/// Exception thrown during OAuth web redirect flow when auto-redirecting
-/// after storing the authorize destination URL. This is silently handled
-/// as it indicates a normal redirect flow, not an error condition.
-class AutoRedirectToAppAfterStoreAuthorizeDestinationUrlException
-    implements Exception {}

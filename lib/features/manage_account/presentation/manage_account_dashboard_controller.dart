@@ -11,9 +11,9 @@ import 'package:jmap_dart_client/jmap/core/capability/capability_identifier.dart
 import 'package:jmap_dart_client/jmap/core/session/session.dart';
 import 'package:jmap_dart_client/jmap/mail/vacation/vacation_response.dart';
 import 'package:jmap_dart_client/jmap/quotas/quota.dart';
+import 'package:model/ai/ai_capabilities.dart';
 import 'package:model/model.dart';
 import 'package:rule_filter/rule_filter/capability_rule_filter.dart';
-import 'package:scribe/scribe/ai/presentation/utils/ai_scribe_constants.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:server_settings/server_settings/capability_server_settings.dart';
 import 'package:tmail_ui_user/features/base/action/ui_action.dart';
@@ -26,11 +26,8 @@ import 'package:tmail_ui_user/features/home/data/exceptions/session_exceptions.d
 import 'package:tmail_ui_user/features/home/domain/extensions/session_extensions.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/state/export_trace_log_state.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/state/get_all_vacation_state.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/state/get_label_visibility_state.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/state/update_vacation_state.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/get_all_vacation_interactor.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/usecases/get_label_visibility_interactor.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/usecases/save_label_visibility_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/update_vacation_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/action/dashboard_setting_action.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/email_rules/bindings/email_rules_bindings.dart';
@@ -49,9 +46,7 @@ import 'package:tmail_ui_user/features/manage_account/presentation/model/manage_
 import 'package:tmail_ui_user/features/manage_account/presentation/model/settings_page_level.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/notification/bindings/notification_binding.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/preferences/bindings/preferences_bindings.dart';
-import 'package:tmail_ui_user/features/manage_account/presentation/storage/storage_bindings.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/vacation/vacation_controller_bindings.dart';
-import 'package:tmail_ui_user/features/paywall/presentation/paywall_controller.dart';
 import 'package:tmail_ui_user/features/quotas/domain/state/get_quotas_state.dart';
 import 'package:tmail_ui_user/features/quotas/domain/use_case/get_quotas_interactor.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
@@ -67,10 +62,7 @@ class ManageAccountDashBoardController extends ReloadableController
 
   GetAllVacationInteractor? _getAllVacationInteractor;
   UpdateVacationInteractor? _updateVacationInteractor;
-  PaywallController? paywallController;
   GetQuotasInteractor? getQuotasInteractor;
-  SaveLabelVisibilityInteractor? saveLabelVisibilityInteractor;
-  GetLabelVisibilityInteractor? getLabelVisibilityInteractor;
 
   final accountId = Rxn<AccountId>();
   final accountMenuItemSelected = AccountMenuItem.profiles.obs;
@@ -78,7 +70,7 @@ class ManageAccountDashBoardController extends ReloadableController
   final vacationResponse = Rxn<VacationResponse>();
   final dashboardSettingAction = Rxn<UIAction>();
   final octetsQuota = Rxn<Quota>();
-  final isLabelVisibilityEnabled = RxBool(PlatformInfo.isIntegrationTesting);
+  final isLabelVisibilityEnabled = RxBool(false);
 
   Uri? previousUri;
   AccountMenuItem? selectedMenu;
@@ -110,8 +102,6 @@ class ManageAccountDashBoardController extends ReloadableController
       handleExportTraceLogSuccess(success);
     } else if (success is GetQuotasSuccess) {
       handleGetQuotasSuccess(success);
-    } else if (success is GetLabelVisibilitySuccess) {
-      handleGetLabelVisibilitySuccess(success.visible);
     } else {
       super.handleSuccessViewState(success);
     }
@@ -185,9 +175,6 @@ class ManageAccountDashBoardController extends ReloadableController
     _bindingInteractorForMenuItemView(sessionCurrent, accountId.value);
     _getVacationResponse();
     injectAIScribeBindings(sessionCurrent, accountId.value);
-    paywallController = PaywallController(
-      ownEmailAddress: ownEmailAddress.value,
-    );
 
     if (quota != null) {
       octetsQuota.value = quota;
@@ -195,9 +182,7 @@ class ManageAccountDashBoardController extends ReloadableController
       getQuotas(accountId.value);
     }
 
-    if (isLabelCapabilitySupported) {
-      setUpLabelVisibility();
-    }
+    isLabelVisibilityEnabled.value = isLabelCapabilitySupported;
   }
 
   void _getParametersRouter() {
@@ -288,9 +273,6 @@ class ManageAccountDashBoardController extends ReloadableController
       case AccountMenuItem.notification:
         NotificationBinding().dependencies();
         break;
-      case AccountMenuItem.storage:
-        StorageBindings().dependencies();
-        break;
       default:
         break;
     }
@@ -369,7 +351,7 @@ class ManageAccountDashBoardController extends ReloadableController
 
   bool get isAICapabilitySupported {
     if (accountId.value != null && sessionCurrent != null) {
-      return AiScribeConstants.aiCapability.isSupported(sessionCurrent!, accountId.value!);
+      return AiCapabilities.aiCapability.isSupported(sessionCurrent!, accountId.value!);
     } else {
       return false;
     }
@@ -517,8 +499,6 @@ class ManageAccountDashBoardController extends ReloadableController
     if (LogTracking().isEnabled) {
       disposeTraceLogDependencies();
     }
-    paywallController?.onClose();
-    paywallController = null;
     previousUri = null;
     selectedMenu = null;
     super.onClose();

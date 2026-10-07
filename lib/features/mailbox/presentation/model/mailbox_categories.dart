@@ -1,14 +1,11 @@
 
 import 'package:flutter/cupertino.dart';
 import 'package:model/mailbox/expand_mode.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_category.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_categories_expand_mode.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
-enum MailboxCategories {
-  exchange,
-  personalFolders,
-  teamMailboxes
-}
+export 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_category.dart';
 
 extension MailboxCategoriessExtension on MailboxCategories {
 
@@ -35,13 +32,13 @@ extension MailboxCategoriessExtension on MailboxCategories {
   }
 
   ExpandMode getExpandMode(MailboxCategoriesExpandMode categoriesExpandMode) {
-    switch(this) {
-      case MailboxCategories.exchange:
-        return categoriesExpandMode.defaultMailbox;
-      case MailboxCategories.personalFolders:
-        return categoriesExpandMode.personalFolders;
-      case MailboxCategories.teamMailboxes:
-        return categoriesExpandMode.teamMailboxes;
-    }
+    return categoriesExpandMode.getExpandMode(this);
+  }
+
+  MailboxCategoriesExpandMode withExpandMode(
+    MailboxCategoriesExpandMode categoriesExpandMode,
+    ExpandMode expandMode,
+  ) {
+    return categoriesExpandMode.withExpandMode(this, expandMode);
   }
 }

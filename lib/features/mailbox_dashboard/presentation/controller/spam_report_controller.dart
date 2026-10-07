@@ -9,6 +9,7 @@ import 'package:model/extensions/presentation_mailbox_extension.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
 import 'package:tmail_ui_user/features/base/base_controller.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/extensions/presentation_mailbox_extension.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/domain/exceptions/spam_report_exception.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/model/spam_report_state.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/state/get_spam_mailbox_cached_state.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/state/get_spam_report_state.dart';
@@ -75,7 +76,7 @@ class SpamReportController extends BaseController {
   @override
   void handleFailureViewState(Failure failure) {
     if (failure is GetSpamMailboxCachedFailure) {
-      presentationSpamMailbox.value = null;
+      _validateSpamMailboxChanged(failure);
     } else if (failure is GetSpamReportStateFailure) {
       _spamReportLoaderStatus = LoaderStatus.completed;
     } else {
@@ -145,6 +146,16 @@ class SpamReportController extends BaseController {
 
   void setSpamPresentationMailbox(PresentationMailbox? spamMailbox) {
     presentationSpamMailbox.value = spamMailbox;
+  }
+
+  void _validateSpamMailboxChanged(GetSpamMailboxCachedFailure failure) {
+    if (failure.exception is NoUnreadSpamEmailsException) {
+      final currentSpamMailbox = presentationSpamMailbox.value;
+      if (currentSpamMailbox != null && currentSpamMailbox.countUnreadEmails > 0) {
+        _storeLastTimeDismissedSpamReportedAction();
+      }
+    }
+    setSpamPresentationMailbox(null);
   }
 
   @override

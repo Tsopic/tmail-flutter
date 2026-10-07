@@ -4,6 +4,7 @@ import 'package:core/utils/platform_info.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_address.dart';
@@ -25,6 +26,7 @@ import 'package:tmail_ui_user/features/composer/presentation/view/mobile/tablet_
 import 'package:tmail_ui_user/features/composer/presentation/widgets/ai_scribe/composer_ai_scribe_selection_overlay.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/insert_image_loading_bar_widget.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/list_recipients_collapsed_widget.dart';
+import 'package:tmail_ui_user/features/composer/presentation/providers/composer_attachment_extension_registry_provider.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/mobile/app_bar_composer_widget.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/mobile/from_composer_mobile_widget.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/mobile/landscape_app_bar_composer_widget.dart';
@@ -57,7 +59,7 @@ class ComposerView extends GetWidget<ComposerController> {
             child: Column(
               children: [
                 if (controller.responsiveUtils.isLandscapeMobile(context))
-                  Obx(() => LandscapeAppBarComposerWidget(
+                  Consumer(builder: (_, ref, __) => Obx(() => LandscapeAppBarComposerWidget(
                     imagePaths: controller.imagePaths,
                     isSendButtonEnabled: controller.isEnableEmailSendButton.value,
                     onCloseViewAction: () => controller.handleClickCloseComposer(context),
@@ -66,9 +68,12 @@ class ComposerView extends GetWidget<ComposerController> {
                       controller.handleOpenContextMenu(context, position);
                     },
                     isNetworkConnectionAvailable: controller.isNetworkConnectionAvailable,
+                    onOpenAiAssistantModal: controller.isAIScribeAvailable
+                      ? controller.openAIAssistantModal
+                      : null,
                     attachFileAction: () => controller.openPickAttachmentMenu(
                       context,
-                      _pickAttachmentsActionTiles(context)
+                      _pickAttachmentsActionTiles(context, ref)
                     ),
                     insertImageAction: () => controller.insertImage(context, constraints.maxWidth),
                     openRichToolbarAction: () =>
@@ -76,9 +81,9 @@ class ComposerView extends GetWidget<ComposerController> {
                         context: context,
                         richTextController: controller.richTextMobileTabletController?.richTextController
                       ),
-                  ))
+                  )))
                 else
-                  Obx(() => AppBarComposerWidget(
+                  Consumer(builder: (_, ref, __) => Obx(() => AppBarComposerWidget(
                     imagePaths: controller.imagePaths,
                     isSendButtonEnabled: controller.isEnableEmailSendButton.value,
                     onCloseViewAction: () => controller.handleClickCloseComposer(context),
@@ -87,9 +92,12 @@ class ComposerView extends GetWidget<ComposerController> {
                       controller.handleOpenContextMenu(context, position);
                     },
                     isNetworkConnectionAvailable: controller.isNetworkConnectionAvailable,
+                    onOpenAiAssistantModal: controller.isAIScribeAvailable
+                      ? controller.openAIAssistantModal
+                      : null,
                     attachFileAction: () => controller.openPickAttachmentMenu(
                       context,
-                      _pickAttachmentsActionTiles(context)
+                      _pickAttachmentsActionTiles(context, ref)
                     ),
                     insertImageAction: () => controller.insertImage(context, constraints.maxWidth),
                     openRichToolbarAction: () =>
@@ -97,7 +105,7 @@ class ComposerView extends GetWidget<ComposerController> {
                         context: context,
                         richTextController: controller.richTextMobileTabletController?.richTextController
                       ),
-                  )),
+                  ))),
                 Expanded(
                   child: SafeArea(
                     top: false,
@@ -131,6 +139,7 @@ class ComposerView extends GetWidget<ComposerController> {
                                 if (controller.recipientsCollapsedState.value == PrefixRecipientState.enabled) {
                                   return RecipientsCollapsedComposerWidget(
                                     listEmailAddress: controller.allListEmailAddressWithoutReplyTo,
+                                    invalidRecipients: controller.invalidRecipients.value,
                                     margin: ComposerStyle.mobileRecipientMargin,
                                     onShowAllRecipientsAction: controller.showFullRecipients,
                                   );
@@ -285,7 +294,7 @@ class ComposerView extends GetWidget<ComposerController> {
           color: ComposerStyle.mobileBackgroundColor,
           child: Column(
             children: [
-              Obx(() => TabletAppBarComposerWidget(
+              Consumer(builder: (_, ref, __) => Obx(() => TabletAppBarComposerWidget(
                 imagePaths: controller.imagePaths,
                 emailSubject: controller.subjectEmail.value ?? '',
                 onCloseViewAction: () => controller.handleClickCloseComposer(context),
@@ -293,10 +302,10 @@ class ComposerView extends GetWidget<ComposerController> {
                 isNetworkConnectionAvailable: controller.isNetworkConnectionAvailable,
                 attachFileAction: () => controller.openPickAttachmentMenu(
                   context,
-                  _pickAttachmentsActionTiles(context)
+                  _pickAttachmentsActionTiles(context, ref)
                 ),
                 insertImageAction: () => controller.insertImage(context, constraints.maxWidth),
-              )),
+              ))),
               Expanded(
                 child: SingleChildScrollView(
                   controller: controller.scrollController,
@@ -320,6 +329,7 @@ class ComposerView extends GetWidget<ComposerController> {
                             if (controller.recipientsCollapsedState.value == PrefixRecipientState.enabled) {
                               return RecipientsCollapsedComposerWidget(
                                 listEmailAddress: controller.allListEmailAddressWithoutReplyTo,
+                                invalidRecipients: controller.invalidRecipients.value,
                                 margin: ComposerStyle.mobileRecipientMargin,
                                 onShowAllRecipientsAction: controller.showFullRecipients,
                               );
@@ -481,10 +491,16 @@ class ComposerView extends GetWidget<ComposerController> {
     );
   }
 
-  List<Widget> _pickAttachmentsActionTiles(BuildContext context) {
+  List<Widget> _pickAttachmentsActionTiles(BuildContext context, WidgetRef ref) {
     return [
       _pickPhotoAndVideoAction(context),
       _browseFileAction(context),
+      ...ref
+          .watch(composerAttachmentExtensionRegistryProvider)
+          .buildContextMenuTiles(
+            context,
+            imagePaths: controller.imagePaths,
+          ),
       const SizedBox(height: kIsWeb ? 16 : 30),
     ];
   }
@@ -528,6 +544,7 @@ class ComposerView extends GetWidget<ComposerController> {
       bccState: controller.bccRecipientState.value,
       replyToState: controller.replyToRecipientState.value,
       listEmailAddress: listEmailAddress,
+      invalidRecipients: controller.invalidRecipients.value,
       imagePaths: controller.imagePaths,
       maxWidth: maxWidth,
       minInputLengthAutocomplete: controller.minInputLengthAutocomplete,

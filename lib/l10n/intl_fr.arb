@@ -150,7 +150,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "header_email_quoted": "Le {sentDate}, de {emailAddress}",
+  "header_email_quoted": "Le {sentDate}, {emailAddress} a écrit :",
   "@header_email_quoted": {
     "type": "text",
     "placeholders_order": [
@@ -160,6 +160,18 @@
     "placeholders": {
       "sentDate": {},
       "emailAddress": {}
+    }
+  },
+  "header_email_quoted_date_time": "{date} à {time}",
+  "@header_email_quoted_date_time": {
+    "type": "text",
+    "placeholders_order": [
+      "date",
+      "time"
+    ],
+    "placeholders": {
+      "date": {},
+      "time": {}
     }
   },
   "prefix_reply_email": "Re:",
@@ -1802,7 +1814,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "requestReadReceipt": "Demander un accusé de réception",
+  "requestReadReceipt": "Demander un accusé de lecture",
   "@requestReadReceipt": {
     "type": "text",
     "placeholders_order": [],
@@ -1814,7 +1826,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "titleReadReceiptRequestNotificationMessage": "Demander un accusé de réception",
+  "titleReadReceiptRequestNotificationMessage": "Demande d'accusé de lecture",
   "@titleReadReceiptRequestNotificationMessage": {
     "type": "text",
     "placeholders_order": [],
@@ -1867,6 +1879,16 @@
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
+  },
+  "sendMessageFailureWithInvalidRecipients": "Échec de l'envoi de votre message, car ces destinataires sont invalides : {invalidRecipients}",
+  "@sendMessageFailureWithInvalidRecipients": {
+    "type": "text",
+    "placeholders_order": [
+      "invalidRecipients"
+    ],
+    "placeholders": {
+      "invalidRecipients": {}
+    }
   },
   "actionTitleRulesFilter": "Effectuer l'action suivante :",
   "@actionTitleRulesFilter": {
@@ -2222,7 +2244,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "subTitleReadReceiptRequestNotificationMessage": "L'expéditeur a demandé l'envoi d'un accusé de réception pour ce message. Envoyer un accusé de réception ?",
+  "subTitleReadReceiptRequestNotificationMessage": "L'expéditeur a demandé l'envoi d'un accusé de lecture pour ce message. Envoyer un accusé de lecture ?",
   "@subTitleReadReceiptRequestNotificationMessage": {
     "type": "text",
     "placeholders_order": [],
@@ -2596,7 +2618,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "textBodySendReceiptToSender": "Le message a été lu par {receiver} le {time}\n\nSujet : {subject}\n\nRemarque : Cet accusé de réception confirme uniquement que le message a été affiché sur l'ordinateur du destinataire. Il n'y a aucune garantie que le destinataire ait lu ou compris le contenu du message.",
+  "textBodySendReceiptToSender": "Le message a été lu par {receiver} le {time}\n\nSujet : {subject}\n\nRemarque : Cet accusé de lecture confirme uniquement que le message a été affiché sur l'ordinateur du destinataire. Il n'y a aucune garantie que le destinataire ait lu ou compris le contenu du message.",
   "@textBodySendReceiptToSender": {
     "type": "text",
     "placeholders_order": [
@@ -2610,7 +2632,7 @@
       "time": {}
     }
   },
-  "toastMessageSendReceiptSuccess": "Un accusé de réception a été envoyé.",
+  "toastMessageSendReceiptSuccess": "Un accusé de lecture a été envoyé.",
   "@toastMessageSendReceiptSuccess": {
     "type": "text",
     "placeholders_order": [],
@@ -2634,6 +2656,12 @@
   },
   "languageItalian": "Italien",
   "@languageItalian": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "languageBrazilianPortuguese": "Portugais (Brésil)",
+  "@languageBrazilianPortuguese": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -2906,6 +2934,30 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "attending": "Présence ?",
+  "@attending": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "joinTheVideoConference": "Rejoindre la conférence vidéo",
+  "@joinTheVideoConference": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "copyLink": "Copier le lien",
+  "@copyLink": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkCopiedToClipboard": "Lien copié dans le presse-papier",
+  "@linkCopiedToClipboard": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "where": "Où",
   "@where": {
     "type": "text",
@@ -3048,7 +3100,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "quotaStateLabel": "{used} sur {limit} utilisé",
+  "quotaStateLabel": "{used} sur {limit} utilisés",
   "@quotaStateLabel": {
     "type": "text",
     "placeholders_order": [
@@ -3858,19 +3910,19 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "emailReadReceiptsToggleDescription": "Toujours exiger des accusés de réception pour les messages sortants",
+  "emailReadReceiptsToggleDescription": "Toujours exiger des accusés de lecture pour les messages sortants",
   "@emailReadReceiptsToggleDescription": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
   },
-  "emailReadReceipts": "Accusés de réception",
+  "emailReadReceipts": "Accusés de lecture",
   "@emailReadReceipts": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
   },
-  "emailReadReceiptsSettingExplanation": "Les accusés de réception sont des notifications qui peuvent être envoyées à l'expéditeur pour confirmer que le destinataire a bien ouvert le message.",
+  "emailReadReceiptsSettingExplanation": "Les accusés de lecture sont des notifications qui peuvent être envoyées à l'expéditeur pour confirmer que le destinataire a bien ouvert le message.",
   "@emailReadReceiptsSettingExplanation": {
     "type": "text",
     "placeholders_order": [],
@@ -4138,19 +4190,19 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "turnOffRequestReadReceipt": "Désactiver l'accusé de réception",
+  "turnOffRequestReadReceipt": "Désactiver l'accusé de lecture",
   "@turnOffRequestReadReceipt": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
   },
-  "turnOnRequestReadReceipt": "Activer l'accusé de réception",
+  "turnOnRequestReadReceipt": "Activer l'accusé de lecture",
   "@turnOnRequestReadReceipt": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
   },
-  "requestReadReceiptHasBeenEnabled": "L'accusé de réception a été activé",
+  "requestReadReceiptHasBeenEnabled": "L'accusé de lecture a été activé",
   "@requestReadReceiptHasBeenEnabled": {
     "type": "text",
     "placeholders_order": [],
@@ -4192,7 +4244,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "requestReadReceiptHasBeenDisabled": "L'accusé de réception a été désactivé",
+  "requestReadReceiptHasBeenDisabled": "L'accusé de lecture a été désactivé",
   "@requestReadReceiptHasBeenDisabled": {
     "type": "text",
     "placeholders_order": [],
@@ -4276,6 +4328,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "languageMongolian": "Mongol",
+  "@languageMongolian": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "nameToBeDisplayed": "Nom à afficher aux destinataires",
   "@nameToBeDisplayed": {
     "type": "text",
@@ -4306,7 +4364,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "createTwakeIdFailed": "Échec de la création d'un Twake ID. Veuillez réessayer.",
+  "createTwakeIdFailed": "Échec de la création du Twake ID. Veuillez réessayer.",
   "@createTwakeIdFailed": {
     "type": "text",
     "placeholders_order": [],
@@ -4396,6 +4454,12 @@
   },
   "cannotOpenNewWindow": "Impossible d'ouvrir une nouvelle fenêtre",
   "@cannotOpenNewWindow": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkCannotBeOpened": "Ce lien ne peut pas être ouvert",
+  "@linkCannotBeOpened": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -4840,7 +4904,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "threadToggleDescription": "Activité les fil de discussion",
+  "threadToggleDescription": "Activer les fils de discussion",
   "@threadToggleDescription": {
     "type": "text",
     "placeholders_order": [],
@@ -4848,6 +4912,12 @@
   },
   "youAreNotInvitedToThisEventPleaseContactTheOrganizer": "Vous n'êtes pas invité a cette événement. Veuillez contacter l'organisateur de celui-ci.",
   "@youAreNotInvitedToThisEventPleaseContactTheOrganizer": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "seeInYourCalendar": "Voir dans votre Agenda",
+  "@seeInYourCalendar": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -5268,7 +5338,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "storageUsedMessage": "sur {limit} utilisé",
+  "storageUsedMessage": "sur {limit} utilisés",
   "@storageUsedMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5356,42 +5426,6 @@
   },
   "openNewMessage": "Ouvrir un nouveau mail",
   "@openNewMessage": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailComposer": "Editeur de mails",
-  "@mailComposer": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "focusOnSearch": "Focus sur la recherche",
-  "@focusOnSearch": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "openedModal": "Fenêtre pop-up ouverte",
-  "@openedModal": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailboxList": "Liste des mails",
-  "@mailboxList": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "openedMailView": "Mail ouvert",
-  "@openedMailView": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailboxListWithSelectedMail": "Boite mail (mail sélectionné)",
-  "@mailboxListWithSelectedMail": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -5666,7 +5700,7 @@
       "labelName": {}
     }
   },
-  "addLabelToEmailSuccessfullyMessage": "E-mail ajouté au libellé \"{labelName}\"",
+  "addLabelToEmailSuccessfullyMessage": "Libellé \"{labelName}\" ajouté à l'e-mail",
   "@addLabelToEmailSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5676,7 +5710,7 @@
       "labelName": {}
     }
   },
-  "addLabelToEmailFailureMessage": "Impossible d'ajouter l'e-mail au libellé \"{labelName}\"",
+  "addLabelToEmailFailureMessage": "Impossible d'ajouter le libellé \"{labelName}\" à l'e-mail",
   "@addLabelToEmailFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5686,7 +5720,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromEmailSuccessfullyMessage": "E-mail retiré du libellé \"{labelName}\"",
+  "removeLabelFromEmailSuccessfullyMessage": "Libellé \"{labelName}\" retiré de l'e-mail",
   "@removeLabelFromEmailSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5696,7 +5730,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromEmailFailureMessage": "Impossible de retirer l'e-mail du libellé \"{labelName}\"",
+  "removeLabelFromEmailFailureMessage": "Impossible de retirer le libellé \"{labelName}\" de l'e-mail",
   "@removeLabelFromEmailFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5706,7 +5740,7 @@
       "labelName": {}
     }
   },
-  "addLabelToThreadSuccessfullyMessage": "Tous les e-mails du fil ont été ajoutés au libellé \"{labelName}\"",
+  "addLabelToThreadSuccessfullyMessage": "Libellé \"{labelName}\" ajouté à tous les e-mails du fil",
   "@addLabelToThreadSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5716,7 +5750,7 @@
       "labelName": {}
     }
   },
-  "addLabelToThreadFailureMessage": "Impossible d'ajouter tous les e-mails du fil au libellé \"{labelName}\"",
+  "addLabelToThreadFailureMessage": "Impossible d'ajouter le libellé \"{labelName}\" à tous les e-mails du fil",
   "@addLabelToThreadFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5726,7 +5760,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromThreadSuccessfullyMessage": "Tous les e-mails du fil ont été retirés du libellé \"{labelName}\"",
+  "removeLabelFromThreadSuccessfullyMessage": "Libellé \"{labelName}\" retiré de tous les e-mails du fil",
   "@removeLabelFromThreadSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5736,7 +5770,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromThreadFailureMessage": "Impossible de retirer tous les e-mails du fil du libellé \"{labelName}\"",
+  "removeLabelFromThreadFailureMessage": "Impossible de retirer le libellé \"{labelName}\" de tous les e-mails du fil",
   "@removeLabelFromThreadFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5745,5 +5779,279 @@
     "placeholders": {
       "labelName": {}
     }
+  },
+  "pleaseEnterNameYourNewLabel": "Veuillez saisir le nom de votre nouveau libellé",
+  "@pleaseEnterNameYourNewLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseALabelColor": "Choisir une couleur de libellé",
+  "@chooseALabelColor": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "tagNameAlreadyExists": "Un libellé avec ce nom existe déjà. Veuillez choisir un nom différent.",
+  "@tagNameAlreadyExists": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseCustomColour": "Choisir une couleur personnalisée",
+  "@chooseCustomColour": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "createNewLabelFailure": "Échec de la création du libellé",
+  "@createNewLabelFailure": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelVisibilitySettingExplanation": "Afficher les libellés assignés aux e-mails directement dans votre liste de messages pour une catégorisation plus facile.",
+  "@labelVisibilitySettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelVisibilityToggleDescription": "Afficher les libellés",
+  "@labelVisibilityToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "updateTheLabelName": "Mettre à jour le nom du libellé",
+  "@updateTheLabelName": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "areYouSureYouWantToDeleteTheLabel": "Êtes-vous sûr de vouloir supprimer le libellé \"{labelName}\" ?",
+  "@areYouSureYouWantToDeleteTheLabel": {
+    "type": "text",
+    "placeholders_order": [
+      "labelName"
+    ],
+    "placeholders": {
+      "labelName": {}
+    }
+  },
+  "labelDescription": "Description (optionnel)",
+  "@labelDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelDescriptionHintText": "Ajoutez une brève description pour expliquer à quoi sert ce libellé",
+  "@labelDescriptionHintText": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "notIncludeEvents": "Exclure les événements",
+  "@notIncludeEvents": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "closeMailDetailView": "Fermer la vue détaillée de l'email",
+  "@closeMailDetailView": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "allEmail": "Tous les messages",
+  "@allEmail": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "allEmailTrashAndSpam": "Tous les messages, corbeille & spam",
+  "@allEmailTrashAndSpam": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseLabel": "Choisir le libellé",
+  "@chooseLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "selectLabel": "Sélectionner le libellé",
+  "@selectLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailSuccessfullyMessage": "Les libellés ont bien été ajoutés aux messages.",
+  "@addListLabelToListEmailSuccessfullyMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailHasSomeFailureMessage": "Les libellés ont bien été ajoutés à certains messages.",
+  "@addListLabelToListEmailHasSomeFailureMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailFailureMessage": "L'ajout des libellés à ces messages a échoué",
+  "@addListLabelToListEmailFailureMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "noLabelsYet": "Aucun libellé",
+  "@noLabelsYet": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "noLabelsYetMessageDescriptions": "Créez votre premier libellé pour mieux organiser vos messages.",
+  "@noLabelsYetMessageDescriptions": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "createALabel": "Créer un libellé",
+  "@createALabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "confirm": "Confirmer",
+  "@confirm": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "titleConfirmRuleWithRejectAction": "Rejeter tous les e-mails qui correspondent à ce critère ?",
+  "@titleConfirmRuleWithRejectAction": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "messageConfirmationRuleWithRejectAction": "Cette action est irréversible. Confirmez-vous vouloir continuer ?",
+  "@messageConfirmationRuleWithRejectAction": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorization": "Libellés de catégorisation",
+  "@aiLabelCategorization": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorizationToggleDescription": "Activer la catégorisation par libellés",
+  "@aiLabelCategorizationToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorizationSettingExplanation": "Appliquer mes libellés sur les e-mails entrants en utilisant leur description",
+  "@aiLabelCategorizationSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "ssoRedirectFailedMessage": "Nous n'avons pas pu finaliser la redirection de l'authentification unique (SSO). Veuillez réessayer.",
+  "@ssoRedirectFailedMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "cannotPreviewPdf": "Impossible de prévisualiser le PDF",
+  "@cannotPreviewPdf": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "openInDrive": "Ouvrir dans Drive",
+  "@openInDrive": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachment": "Pièce jointe Drive",
+  "@driveAttachment": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentSettingExplanation": "Afficher ou masquer le bouton de pièce jointe Twake Drive dans l'éditeur de message",
+  "@driveAttachmentSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentToggleDescription": "Activer le bouton de pièce jointe Drive",
+  "@driveAttachmentToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReporting": "Rapport d'erreurs",
+  "@errorReporting": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReportingSettingExplanation": "Envoyez des rapports de plantage et d'erreur afin que l'équipe d'assistance puisse diagnostiquer les problèmes que vous rencontrez. Vos e-mails, leur contenu et leurs destinataires ne sont jamais inclus.",
+  "@errorReportingSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReportingToggleDescription": "Envoyer les rapports d'erreurs",
+  "@errorReportingToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentAddedSuccessfully": "Fichiers ajoutés depuis Drive.",
+  "@driveAttachmentAddedSuccessfully": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentTransferFailed": "Échec de l'ajout des fichiers depuis Drive.",
+  "@driveAttachmentTransferFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveNoValidAttachment": "Aucune pièce jointe valide",
+  "@driveNoValidAttachment": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersSuccess": "Sous-dossiers de la corbeille supprimés",
+  "@clearTrashSubfoldersSuccess": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersPartialSuccess": "Certains sous-dossiers de la corbeille n'ont pas pu être supprimés",
+  "@clearTrashSubfoldersPartialSuccess": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersFailed": "Échec de la suppression des sous-dossiers de la corbeille",
+  "@clearTrashSubfoldersFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "deepLinkCannotBeOpened": "Ce lien de connexion ne provient pas de Twake. Veuillez vous connecter depuis l'application.",
+  "@deepLinkCannotBeOpened": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
   }
 }

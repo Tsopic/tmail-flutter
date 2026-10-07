@@ -21,6 +21,7 @@ import 'package:tmail_ui_user/features/base/reloadable/reloadable_controller.dar
 import 'package:tmail_ui_user/features/home/domain/state/auto_sign_in_via_deep_link_state.dart';
 import 'package:tmail_ui_user/features/home/domain/state/get_session_state.dart';
 import 'package:tmail_ui_user/features/login/data/network/oidc_error.dart';
+import 'package:tmail_ui_user/features/login/domain/state/authenticate_oidc_on_browser_state.dart';
 import 'package:tmail_ui_user/features/login/domain/exceptions/authentication_exception.dart';
 import 'package:tmail_ui_user/features/login/domain/exceptions/login_exception.dart';
 import 'package:tmail_ui_user/features/login/domain/model/recent_login_url.dart';
@@ -62,7 +63,7 @@ import 'package:tmail_ui_user/features/starting_page/domain/usecase/sign_in_twak
 import 'package:tmail_ui_user/main/deep_links/deep_link_data.dart';
 import 'package:tmail_ui_user/main/deep_links/deep_links_manager.dart';
 import 'package:tmail_ui_user/main/deep_links/open_app_deep_link_data.dart';
-import 'package:tmail_ui_user/main/exceptions/remote_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/network_exception.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/app_routes.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
@@ -107,6 +108,7 @@ class LoginController extends ReloadableController {
   Password? _password;
   Uri? _baseUri;
   FeatureFailure? featureFailure;
+
   DeepLinksManager? _deepLinksManager;
   StreamSubscription<DeepLinkData?>? _deepLinkDataStreamSubscription;
 
@@ -172,10 +174,13 @@ class LoginController extends ReloadableController {
         failure is GetOIDCConfigurationFailure ||
         failure is SignInTwakeWorkplaceFailure) {
       _handleCommonOIDCFailure();
+    } else if (failure is AuthenticateOidcOnBrowserFailure) {
+      _handleSSORedirectFailure(ssoConfirmed: failure.ssoConfirmed);
     } else if (failure is GetTokenOIDCFailure) {
-      _handleNoSuitableBrowserOIDC(
-        failure,
-      ).map((stillFailed) => _handleCommonOIDCFailure());
+      _handleNoSuitableBrowserOIDC(failure).map(
+        (stillFailed) =>
+            _handleSSORedirectFailure(ssoConfirmed: failure.ssoConfirmed),
+      );
     } else if (failure is GetAuthenticatedAccountFailure) {
       _checkOIDCIsAvailable();
     } else if (failure is GetSessionFailure) {
@@ -241,10 +246,13 @@ class LoginController extends ReloadableController {
         failure is GetOIDCConfigurationFailure ||
         failure is SignInTwakeWorkplaceFailure) {
       _handleCommonOIDCFailure();
+    } else if (failure is AuthenticateOidcOnBrowserFailure) {
+      _handleSSORedirectFailure(ssoConfirmed: failure.ssoConfirmed);
     } else if (failure is GetTokenOIDCFailure) {
-      _handleNoSuitableBrowserOIDC(
-        failure,
-      ).map((stillFailed) => _handleCommonOIDCFailure());
+      _handleNoSuitableBrowserOIDC(failure).map(
+        (stillFailed) =>
+            _handleSSORedirectFailure(ssoConfirmed: failure.ssoConfirmed),
+      );
     } else if (failure is GetSessionFailure) {
       SmartDialog.dismiss();
       clearAllData();
@@ -645,6 +653,17 @@ class LoginController extends ReloadableController {
       _showPasswordForm();
     } else {
       _showCredentialForm();
+    }
+  }
+
+  /// On a webFinger-confirmed SSO server we never fall back to basic auth: keep
+  /// the user on the SSO flow and offer a retry. A guessed provider may not be
+  /// SSO, so it keeps the basic-auth fallback.
+  void _handleSSORedirectFailure({required bool ssoConfirmed}) {
+    if (ssoConfirmed) {
+      loginFormType.value = LoginFormType.retry;
+    } else {
+      _handleCommonOIDCFailure();
     }
   }
 

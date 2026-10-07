@@ -42,15 +42,29 @@ class FcmService {
     }
   }
 
-  void closeStream() {
-    if (backgroundMessageStreamController?.isClosed == false) {
-      backgroundMessageStreamController?.close();
-    }
-    if (fcmTokenStreamController?.isClosed == false) {
-      fcmTokenStreamController?.close();
-    }
-
+  Future<void> closeStream() async {
+    final backgroundController = backgroundMessageStreamController;
+    final tokenController = fcmTokenStreamController;
     backgroundMessageStreamController = null;
     fcmTokenStreamController = null;
+
+    try {
+      if (backgroundController?.isClosed == false) {
+        await backgroundController?.close();
+      }
+    } catch (e) {
+      logWarning(
+        'FcmService::closeStream: backgroundMessageStreamController throw exception: $e',
+      );
+    }
+    try {
+      if (tokenController?.isClosed == false) {
+        await tokenController?.close();
+      }
+    } catch (e) {
+      logWarning(
+        'FcmService::closeStream: fcmTokenStreamController throw exception: $e',
+      );
+    }
   }
 }

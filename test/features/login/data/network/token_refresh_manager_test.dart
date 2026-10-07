@@ -32,7 +32,7 @@ void main() {
       iosSharingManager,
     );
 
-    dotenv.loadFromString(envString: 'PLATFORM=other');
+    dotenv.loadFromString(isOptional: true, envString: 'PLATFORM=other');
   });
 
   tearDown(() {
@@ -40,17 +40,20 @@ void main() {
   });
 
   group('TokenRefreshManager initialization tests', () {
-    test('should not schedule refresh when authentication type is not OIDC', () {
-      tokenRefreshManager.initialize(
-        token: OIDCFixtures.newTokenOidc,
-        config: OIDCFixtures.oidcConfiguration,
-        authenticationType: AuthenticationType.basic,
-      );
+    test(
+      'should not schedule refresh when authentication type is not OIDC',
+      () {
+        tokenRefreshManager.initialize(
+          token: OIDCFixtures.newTokenOidc,
+          config: OIDCFixtures.oidcConfiguration,
+          authenticationType: AuthenticationType.basic,
+        );
 
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
-    });
+        verifyNever(
+          authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+        );
+      },
+    );
 
     test('should not schedule refresh when token is null', () {
       tokenRefreshManager.initialize(
@@ -59,9 +62,9 @@ void main() {
         authenticationType: AuthenticationType.oidc,
       );
 
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
+      verifyNever(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      );
     });
 
     test('should not schedule refresh when config is null', () {
@@ -71,9 +74,9 @@ void main() {
         authenticationType: AuthenticationType.oidc,
       );
 
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
+      verifyNever(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      );
     });
 
     test('should not schedule refresh when refresh token is empty', () {
@@ -90,9 +93,9 @@ void main() {
         authenticationType: AuthenticationType.oidc,
       );
 
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
+      verifyNever(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      );
     });
   });
 
@@ -113,9 +116,9 @@ void main() {
       );
 
       // No immediate refresh should occur since token has plenty of time
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
+      verifyNever(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      );
     });
 
     test('should refresh immediately when token is about to expire', () async {
@@ -127,11 +130,12 @@ void main() {
         expiredTime: DateTime.now().add(const Duration(seconds: 30)),
       );
 
-      when(accountCacheManager.getCurrentAccount())
-          .thenAnswer((_) async => AccountFixtures.aliceAccount);
-      when(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      )).thenAnswer((_) async => OIDCFixtures.newTokenOidc);
+      when(
+        accountCacheManager.getCurrentAccount(),
+      ).thenAnswer((_) async => AccountFixtures.aliceAccount);
+      when(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      ).thenAnswer((_) async => OIDCFixtures.newTokenOidc);
 
       tokenRefreshManager.initialize(
         token: tokenAboutToExpire,
@@ -142,13 +146,15 @@ void main() {
       // Give time for immediate refresh to occur
       await Future.delayed(const Duration(milliseconds: 100));
 
-      verify(authenticationClient.refreshingTokensOIDC(
-        OIDCFixtures.oidcConfiguration.clientId,
-        OIDCFixtures.oidcConfiguration.redirectUrl,
-        OIDCFixtures.oidcConfiguration.discoveryUrl,
-        OIDCFixtures.oidcConfiguration.scopes,
-        'refresh123',
-      )).called(1);
+      verify(
+        authenticationClient.refreshingTokensOIDC(
+          OIDCFixtures.oidcConfiguration.clientId,
+          OIDCFixtures.oidcConfiguration.redirectUrl,
+          OIDCFixtures.oidcConfiguration.discoveryUrl,
+          OIDCFixtures.oidcConfiguration.scopes,
+          tokenAboutToExpire,
+        ),
+      ).called(1);
     });
 
     test('should not schedule refresh when token is already expired', () {
@@ -158,75 +164,86 @@ void main() {
         authenticationType: AuthenticationType.oidc,
       );
 
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
+      verifyNever(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      );
     });
   });
 
   group('TokenRefreshManager callback tests', () {
-    test('should call onTokenRefreshed callback when token is refreshed', () async {
-      TokenOIDC? callbackToken;
+    test(
+      'should call onTokenRefreshed callback when token is refreshed',
+      () async {
+        TokenOIDC? callbackToken;
 
-      final tokenAboutToExpire = TokenOIDC(
-        'old-token',
-        OIDCFixtures.newTokenOidc.tokenId,
-        'refresh123',
-        expiredTime: DateTime.now().add(const Duration(seconds: 10)),
-      );
+        final tokenAboutToExpire = TokenOIDC(
+          'old-token',
+          OIDCFixtures.newTokenOidc.tokenId,
+          'refresh123',
+          expiredTime: DateTime.now().add(const Duration(seconds: 10)),
+        );
 
-      when(accountCacheManager.getCurrentAccount())
-          .thenAnswer((_) async => AccountFixtures.aliceAccount);
-      when(accountCacheManager.deleteCurrentAccount(any))
-          .thenAnswer((_) async {});
-      when(accountCacheManager.setCurrentAccount(any))
-          .thenAnswer((_) async {});
-      when(tokenOidcCacheManager.persistOneTokenOidc(any))
-          .thenAnswer((_) async {});
-      when(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      )).thenAnswer((_) async => OIDCFixtures.newTokenOidc);
+        when(
+          accountCacheManager.getCurrentAccount(),
+        ).thenAnswer((_) async => AccountFixtures.aliceAccount);
+        when(
+          accountCacheManager.deleteCurrentAccount(any),
+        ).thenAnswer((_) async {});
+        when(
+          accountCacheManager.setCurrentAccount(any),
+        ).thenAnswer((_) async {});
+        when(
+          tokenOidcCacheManager.persistOneTokenOidc(any),
+        ).thenAnswer((_) async {});
+        when(
+          authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+        ).thenAnswer((_) async => OIDCFixtures.newTokenOidc);
 
-      tokenRefreshManager.initialize(
-        token: tokenAboutToExpire,
-        config: OIDCFixtures.oidcConfiguration,
-        authenticationType: AuthenticationType.oidc,
-        onRefreshed: (token) => callbackToken = token,
-      );
+        tokenRefreshManager.initialize(
+          token: tokenAboutToExpire,
+          config: OIDCFixtures.oidcConfiguration,
+          authenticationType: AuthenticationType.oidc,
+          onRefreshed: (token) => callbackToken = token,
+        );
 
-      await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: 200));
 
-      expect(callbackToken, isNotNull);
-      expect(callbackToken?.token, equals(OIDCFixtures.newTokenOidc.token));
-    });
+        expect(callbackToken, isNotNull);
+        expect(callbackToken?.token, equals(OIDCFixtures.newTokenOidc.token));
+      },
+    );
 
-    test('should not call callback when refreshed token is same as current', () async {
-      TokenOIDC? callbackToken;
+    test(
+      'should not call callback when refreshed token is same as current',
+      () async {
+        TokenOIDC? callbackToken;
 
-      final currentToken = TokenOIDC(
-        'same-token',
-        OIDCFixtures.newTokenOidc.tokenId,
-        'refresh123',
-        expiredTime: DateTime.now().add(const Duration(seconds: 10)),
-      );
+        final currentToken = TokenOIDC(
+          'same-token',
+          OIDCFixtures.newTokenOidc.tokenId,
+          'refresh123',
+          expiredTime: DateTime.now().add(const Duration(seconds: 10)),
+        );
 
-      when(accountCacheManager.getCurrentAccount())
-          .thenAnswer((_) async => AccountFixtures.aliceAccount);
-      when(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      )).thenAnswer((_) async => currentToken);
+        when(
+          accountCacheManager.getCurrentAccount(),
+        ).thenAnswer((_) async => AccountFixtures.aliceAccount);
+        when(
+          authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+        ).thenAnswer((_) async => currentToken);
 
-      tokenRefreshManager.initialize(
-        token: currentToken,
-        config: OIDCFixtures.oidcConfiguration,
-        authenticationType: AuthenticationType.oidc,
-        onRefreshed: (token) => callbackToken = token,
-      );
+        tokenRefreshManager.initialize(
+          token: currentToken,
+          config: OIDCFixtures.oidcConfiguration,
+          authenticationType: AuthenticationType.oidc,
+          onRefreshed: (token) => callbackToken = token,
+        );
 
-      await Future.delayed(const Duration(milliseconds: 200));
+        await Future.delayed(const Duration(milliseconds: 200));
 
-      expect(callbackToken, isNull);
-    });
+        expect(callbackToken, isNull);
+      },
+    );
   });
 
   group('TokenRefreshManager retry logic tests', () {
@@ -240,23 +257,25 @@ void main() {
         expiredTime: DateTime.now().add(const Duration(seconds: 5)),
       );
 
-      when(accountCacheManager.getCurrentAccount())
-          .thenAnswer((_) async => AccountFixtures.aliceAccount);
-      when(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      )).thenAnswer((_) async {
+      when(
+        accountCacheManager.getCurrentAccount(),
+      ).thenAnswer((_) async => AccountFixtures.aliceAccount);
+      when(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      ).thenAnswer((_) async {
         refreshAttempts++;
         if (refreshAttempts < 2) {
           throw Exception('Network error');
         }
         return OIDCFixtures.newTokenOidc;
       });
-      when(accountCacheManager.deleteCurrentAccount(any))
-          .thenAnswer((_) async {});
-      when(accountCacheManager.setCurrentAccount(any))
-          .thenAnswer((_) async {});
-      when(tokenOidcCacheManager.persistOneTokenOidc(any))
-          .thenAnswer((_) async {});
+      when(
+        accountCacheManager.deleteCurrentAccount(any),
+      ).thenAnswer((_) async {});
+      when(accountCacheManager.setCurrentAccount(any)).thenAnswer((_) async {});
+      when(
+        tokenOidcCacheManager.persistOneTokenOidc(any),
+      ).thenAnswer((_) async {});
 
       tokenRefreshManager.initialize(
         token: tokenAboutToExpire,
@@ -284,53 +303,60 @@ void main() {
       tokenRefreshManager.updateToken(OIDCFixtures.newTokenOidc);
 
       // No errors should occur
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
+      verifyNever(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      );
     });
   });
 
   group('TokenRefreshManager checkAndRefreshIfNeeded tests', () {
-    test('should refresh immediately when called and token is about to expire', () async {
-      // Use a token that expires in 50 seconds - this will schedule a refresh (not immediate)
-      // since it's just under the 60s buffer but 80% of 50s = 40s, which is positive
-      final tokenAboutToExpire = TokenOIDC(
-        'token123',
-        OIDCFixtures.newTokenOidc.tokenId,
-        'refresh123',
-        expiredTime: DateTime.now().add(const Duration(seconds: 50)),
-      );
+    test(
+      'should refresh immediately when called and token is about to expire',
+      () async {
+        // Use a token that expires in 50 seconds - this will schedule a refresh (not immediate)
+        // since it's just under the 60s buffer but 80% of 50s = 40s, which is positive
+        final tokenAboutToExpire = TokenOIDC(
+          'token123',
+          OIDCFixtures.newTokenOidc.tokenId,
+          'refresh123',
+          expiredTime: DateTime.now().add(const Duration(seconds: 50)),
+        );
 
-      when(accountCacheManager.getCurrentAccount())
-          .thenAnswer((_) async => AccountFixtures.aliceAccount);
-      when(accountCacheManager.deleteCurrentAccount(any))
-          .thenAnswer((_) async {});
-      when(accountCacheManager.setCurrentAccount(any))
-          .thenAnswer((_) async {});
-      when(tokenOidcCacheManager.persistOneTokenOidc(any))
-          .thenAnswer((_) async {});
-      when(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      )).thenAnswer((_) async => OIDCFixtures.newTokenOidc);
+        when(
+          accountCacheManager.getCurrentAccount(),
+        ).thenAnswer((_) async => AccountFixtures.aliceAccount);
+        when(
+          accountCacheManager.deleteCurrentAccount(any),
+        ).thenAnswer((_) async {});
+        when(
+          accountCacheManager.setCurrentAccount(any),
+        ).thenAnswer((_) async {});
+        when(
+          tokenOidcCacheManager.persistOneTokenOidc(any),
+        ).thenAnswer((_) async {});
+        when(
+          authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+        ).thenAnswer((_) async => OIDCFixtures.newTokenOidc);
 
-      tokenRefreshManager.initialize(
-        token: tokenAboutToExpire,
-        config: OIDCFixtures.oidcConfiguration,
-        authenticationType: AuthenticationType.oidc,
-      );
+        tokenRefreshManager.initialize(
+          token: tokenAboutToExpire,
+          config: OIDCFixtures.oidcConfiguration,
+          authenticationType: AuthenticationType.oidc,
+        );
 
-      // The token with 50s lifetime will be scheduled for refresh at min(40s, -10s) = -10s
-      // which means immediate refresh. Let's wait for it to complete
-      await Future.delayed(const Duration(milliseconds: 300));
+        // The token with 50s lifetime will be scheduled for refresh at min(40s, -10s) = -10s
+        // which means immediate refresh. Let's wait for it to complete
+        await Future.delayed(const Duration(milliseconds: 300));
 
-      // Now manually call checkAndRefreshIfNeeded - token is still within buffer
-      await tokenRefreshManager.checkAndRefreshIfNeeded();
+        // Now manually call checkAndRefreshIfNeeded - token is still within buffer
+        await tokenRefreshManager.checkAndRefreshIfNeeded();
 
-      // Verify refresh was called at least once (from either init or check)
-      verify(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      )).called(greaterThanOrEqualTo(1));
-    });
+        // Verify refresh was called at least once (from either init or check)
+        verify(
+          authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+        ).called(greaterThanOrEqualTo(1));
+      },
+    );
 
     test('should not refresh when token has plenty of time', () async {
       final tokenWithLongLifetime = TokenOIDC(
@@ -348,9 +374,9 @@ void main() {
 
       await tokenRefreshManager.checkAndRefreshIfNeeded();
 
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
+      verifyNever(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      );
     });
   });
 
@@ -365,9 +391,9 @@ void main() {
       tokenRefreshManager.dispose();
 
       // Verify no errors and clean disposal
-      verifyNever(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      ));
+      verifyNever(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      );
     });
   });
 
@@ -380,17 +406,19 @@ void main() {
         expiredTime: DateTime.now().add(const Duration(seconds: 10)),
       );
 
-      when(accountCacheManager.getCurrentAccount())
-          .thenAnswer((_) async => AccountFixtures.aliceAccount);
-      when(accountCacheManager.deleteCurrentAccount(any))
-          .thenAnswer((_) async {});
-      when(accountCacheManager.setCurrentAccount(any))
-          .thenAnswer((_) async {});
-      when(tokenOidcCacheManager.persistOneTokenOidc(any))
-          .thenAnswer((_) async {});
-      when(authenticationClient.refreshingTokensOIDC(
-        any, any, any, any, any,
-      )).thenAnswer((_) async => OIDCFixtures.newTokenOidc);
+      when(
+        accountCacheManager.getCurrentAccount(),
+      ).thenAnswer((_) async => AccountFixtures.aliceAccount);
+      when(
+        accountCacheManager.deleteCurrentAccount(any),
+      ).thenAnswer((_) async {});
+      when(accountCacheManager.setCurrentAccount(any)).thenAnswer((_) async {});
+      when(
+        tokenOidcCacheManager.persistOneTokenOidc(any),
+      ).thenAnswer((_) async {});
+      when(
+        authenticationClient.refreshingTokensOIDC(any, any, any, any, any),
+      ).thenAnswer((_) async => OIDCFixtures.newTokenOidc);
 
       tokenRefreshManager.initialize(
         token: tokenAboutToExpire,
@@ -400,8 +428,14 @@ void main() {
 
       await Future.delayed(const Duration(milliseconds: 200));
 
-      verify(tokenOidcCacheManager.persistOneTokenOidc(OIDCFixtures.newTokenOidc)).called(1);
-      verify(accountCacheManager.deleteCurrentAccount(AccountFixtures.aliceAccount.id)).called(1);
+      verify(
+        tokenOidcCacheManager.persistOneTokenOidc(OIDCFixtures.newTokenOidc),
+      ).called(1);
+      verify(
+        accountCacheManager.deleteCurrentAccount(
+          AccountFixtures.aliceAccount.id,
+        ),
+      ).called(1);
       verify(accountCacheManager.setCurrentAccount(any)).called(1);
     });
   });

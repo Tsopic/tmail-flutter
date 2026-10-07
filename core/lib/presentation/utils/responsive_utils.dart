@@ -7,6 +7,7 @@ class ResponsiveUtils {
   static const double defaultSizeLeftMenuMobile = 375;
   static const double defaultSizeMenu = 256;
   static const double defaultSizeMenuCollapsed = 64;
+  static const double sidebarMenuWidth = 236;
   static const double mobileLeftMenuSize = 339;
 
   static const int heightShortest = 600;

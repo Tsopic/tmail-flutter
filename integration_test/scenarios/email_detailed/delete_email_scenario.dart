@@ -11,7 +11,7 @@ import '../../robots/thread_robot.dart';
 
 class DeleteEmailScenario extends BaseTestScenario {
 
-  const DeleteEmailScenario(super.$);
+  const DeleteEmailScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -44,7 +44,7 @@ class DeleteEmailScenario extends BaseTestScenario {
     _expectEmailViewInvisible();
 
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(appLocalizations.trashMailboxDisplayName);
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.trashMailboxDisplayName));
     await _expectEmailWithSubjectInTrashFolderVisible(subject);
   }
 

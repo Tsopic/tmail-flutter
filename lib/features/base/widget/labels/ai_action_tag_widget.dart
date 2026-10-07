@@ -6,8 +6,15 @@ import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 class AiActionTagWidget extends StatelessWidget {
   final EdgeInsetsGeometry? margin;
+  final EdgeInsetsGeometry? padding;
+  final Widget? actionWidget;
 
-  const AiActionTagWidget({super.key, this.margin});
+  const AiActionTagWidget({
+    super.key,
+    this.margin,
+    this.padding,
+    this.actionWidget,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +24,9 @@ class AiActionTagWidget extends StatelessWidget {
       textColor: Colors.white,
       isTruncateText: true,
       showTooltip: PlatformInfo.isWeb,
+      actionWidget: actionWidget,
       margin: margin,
+      padding: padding,
     );
   }
 }

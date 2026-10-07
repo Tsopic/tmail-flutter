@@ -25,6 +25,7 @@ class CalendarEventDetailWidget extends StatelessWidget {
   final ScrollController? scrollController;
   final bool isInsideThreadDetailView;
   final OnIFrameClickAction? onIFrameClickAction;
+  final OnBlockedLinkAction? onBlockedLinkAction;
 
   const CalendarEventDetailWidget({
     super.key,
@@ -35,11 +36,15 @@ class CalendarEventDetailWidget extends StatelessWidget {
     this.scrollController,
     this.isInsideThreadDetailView = false,
     this.onIFrameClickAction,
+    this.onBlockedLinkAction,
   });
 
   @override
   Widget build(BuildContext context) {
-    final eventDesc = _generateEventDescriptionAsHtml();
+    final eventDesc = generateEventDescriptionAsHtml(
+      description: calendarEvent.description,
+      emailContent: emailContent,
+    );
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -72,25 +77,30 @@ class CalendarEventDetailWidget extends StatelessWidget {
                 scrollController: scrollController,
                 isInsideThreadDetailView: isInsideThreadDetailView,
                 onIFrameClickAction: onIFrameClickAction,
+                onBlockedLinkAction: onBlockedLinkAction,
               )
             ),
         ],
       ),
     );
   }
+}
 
-  String _generateEventDescriptionAsHtml() {
-    final descriptions = calendarEvent.description?.trimmed ?? '';
-    final emailContentTrimmed = emailContent.trimmed;
+@visibleForTesting
+String generateEventDescriptionAsHtml({
+  required String? description,
+  required String emailContent,
+}) {
+  final descriptions = description?.trimmed ?? '';
+  final emailContentTrimmed = emailContent.trimmed;
 
-    if (descriptions.isEmpty && emailContentTrimmed.isEmpty) {
-      return '';
-    }
+  if (descriptions.isEmpty && emailContentTrimmed.isEmpty) {
+    return '';
+  }
 
-    return '''
+  return '''
       $descriptions
       <br>
       $emailContentTrimmed
     ''';
-  }
 }

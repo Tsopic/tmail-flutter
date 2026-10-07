@@ -1,6 +1,6 @@
 import 'package:core/presentation/utils/theme_utils.dart';
+import 'package:core/presentation/utils/web_selection/web_selection_coordinator.dart';
 import 'package:core/utils/build_utils.dart';
-import 'package:core/utils/config/env_loader.dart';
 import 'package:core/utils/platform_info.dart';
 import 'package:flutter/widgets.dart';
 import 'package:tmail_ui_user/features/caching/config/hive_cache_config.dart';
@@ -22,16 +22,18 @@ Future<void> runTmailPreload() async {
   await Future.wait([
     MainBindings().dependencies(),
     HiveCacheConfig.instance.setUp(),
-    EnvLoader.loadEnvFile(),
     if (PlatformInfo.isWeb) AssetPreloader.preloadHtmlEditorAssets(),
   ], eagerError: false);
 
-  workerManager.log = BuildUtils.isDebugMode;
-  await workerManager.init();
+  if (PlatformInfo.isMobile) {
+    await workerManager.init(dynamicSpawning: true);
+    workerManager.log = BuildUtils.isDebugMode;
+  }
   await CozyIntegration.integrateCozy();
   await HiveCacheConfig.instance.initializeEncryptionKey();
 
   if (PlatformInfo.isWeb) {
     usePathUrlStrategy();
+    WebSelectionCoordinator.instance.start();
   }
 }

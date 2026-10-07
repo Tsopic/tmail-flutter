@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 import '../../base/base_test_scenario.dart';
@@ -7,7 +9,7 @@ import '../../robots/mailbox_menu_robot.dart';
 import '../../robots/thread_robot.dart';
 
 class MoveFolderContentScenario extends BaseTestScenario {
-  const MoveFolderContentScenario(super.$);
+  const MoveFolderContentScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -34,26 +36,26 @@ class MoveFolderContentScenario extends BaseTestScenario {
     await threadRobot.openMailbox();
     await $.pumpAndTrySettle();
 
-    await mailboxMenuRobot.longPressMailboxWithName(
-      appLocalizations.inboxMailboxDisplayName,
+    await mailboxMenuRobot.navigation.longPressMailbox(
+      mailboxMenuRobot.mailboxItemByName(appLocalizations.inboxMailboxDisplayName),
     );
-    await mailboxMenuRobot.tapMoveFolderContentAction(
-      appLocalizations.templatesMailboxDisplayName,
+    await mailboxMenuRobot.folder.tapMoveFolderContentAction(
+      mailboxMenuRobot.mailboxItemByName(appLocalizations.templatesMailboxDisplayName),
     );
     await $.pumpAndTrySettle(duration: const Duration(seconds: 3));
 
     await threadRobot.openMailbox();
     await $.pumpAndTrySettle();
-    await mailboxMenuRobot.openFolderByName(
-      appLocalizations.templatesMailboxDisplayName,
+    await mailboxMenuRobot.navigation.openFolder(
+      mailboxMenuRobot.mailboxItemByName(appLocalizations.templatesMailboxDisplayName),
     );
     await $.pumpAndTrySettle();
     await _expectEmailWithSubjectVisible(emailSubject);
 
     await threadRobot.openMailbox();
     await $.pumpAndTrySettle();
-    await mailboxMenuRobot.openFolderByName(
-      appLocalizations.inboxMailboxDisplayName,
+    await mailboxMenuRobot.navigation.openFolder(
+      mailboxMenuRobot.mailboxItemByName(appLocalizations.inboxMailboxDisplayName),
     );
     await $.pumpAndTrySettle();
     await _expectEmailWithSubjectInVisible(emailSubject);
@@ -64,15 +66,24 @@ class MoveFolderContentScenario extends BaseTestScenario {
     await expectViewVisible($(subject));
   }
 
-  Future<void> _expectEmailWithSubjectInVisible(String subject) async {
-    await expectViewInvisible($(subject));
+  Future<void> _expectEmailWithSubjectInVisible(String subject, {int attempt = 0,}) async {
+    // While the emails are being move, pumpAndTrySettle might resolve,
+    // causing some emails are still waiting to be moved
+    // and this expectation is triggered
+    try {
+      await expectViewInvisible($(subject));
+    } catch (e) {
+      if (attempt == 3) rethrow;
+      await $.pumpAndTrySettle(duration: Duration(seconds: attempt + 1));
+      await _expectEmailWithSubjectInVisible(subject, attempt: attempt + 1);
+    }
   }
 
   Future<void> _expectEmptyViewVisibleInInboxFolder() async {
-    await expectViewVisible($(#empty_thread_view));
+    await expectViewVisible($(const Key(UiKeys.emptyThreadView)));
   }
 
   Future<void> _expectEmptyViewInVisibleInInboxFolder() async {
-    await expectViewInvisible($(#empty_thread_view));
+    await expectViewInvisible($(const Key(UiKeys.emptyThreadView)));
   }
 }

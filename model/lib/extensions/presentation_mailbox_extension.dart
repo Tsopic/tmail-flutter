@@ -40,15 +40,88 @@ extension PresentationMailboxExtension on PresentationMailbox {
 
   bool get isVirtualFolder => isFavorite || isActionRequired;
 
-  bool get isTrash => role == PresentationMailbox.roleTrash;
+  bool get isTrash => isTrashPersonal || isTrashTeamMailbox;
 
-  bool get isDrafts => role == PresentationMailbox.roleDrafts;
+  bool get isTrashPersonal =>
+      isPersonal && role == PresentationMailbox.roleTrash;
 
-  bool get isTemplates => role == PresentationMailbox.roleTemplates;
+  bool _isTeamMailboxWithRole(String role) =>
+      isChildOfTeamMailboxes &&
+      name?.name.toLowerCase() == role.toLowerCase();
+
+  /// Stricter version of [_isTeamMailboxWithRole] that additionally checks
+  /// the parent is a team-root node (no parentId), ensuring only first-level
+  /// system folders match — not nested user subfolders like Team/Project/Trash.
+  bool isFirstLevelTeamSystemFolder(
+    Map<MailboxId, PresentationMailbox> mailboxMap,
+    String role,
+  ) {
+    if (!_isTeamMailboxWithRole(role)) return false;
+    final parent = parentId != null ? mailboxMap[parentId] : null;
+    return parent?.isTeamMailboxes == true;
+  }
+
+  bool get isTrashTeamMailbox =>
+      _isTeamMailboxWithRole(PresentationMailbox.trashRole);
+
+  bool get isEmptyableTrash =>
+      isTrashPersonal ||
+      (isTrashTeamMailbox && myRights?.mayRemoveItems == true);
+
+  bool get isDrafts {
+    if (isPersonal) {
+      return role == PresentationMailbox.roleDrafts;
+    } else {
+      return isDraftsTeamMailbox;
+    }
+  }
+
+  bool get isDraftsTeamMailbox =>
+      _isTeamMailboxWithRole(PresentationMailbox.draftsRole);
+
+  bool get isTemplates {
+    if (isPersonal) {
+      return role == PresentationMailbox.roleTemplates;
+    } else {
+      return isTemplatesTeamMailbox;
+    }
+  }
+
+  bool get isTemplatesTeamMailbox =>
+      _isTeamMailboxWithRole(PresentationMailbox.templatesRole);
 
   bool get isSent => role == PresentationMailbox.roleSent;
 
   bool get isOutbox => name?.name == PresentationMailbox.outboxRole || role == PresentationMailbox.roleOutbox;
+
+  bool get isOutgoingMailbox => isSent || isDrafts || isOutbox;
+
+  static const List<String> _ruleActionForbiddenTeamSystemFolders = [
+    PresentationMailbox.outboxRole,
+    PresentationMailbox.draftsRole,
+    PresentationMailbox.templatesRole,
+  ];
+
+  /// A subfolder of an excluded folder is excluded too: dropping only the
+  /// parent would make the tree builder show the subfolder at the root.
+  bool isValidRuleActionTarget(Map<MailboxId, PresentationMailbox> mailboxMap) {
+    final visitedIds = <MailboxId>{};
+    PresentationMailbox? mailbox = this;
+    while (mailbox != null && visitedIds.add(mailbox.id)) {
+      if (!mailbox._isAllowedRuleActionFolder(mailboxMap)) return false;
+      mailbox = mailboxMap[mailbox.parentId];
+    }
+    return true;
+  }
+
+  bool _isAllowedRuleActionFolder(Map<MailboxId, PresentationMailbox> mailboxMap) {
+    if (isPersonal) {
+      return !isOutbox && !isDrafts && !isTemplates;
+    }
+    return role != PresentationMailbox.roleOutbox &&
+        !_ruleActionForbiddenTeamSystemFolders
+            .any((folder) => isFirstLevelTeamSystemFolder(mailboxMap, folder));
+  }
 
   bool get isArchive => role == PresentationMailbox.roleArchive;
 

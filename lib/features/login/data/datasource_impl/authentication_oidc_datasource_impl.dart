@@ -13,7 +13,7 @@ import 'package:tmail_ui_user/features/login/data/network/authentication_client/
 import 'package:tmail_ui_user/features/login/data/network/config/oidc_constant.dart';
 import 'package:tmail_ui_user/features/login/data/network/oidc_http_client.dart';
 import 'package:tmail_ui_user/features/login/domain/model/login_constants.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 class AuthenticationOIDCDataSourceImpl extends AuthenticationOIDCDataSource {
 
@@ -86,6 +86,13 @@ class AuthenticationOIDCDataSourceImpl extends AuthenticationOIDCDataSource {
   Future<void> persistTokenOIDC(TokenOIDC tokenOidc) {
     return Future.sync(() async {
       return await _tokenOidcCacheManager.persistOneTokenOidc(tokenOidc);
+    }).catchError(_cacheExceptionThrower.throwException);
+  }
+
+  @override
+  Future<void> persistTokenOIDCAt(String key, TokenOIDC tokenOidc) {
+    return Future.sync(() async {
+      return await _tokenOidcCacheManager.persistOneTokenOidcAt(key, tokenOidc);
     }).catchError(_cacheExceptionThrower.throwException);
   }
 

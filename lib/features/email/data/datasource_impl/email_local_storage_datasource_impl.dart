@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'package:core/data/model/preview_attachment.dart';
 import 'package:core/data/network/download/downloaded_response.dart';
 import 'package:core/domain/extensions/datetime_extension.dart';
-import 'package:core/presentation/extensions/html_extension.dart';
+import 'package:core/presentation/extensions/string_extension.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:core/utils/file_utils.dart';
 import 'package:core/utils/preview_eml_file_utils.dart';
@@ -40,7 +40,7 @@ import 'package:tmail_ui_user/features/email/presentation/extensions/attachment_
 import 'package:tmail_ui_user/features/email/presentation/model/eml_previewer.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/create_new_mailbox_request.dart';
 import 'package:tmail_ui_user/features/sending_queue/domain/model/sending_email.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 class EmailLocalStorageDataSourceImpl extends EmailDataSource {
 
@@ -202,7 +202,7 @@ class EmailLocalStorageDataSourceImpl extends EmailDataSource {
   }
 
   @override
-  Future<Email> updateEmailDrafts(Session session, AccountId accountId, Email newEmail, EmailId oldEmailId, {CancelToken? cancelToken}) {
+  Future<Email> updateEmailDrafts(Session session, AccountId accountId, Email newEmail, EmailId oldEmailId, {CancelToken? cancelToken, bool isUpdateDraftToClose = false}) {
     throw UnimplementedError();
   }
 
@@ -288,7 +288,7 @@ class EmailLocalStorageDataSourceImpl extends EmailDataSource {
 
           final previewAttachment = PreviewAttachment(
             iconBase64Data: iconBase64Data,
-            name: attachment.name.escapeLtGtHtmlString(),
+            name: (attachment.name ?? '').sanitizedBidiForDisplay,
             size: filesize(attachment.size?.value),
             link: attachment.hyperLink,
           );
@@ -305,9 +305,9 @@ class EmailLocalStorageDataSourceImpl extends EmailDataSource {
         appName: appLocalizations.app_name,
         ownEmailAddress: entireMessageRequest.ownEmailAddress,
         subjectPrefix: appLocalizations.subject,
-        subject: email.subject?.escapeLtGtHtmlString() ?? '',
+        subject: email.subject ?? '',
         emailContent: emailContentEscaped,
-        senderName: sender?.name.escapeLtGtHtmlString() ?? '',
+        senderName: sender?.name ?? '',
         senderEmailAddress: sender?.email ?? '',
         dateTime: receiveTime.isNotEmpty ? receiveTime : sentTime,
         fromPrefix: appLocalizations.from_email_address_prefix,
@@ -375,6 +375,19 @@ class EmailLocalStorageDataSourceImpl extends EmailDataSource {
     List<EmailId> emailIdsSuccess,
     Map<Id, SetError> mapErrors,
   })> removeLabelFromThread(Session session, AccountId accountId, List<EmailId> emailIds, KeyWordIdentifier labelKeyword) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<({
+    List<EmailId> emailIdsSuccess,
+    Map<Id, SetError> mapErrors,
+  })> addListLabelToListEmail(
+    Session session,
+    AccountId accountId,
+    List<EmailId> emailIds,
+    List<KeyWordIdentifier> labelKeywords,
+  ) {
     throw UnimplementedError();
   }
 }

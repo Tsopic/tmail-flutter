@@ -11,6 +11,8 @@ extension OidcConfigutationCacheExtension on OidcConfigurationCache {
       isTWP: isTWP,
       clientId: OIDCConstant.clientId,
       scopes: AppConfig.oidcScopes,
+      // Pre-existing entries lack this field; unconfirmed keeps basic auth open.
+      ssoConfirmed: ssoConfirmed ?? false,
     );
   }
 }

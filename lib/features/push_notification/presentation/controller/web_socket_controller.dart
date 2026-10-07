@@ -24,6 +24,7 @@ import 'package:tmail_ui_user/features/push_notification/domain/usecases/connect
 import 'package:tmail_ui_user/features/push_notification/presentation/controller/push_base_controller.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/extensions/state_change_extension.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/listener/email_change_listener.dart';
+import 'package:tmail_ui_user/features/push_notification/presentation/listener/label_change_listener.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/listener/mailbox_change_listener.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/utils/fcm_utils.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
@@ -49,8 +50,19 @@ class WebSocketController extends PushBaseController {
   NetworkConnectionController? _networkConnectionController;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
+  static final List<TypeName> _mailTypePushSupported = [
+    TypeName.emailType,
+    TypeName.mailboxType,
+  ];
+  static final List<TypeName> _labelTypePushSupported = [
+    TypeName.emailType,
+    TypeName.mailboxType,
+    TypeName.labelType,
+  ];
+
   int _retryRemained = 3;
   bool _isConnecting = false;
+  bool _isLabelAvailable = false;
   WebSocketChannel? _webSocketChannel;
   Timer? _webSocketPingTimer;
   StreamSubscription? _webSocketSubscription;
@@ -88,10 +100,14 @@ class WebSocketController extends PushBaseController {
   }
 
   @override
-  void initialize({AccountId? accountId, Session? session}) {
-    log('WebSocketController::initialize:AccountId = ${accountId?.asString}');
+  void initialize({
+    AccountId? accountId,
+    Session? session,
+    bool isLabelAvailable = false,
+  }) {
+    log('WebSocketController::initialize:AccountId = ${accountId?.asString}, isLabelAvailable = $isLabelAvailable');
     super.initialize(accountId: accountId, session: session);
-
+    _isLabelAvailable = isLabelAvailable;
     _connectWebSocket();
     _listenToAppLifeCycle();
     if (PlatformInfo.isWeb) {
@@ -234,9 +250,12 @@ class WebSocketController extends PushBaseController {
   }
 
   void _enableWebSocketPush() {
-    log('WebSocketController::_enableWebSocketPush:');
+    final dataTypes = _isLabelAvailable
+        ? _labelTypePushSupported
+        : _mailTypePushSupported;
+    log('WebSocketController::_enableWebSocketPush: DataType is $dataTypes');
     _webSocketChannel?.sink.add(jsonEncode(WebSocketPushEnableRequest.toJson(
-      dataTypes: [TypeName.emailType, TypeName.mailboxType]
+      dataTypes: dataTypes,
     )));
   }
 
@@ -299,6 +318,7 @@ class WebSocketController extends PushBaseController {
         accountId!,
         emailChangeListener: EmailChangeListener.instance,
         mailboxChangeListener: MailboxChangeListener.instance,
+        labelChangeListener: LabelChangeListener.instance,
         session!.username,
         session: session,
       );

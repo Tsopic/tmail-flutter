@@ -3,9 +3,12 @@ import 'package:core/presentation/views/checkbox/custom_icon_labeled_checkbox.da
 import 'package:core/presentation/views/dialog/confirm_dialog_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:get/get.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/advanced_filter_controller.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/input_field_focus_manager.dart';
+import 'package:tmail_ui_user/features/search/email/domain/notifier/search_filter_notifier.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 
@@ -39,6 +42,10 @@ class AdvancedSearchFilterFormBottomView extends GetWidget<AdvancedFilterControl
               context,
               focusManager.starredCheckboxFocusNode,
             ),
+            _buildCheckboxEvents(
+              context,
+              focusManager.eventsCheckboxFocusNode,
+            ),
           ],
         ),
         const SizedBox(height: 25),
@@ -63,22 +70,25 @@ class AdvancedSearchFilterFormBottomView extends GetWidget<AdvancedFilterControl
         ),
         const SizedBox(width: 8),
         Flexible(
-          child: KeyboardListener(
-            focusNode: FocusNode(),
-            onKeyEvent: (event) {
-              if (event is KeyDownEvent &&
-                  event.logicalKey == LogicalKeyboardKey.tab) {
-                focusManager.fromFieldFocusNode.requestFocus();
-              }
-            },
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 112),
-              height: 48,
-              child: ConfirmDialogButton(
-                label: AppLocalizations.of(context).search,
-                backgroundColor: AppColor.primaryMain,
-                textColor: Colors.white,
-                onTapAction: _onClickSearchButton,
+          child: Consumer(
+            builder: (context, ref, _) => KeyboardListener(
+              focusNode: FocusNode(),
+              onKeyEvent: (event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.tab) {
+                  focusManager.fromFieldFocusNode.requestFocus();
+                }
+              },
+              child: Container(
+                key: const ValueKey(UiKeys.advancedSearchSearchButton),
+                constraints: const BoxConstraints(minWidth: 112),
+                height: 48,
+                child: ConfirmDialogButton(
+                  label: AppLocalizations.of(context).search,
+                  backgroundColor: AppColor.primaryMain,
+                  textColor: Colors.white,
+                  onTapAction: () => _onClickSearchButton(ref),
+                ),
               ),
             ),
           ),
@@ -91,15 +101,18 @@ class AdvancedSearchFilterFormBottomView extends GetWidget<AdvancedFilterControl
       BuildContext context,
       FocusNode currentFocusNode,
   ) {
-    return Obx(
-      () => CustomIconLabeledCheckbox(
+    return Consumer(
+      builder: (context, ref, _) => CustomIconLabeledCheckbox(
+        key: const ValueKey(UiKeys.advancedSearchHasAttachmentCheckbox),
         label: AppLocalizations.of(context).hasAttachment,
         svgIconPath: controller.imagePaths.icCheckboxUnselected,
         selectedSvgIconPath: controller.imagePaths.icCheckboxSelected,
         focusNode: currentFocusNode,
         gap: 8.0,
-        value: controller.hasAttachment.value,
-        onChanged: controller.onHasAttachmentCheckboxChanged,
+        value: ref.watch(searchFilterProvider.select((filter) => filter.hasAttachment)),
+        onChanged: (isChecked) => ref
+          .read(searchFilterProvider.notifier)
+          .setHasAttachment((isChecked ?? false).asSearchFilterToggle()),
       ),
     );
   }
@@ -108,15 +121,17 @@ class AdvancedSearchFilterFormBottomView extends GetWidget<AdvancedFilterControl
     BuildContext context,
     FocusNode currentFocusNode,
   ) {
-    return Obx(
-      () => CustomIconLabeledCheckbox(
+    return Consumer(
+      builder: (context, ref, _) => CustomIconLabeledCheckbox(
         label: AppLocalizations.of(context).starred,
         svgIconPath: controller.imagePaths.icCheckboxUnselected,
         selectedSvgIconPath: controller.imagePaths.icCheckboxSelected,
         focusNode: currentFocusNode,
         gap: 8.0,
-        value: controller.isStarred.value,
-        onChanged: controller.onStarredCheckboxChanged,
+        value: ref.watch(searchFilterProvider.select((filter) => filter.isContainFlagged)),
+        onChanged: (isChecked) => ref
+          .read(searchFilterProvider.notifier)
+          .toggleStarred((isChecked ?? false).asSearchFilterToggle()),
       ),
     );
   }
@@ -125,15 +140,36 @@ class AdvancedSearchFilterFormBottomView extends GetWidget<AdvancedFilterControl
     BuildContext context,
     FocusNode currentFocusNode,
   ) {
-    return Obx(
-      () => CustomIconLabeledCheckbox(
+    return Consumer(
+      builder: (context, ref, _) => CustomIconLabeledCheckbox(
         label: AppLocalizations.of(context).unread,
         svgIconPath: controller.imagePaths.icCheckboxUnselected,
         selectedSvgIconPath: controller.imagePaths.icCheckboxSelected,
         focusNode: currentFocusNode,
         gap: 8.0,
-        value: controller.isUnread.value,
-        onChanged: controller.onUnreadCheckboxChanged,
+        value: ref.watch(searchFilterProvider.select((filter) => filter.unread)),
+        onChanged: (isChecked) => ref
+          .read(searchFilterProvider.notifier)
+          .setUnread((isChecked == true).asSearchFilterToggle()),
+      ),
+    );
+  }
+
+  Widget _buildCheckboxEvents(
+    BuildContext context,
+    FocusNode currentFocusNode,
+  ) {
+    return Consumer(
+      builder: (context, ref, _) => CustomIconLabeledCheckbox(
+        label: AppLocalizations.of(context).notIncludeEvents,
+        svgIconPath: controller.imagePaths.icCheckboxUnselected,
+        selectedSvgIconPath: controller.imagePaths.icCheckboxSelected,
+        focusNode: currentFocusNode,
+        gap: 8.0,
+        value: ref.watch(searchFilterProvider.select((filter) => filter.notIncludeEvents)),
+        onChanged: (isChecked) => ref
+          .read(searchFilterProvider.notifier)
+          .setNotIncludeEvents((isChecked == true).asSearchFilterToggle()),
       ),
     );
   }
@@ -143,8 +179,10 @@ class AdvancedSearchFilterFormBottomView extends GetWidget<AdvancedFilterControl
     popBack();
   }
 
-  void _onClickSearchButton() {
-    controller.applyAdvancedSearchFilter();
+  void _onClickSearchButton(WidgetRef ref) {
+    controller.applyAdvancedSearchFilter(
+      committedFilter: ref.read(searchFilterProvider),
+      filterNotifier: ref.read(searchFilterProvider.notifier));
     popBack();
   }
 }

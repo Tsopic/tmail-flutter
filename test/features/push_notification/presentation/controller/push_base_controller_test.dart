@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'package:dartz/dartz.dart' show Either, Left, Right;
 
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
-import 'package:dartz/dartz.dart' show Either, Left, Right;
 import 'package:fcm/model/type_name.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:jmap_dart_client/jmap/account_id.dart';
@@ -14,6 +14,7 @@ import 'package:mockito/mockito.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/action/push_notification_state_change_action.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/controller/push_base_controller.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/listener/email_change_listener.dart';
+import 'package:tmail_ui_user/features/push_notification/presentation/listener/label_change_listener.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/listener/mailbox_change_listener.dart';
 
 import 'push_base_controller_test.mocks.dart';
@@ -45,229 +46,13 @@ class _FakeFailure extends FeatureFailure {
 @GenerateNiceMocks([
   MockSpec<EmailChangeListener>(),
   MockSpec<MailboxChangeListener>(),
+  MockSpec<LabelChangeListener>(),
 ])
 void main() {
   final accountId = AccountId(Id('accountId'));
   final userName = UserName('userName');
 
   group('push base controller test:', () {
-    group('mappingTypeStateToAction:', () {
-      final emailChangeListener = MockEmailChangeListener();
-      final mailboxChangeListener = MockMailboxChangeListener();
-
-      test(
-        'should call emailChangeListener.dispatchActions with SynchronizeEmailOnForegroundAction '
-        'when mapTypeState contains emailType '
-        'and isForeground is true',
-        () {
-          // arrange
-          final state = State('some-state');
-          final mapTypeState = {TypeName.emailType.value: state.value};
-
-          // act
-          final pushBaseController = TestPushController();
-          pushBaseController.mappingTypeStateToAction(
-            mapTypeState,
-            accountId,
-            userName,
-            isForeground: true,
-            emailChangeListener: emailChangeListener,
-            mailboxChangeListener: mailboxChangeListener,
-          );
-
-          // assert
-          verify(
-            emailChangeListener.dispatchActions([
-              SynchronizeEmailOnForegroundAction(
-                TypeName.emailType,
-                state,
-                accountId,
-                null,
-              ),
-            ]),
-          ).called(1);
-          verifyNever(mailboxChangeListener.dispatchActions(any));
-        },
-      );
-
-      test(
-        'should call emailChangeListener.dispatchActions with StoreEmailStateToRefreshAction '
-        'when mapTypeState contains emailType '
-        'and isForeground is false',
-        () {
-          // arrange
-          final state = State('some-state');
-          final mapTypeState = {TypeName.emailType.value: state.value};
-
-          // act
-          final pushBaseController = TestPushController();
-          pushBaseController.mappingTypeStateToAction(
-            mapTypeState,
-            accountId,
-            userName,
-            isForeground: false,
-            emailChangeListener: emailChangeListener,
-            mailboxChangeListener: mailboxChangeListener,
-          );
-
-          // assert
-          verify(
-            emailChangeListener.dispatchActions([
-              StoreEmailStateToRefreshAction(
-                TypeName.emailType,
-                state,
-                accountId,
-                userName,
-                null,
-              ),
-            ]),
-          ).called(1);
-          verifyNever(mailboxChangeListener.dispatchActions(any));
-        },
-      );
-
-      test(
-        'should call emailChangeListener.dispatchActions with SynchronizeEmailOnForegroundAction '
-        'when mapTypeState contains emailDelivery '
-        'and isForeground is true',
-        () {
-          // arrange
-          final state = State('some-state');
-          final mapTypeState = {TypeName.emailDelivery.value: state.value};
-
-          // act
-          final pushBaseController = TestPushController();
-          pushBaseController.mappingTypeStateToAction(
-            mapTypeState,
-            accountId,
-            userName,
-            isForeground: true,
-            emailChangeListener: emailChangeListener,
-            mailboxChangeListener: mailboxChangeListener,
-          );
-
-          // assert
-          // emailDelivery in foreground should now trigger sync to show new emails
-          verify(
-            emailChangeListener.dispatchActions([
-              SynchronizeEmailOnForegroundAction(
-                TypeName.emailDelivery,
-                state,
-                accountId,
-                null,
-              ),
-            ]),
-          ).called(1);
-          verifyNever(mailboxChangeListener.dispatchActions(any));
-        },
-      );
-
-      test(
-        'should call emailChangeListener.dispatchActions with PushNotificationAction '
-        'when mapTypeState contains emailDelivery '
-        'and isForeground is false',
-        () {
-          // arrange
-          final state = State('some-state');
-          final mapTypeState = {TypeName.emailDelivery.value: state.value};
-
-          // act
-          final pushBaseController = TestPushController();
-          pushBaseController.mappingTypeStateToAction(
-            mapTypeState,
-            accountId,
-            userName,
-            isForeground: false,
-            emailChangeListener: emailChangeListener,
-            mailboxChangeListener: mailboxChangeListener,
-          );
-
-          // assert
-          verify(
-            emailChangeListener.dispatchActions([
-              PushNotificationAction(
-                TypeName.emailDelivery,
-                state,
-                null,
-                accountId,
-                userName,
-              ),
-            ]),
-          ).called(1);
-          verifyNever(mailboxChangeListener.dispatchActions(any));
-        },
-      );
-
-      test(
-        'should call mailboxChangeListener.dispatchActions with SynchronizeMailboxOnForegroundAction '
-        'when mapTypeState contains mailboxType '
-        'and isForeground is true',
-        () {
-          // arrange
-          final state = State('some-state');
-          final mapTypeState = {TypeName.mailboxType.value: state.value};
-
-          // act
-          final pushBaseController = TestPushController();
-          pushBaseController.mappingTypeStateToAction(
-            mapTypeState,
-            accountId,
-            userName,
-            isForeground: true,
-            emailChangeListener: emailChangeListener,
-            mailboxChangeListener: mailboxChangeListener,
-          );
-
-          // assert
-          verify(
-            mailboxChangeListener.dispatchActions([
-              SynchronizeMailboxOnForegroundAction(
-                TypeName.mailboxType,
-                state,
-                accountId,
-              ),
-            ]),
-          ).called(1);
-          verifyNever(emailChangeListener.dispatchActions(any));
-        },
-      );
-
-      test(
-        'should call mailboxChangeListener.dispatchActions with StoreMailboxStateToRefreshAction '
-        'when mapTypeState contains mailboxType '
-        'and isForeground is false',
-        () {
-          // arrange
-          final state = State('some-state');
-          final mapTypeState = {TypeName.mailboxType.value: state.value};
-
-          // act
-          final pushBaseController = TestPushController();
-          pushBaseController.mappingTypeStateToAction(
-            mapTypeState,
-            accountId,
-            userName,
-            isForeground: false,
-            emailChangeListener: emailChangeListener,
-            mailboxChangeListener: mailboxChangeListener,
-          );
-
-          // assert
-          verify(
-            mailboxChangeListener.dispatchActions([
-              StoreMailboxStateToRefreshAction(
-                TypeName.mailboxType,
-                state,
-                accountId,
-                userName,
-              ),
-            ]),
-          ).called(1);
-          verifyNever(emailChangeListener.dispatchActions(any));
-        },
-      );
-    });
-
     group('consumeState lifecycle:', () {
       test(
         'should cancel consumed stream subscriptions when onClose is called',
@@ -301,6 +86,307 @@ void main() {
           );
 
           await streamController.close();
+        },
+      );
+    });
+    group('mappingTypeStateToAction:', () {
+      final emailChangeListener = MockEmailChangeListener();
+      final mailboxChangeListener = MockMailboxChangeListener();
+      final labelChangeListener = MockLabelChangeListener();
+
+      test(
+        'should call emailChangeListener.dispatchActions with SynchronizeEmailOnForegroundAction '
+        'when mapTypeState contains emailType '
+        'and isForeground is true',
+        () {
+          // arrange
+          final state = State('some-state');
+          final mapTypeState = {TypeName.emailType.value: state.value};
+
+          // act
+          final pushBaseController = TestPushController();
+          pushBaseController.mappingTypeStateToAction(
+            mapTypeState,
+            accountId,
+            userName,
+            isForeground: true,
+            emailChangeListener: emailChangeListener,
+            mailboxChangeListener: mailboxChangeListener,
+            labelChangeListener: labelChangeListener,
+          );
+
+          // assert
+          verify(
+            emailChangeListener.dispatchActions([
+              SynchronizeEmailOnForegroundAction(
+                TypeName.emailType,
+                state,
+                accountId,
+                null,
+              ),
+            ]),
+          ).called(1);
+          verifyNever(mailboxChangeListener.dispatchActions(any));
+          verifyNever(labelChangeListener.dispatchActions(any));
+        },
+      );
+
+      test(
+        'should call emailChangeListener.dispatchActions with StoreEmailStateToRefreshAction '
+        'when mapTypeState contains emailType '
+        'and isForeground is false',
+        () {
+          // arrange
+          final state = State('some-state');
+          final mapTypeState = {TypeName.emailType.value: state.value};
+
+          // act
+          final pushBaseController = TestPushController();
+          pushBaseController.mappingTypeStateToAction(
+            mapTypeState,
+            accountId,
+            userName,
+            isForeground: false,
+            emailChangeListener: emailChangeListener,
+            mailboxChangeListener: mailboxChangeListener,
+            labelChangeListener: labelChangeListener,
+          );
+
+          // assert
+          verify(
+            emailChangeListener.dispatchActions([
+              StoreEmailStateToRefreshAction(
+                TypeName.emailType,
+                state,
+                accountId,
+                userName,
+                null,
+              ),
+            ]),
+          ).called(1);
+          verifyNever(mailboxChangeListener.dispatchActions(any));
+          verifyNever(labelChangeListener.dispatchActions(any));
+        },
+      );
+
+      test(
+        'should call emailChangeListener.dispatchActions with SynchronizeEmailOnForegroundAction '
+        'when mapTypeState contains emailDelivery '
+        'and isForeground is true',
+        () {
+          // arrange
+          final state = State('some-state');
+          final mapTypeState = {TypeName.emailDelivery.value: state.value};
+
+          // act
+          final pushBaseController = TestPushController();
+          pushBaseController.mappingTypeStateToAction(
+            mapTypeState,
+            accountId,
+            userName,
+            isForeground: true,
+            emailChangeListener: emailChangeListener,
+            mailboxChangeListener: mailboxChangeListener,
+            labelChangeListener: labelChangeListener,
+          );
+
+          // assert
+          verify(
+            emailChangeListener.dispatchActions([
+              SynchronizeEmailOnForegroundAction(
+                TypeName.emailDelivery,
+                state,
+                accountId,
+                null,
+              ),
+            ]),
+          ).called(1);
+          verifyNever(mailboxChangeListener.dispatchActions(any));
+          verifyNever(labelChangeListener.dispatchActions(any));
+        },
+      );
+
+      test(
+        'should call emailChangeListener.dispatchActions with PushNotificationAction '
+        'when mapTypeState contains emailDelivery '
+        'and isForeground is false',
+        () {
+          // arrange
+          final state = State('some-state');
+          final mapTypeState = {TypeName.emailDelivery.value: state.value};
+
+          // act
+          final pushBaseController = TestPushController();
+          pushBaseController.mappingTypeStateToAction(
+            mapTypeState,
+            accountId,
+            userName,
+            isForeground: false,
+            emailChangeListener: emailChangeListener,
+            mailboxChangeListener: mailboxChangeListener,
+            labelChangeListener: labelChangeListener,
+          );
+
+          // assert
+          verify(
+            emailChangeListener.dispatchActions([
+              PushNotificationAction(
+                TypeName.emailDelivery,
+                state,
+                null,
+                accountId,
+                userName,
+              ),
+            ]),
+          ).called(1);
+          verifyNever(mailboxChangeListener.dispatchActions(any));
+          verifyNever(labelChangeListener.dispatchActions(any));
+        },
+      );
+
+      test(
+        'should call mailboxChangeListener.dispatchActions with SynchronizeMailboxOnForegroundAction '
+        'when mapTypeState contains mailboxType '
+        'and isForeground is true',
+        () {
+          // arrange
+          final state = State('some-state');
+          final mapTypeState = {TypeName.mailboxType.value: state.value};
+
+          // act
+          final pushBaseController = TestPushController();
+          pushBaseController.mappingTypeStateToAction(
+            mapTypeState,
+            accountId,
+            userName,
+            isForeground: true,
+            emailChangeListener: emailChangeListener,
+            mailboxChangeListener: mailboxChangeListener,
+            labelChangeListener: labelChangeListener,
+          );
+
+          // assert
+          verify(
+            mailboxChangeListener.dispatchActions([
+              SynchronizeMailboxOnForegroundAction(
+                TypeName.mailboxType,
+                state,
+                accountId,
+              ),
+            ]),
+          ).called(1);
+          verifyNever(emailChangeListener.dispatchActions(any));
+          verifyNever(labelChangeListener.dispatchActions(any));
+        },
+      );
+
+      test(
+        'should call mailboxChangeListener.dispatchActions with StoreMailboxStateToRefreshAction '
+        'when mapTypeState contains mailboxType '
+        'and isForeground is false',
+        () {
+          // arrange
+          final state = State('some-state');
+          final mapTypeState = {TypeName.mailboxType.value: state.value};
+
+          // act
+          final pushBaseController = TestPushController();
+          pushBaseController.mappingTypeStateToAction(
+            mapTypeState,
+            accountId,
+            userName,
+            isForeground: false,
+            emailChangeListener: emailChangeListener,
+            mailboxChangeListener: mailboxChangeListener,
+            labelChangeListener: labelChangeListener,
+          );
+
+          // assert
+          verify(
+            mailboxChangeListener.dispatchActions([
+              StoreMailboxStateToRefreshAction(
+                TypeName.mailboxType,
+                state,
+                accountId,
+                userName,
+              ),
+            ]),
+          ).called(1);
+          verifyNever(emailChangeListener.dispatchActions(any));
+          verifyNever(labelChangeListener.dispatchActions(any));
+        },
+      );
+
+      test(
+        'should call labelChangeListener.dispatchActions with SynchronizeLabelOnForegroundAction '
+        'when mapTypeState contains labelType '
+        'and isForeground is true',
+        () {
+          // arrange
+          final state = State('some-state');
+          final mapTypeState = {TypeName.labelType.value: state.value};
+
+          // act
+          final pushBaseController = TestPushController();
+          pushBaseController.mappingTypeStateToAction(
+            mapTypeState,
+            accountId,
+            userName,
+            isForeground: true,
+            emailChangeListener: emailChangeListener,
+            mailboxChangeListener: mailboxChangeListener,
+            labelChangeListener: labelChangeListener,
+          );
+
+          // assert
+          verify(
+            labelChangeListener.dispatchActions([
+              SynchronizeLabelOnForegroundAction(
+                TypeName.labelType,
+                state,
+                accountId,
+              ),
+            ]),
+          ).called(1);
+          verifyNever(emailChangeListener.dispatchActions(any));
+          verifyNever(mailboxChangeListener.dispatchActions(any));
+        },
+      );
+
+      test(
+        'should call labelChangeListener.dispatchActions with StoreLabelStateToRefreshAction '
+        'when mapTypeState contains labelType '
+        'and isForeground is false',
+        () {
+          // arrange
+          final state = State('some-state');
+          final mapTypeState = {TypeName.labelType.value: state.value};
+
+          // act
+          final pushBaseController = TestPushController();
+          pushBaseController.mappingTypeStateToAction(
+            mapTypeState,
+            accountId,
+            userName,
+            isForeground: false,
+            emailChangeListener: emailChangeListener,
+            mailboxChangeListener: mailboxChangeListener,
+            labelChangeListener: labelChangeListener,
+          );
+
+          // assert
+          verify(
+            labelChangeListener.dispatchActions([
+              StoreLabelStateToRefreshAction(
+                TypeName.labelType,
+                state,
+                accountId,
+                userName,
+              ),
+            ]),
+          ).called(1);
+          verifyNever(emailChangeListener.dispatchActions(any));
+          verifyNever(mailboxChangeListener.dispatchActions(any));
         },
       );
     });

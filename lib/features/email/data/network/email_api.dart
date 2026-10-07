@@ -21,6 +21,7 @@ import 'package:jmap_dart_client/jmap/core/properties/properties.dart';
 import 'package:jmap_dart_client/jmap/core/reference_id.dart';
 import 'package:jmap_dart_client/jmap/core/reference_prefix.dart';
 import 'package:jmap_dart_client/jmap/core/request/request_invocation.dart';
+import 'package:jmap_dart_client/jmap/core/response/response_object.dart';
 import 'package:jmap_dart_client/jmap/core/session/session.dart';
 import 'package:jmap_dart_client/jmap/jmap_request.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email.dart';
@@ -56,14 +57,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:tmail_ui_user/features/base/mixin/batch_set_email_processing_mixin.dart';
 import 'package:tmail_ui_user/features/base/mixin/handle_error_mixin.dart';
 import 'package:tmail_ui_user/features/base/mixin/mail_api_mixin.dart';
+import 'package:tmail_ui_user/features/base/mixin/session_mixin.dart';
+import 'package:tmail_ui_user/features/composer/domain/exceptions/invalid_recipients_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/set_method_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/model/email_request.dart';
 import 'package:tmail_ui_user/features/download/domain/model/download_source_view.dart';
 import 'package:tmail_ui_user/features/download/domain/state/download_all_attachments_for_web_state.dart';
 import 'package:tmail_ui_user/features/download/domain/state/download_attachment_for_web_state.dart';
+import 'package:tmail_ui_user/features/email/data/extensions/response_object_extension.dart';
 import 'package:tmail_ui_user/features/email/domain/exceptions/email_exceptions.dart';
 import 'package:tmail_ui_user/features/email/domain/model/move_to_mailbox_request.dart';
 import 'package:tmail_ui_user/features/email/domain/model/restore_deleted_message_request.dart';
+import 'package:tmail_ui_user/features/mailbox/domain/exceptions/mailbox_exception.dart';
 import 'package:tmail_ui_user/features/mailbox/domain/model/create_new_mailbox_request.dart';
 import 'package:tmail_ui_user/features/thread/domain/constants/thread_constants.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
@@ -71,7 +76,11 @@ import 'package:uri/uri.dart';
 import 'package:uuid/uuid.dart';
 
 class EmailAPI
-    with HandleSetErrorMixin, MailAPIMixin, BatchSetEmailProcessingMixin {
+    with
+        HandleSetErrorMixin,
+        SessionMixin,
+        MailAPIMixin,
+        BatchSetEmailProcessingMixin {
   final HttpClient _httpClient;
   final DownloadManager _downloadManager;
   final DioClient _dioClient;
@@ -83,6 +92,41 @@ class EmailAPI
     this._dioClient,
     this._uuid,
   );
+
+  Future<Email> getEmailMetadata(
+    Session session,
+    AccountId accountId,
+    EmailId emailId,
+    Properties properties,
+  ) async {
+    final processingInvocation = ProcessingInvocation();
+    final jmapRequestBuilder = JmapRequestBuilder(_httpClient, processingInvocation);
+
+    final getEmailMethod = GetEmailMethod(accountId)
+      ..addIds({emailId.id})
+      ..addProperties(properties);
+
+    final getEmailInvocation = jmapRequestBuilder.invocation(getEmailMethod);
+
+    final capabilities = getEmailMethod.requiredCapabilities
+        .toCapabilitiesSupportTeamMailboxes(session, accountId);
+
+    final result = await (jmapRequestBuilder
+        ..usings(capabilities))
+      .build()
+      .execute();
+
+    final resultList = result.parse<GetEmailResponse>(
+      getEmailInvocation.methodCallId,
+      GetEmailResponse.deserialize,
+    );
+
+    if (resultList?.list.isNotEmpty == true) {
+      return resultList!.list.first;
+    } else {
+      throw NotFoundEmailException();
+    }
+  }
 
   Future<Email> getEmailContent(
     Session session,
@@ -245,13 +289,6 @@ class EmailAPI
       SetEmailResponse.deserialize,
     );
 
-    final setEmailSubmissionResponse = response
-        .parse<SetEmailSubmissionResponse>(
-          setEmailSubmissionInvocation.methodCallId,
-          SetEmailSubmissionResponse.deserialize,
-          methodName: setEmailInvocation.methodName,
-        );
-
     if (markAsAnsweredOrForwardedInvocation != null) {
       markAsAnsweredOrForwardedSetResponse = response.parse<SetEmailResponse>(
         markAsAnsweredOrForwardedInvocation.methodCallId,
@@ -260,15 +297,47 @@ class EmailAPI
     }
 
     final emailCreated = setEmailResponse?.created?[idCreateMethod];
-    final mapErrors = handleSetResponse([
-      setEmailResponse,
-      setEmailSubmissionResponse,
+    if (emailCreated == null) {
+      throw SetMethodException(handleSetResponse([setEmailResponse]));
+    }
+
+    _throwIfSubmissionFailed(response, setEmailSubmissionInvocation, emailCreated.id);
+
+    final markAsAnsweredOrForwardedErrors = handleSetResponse([
       markAsAnsweredOrForwardedSetResponse,
     ]);
-
-    if (emailCreated == null || mapErrors.isNotEmpty) {
-      throw SetMethodException(mapErrors);
+    if (markAsAnsweredOrForwardedErrors.isNotEmpty) {
+      throw SetMethodException(markAsAnsweredOrForwardedErrors);
     }
+  }
+
+  /// `EmailSubmission/set` is checked on its own response, not fused with
+  /// `Email/set`, so an `invalidRecipients` SetError there is never confused
+  /// with an `Email/set` failure.
+  void _throwIfSubmissionFailed(
+    ResponseObject response,
+    RequestInvocation submissionInvocation,
+    EmailId? createdEmailId,
+  ) {
+    final setEmailSubmissionResponse = response.parse<SetEmailSubmissionResponse>(
+      submissionInvocation.methodCallId,
+      SetEmailSubmissionResponse.deserialize,
+      methodName: submissionInvocation.methodName);
+
+    final submissionErrors = handleSetResponse([setEmailSubmissionResponse]);
+    if (submissionErrors.isEmpty) return;
+
+    final invalidRecipients = response.parseInvalidRecipients(
+      submissionInvocation.methodCallId,
+    );
+
+    throw invalidRecipients.isEmpty
+        ? SetMethodException(submissionErrors)
+        : InvalidRecipientsException(
+            submissionErrors,
+            invalidRecipients,
+            createdEmailId: createdEmailId,
+          );
   }
 
   Future<({List<EmailId> emailIdsSuccess, Map<Id, SetError> mapErrors})>
@@ -627,43 +696,39 @@ class EmailAPI
     Session session,
     AccountId accountId,
     Email newEmail,
-    EmailId oldEmailId, {
-    CancelToken? cancelToken,
-  }) async {
+    EmailId oldEmailId,
+    {
+      CancelToken? cancelToken,
+      bool isUpdateDraftToClose = false,
+    }
+  ) async {
     final emailCreated = await saveEmailAsDrafts(
       session,
       accountId,
       newEmail,
       cancelToken: cancelToken,
     );
-
-    try {
-      await removeEmailDrafts(
-        session,
-        accountId,
-        oldEmailId,
-        cancelToken: cancelToken,
-      );
-    } catch (e) {
-      logWarning('EmailAPI::updateEmailDrafts: Exception = $e');
-    }
-
-    return emailCreated;
+    return _postSaveEmailProcessing(
+      savedEmail: emailCreated,
+      removeOldEmail: () => removeEmailDrafts(
+        session, accountId, oldEmailId, cancelToken: cancelToken,
+      ),
+      callerTag: 'EmailAPI::updateEmailDrafts',
+      session: session,
+      accountId: accountId,
+      skipMetadataFetch: isUpdateDraftToClose,
+    );
   }
 
   Future<Email> saveEmailAsTemplate(
     Session session,
     AccountId accountId,
-    Email email, {
-    CreateNewMailboxRequest? createNewMailboxRequest,
-    CancelToken? cancelToken,
-  }) => _emailSetCreateMethod(
-    session,
-    accountId,
-    email,
-    createNewMailboxRequest: createNewMailboxRequest,
-    cancelToken: cancelToken,
-  );
+    Email email,
+    {
+      CreateNewMailboxRequest? createNewMailboxRequest,
+      CancelToken? cancelToken,
+    }
+  ) => _emailSetCreateMethod(session, accountId, email, createNewMailboxRequest: createNewMailboxRequest, cancelToken: cancelToken);
 
   Future<bool> removeEmailTemplate(
     Session session,
@@ -690,19 +755,48 @@ class EmailAPI
       newEmail,
       cancelToken: cancelToken,
     );
+    return _postSaveEmailProcessing(
+      savedEmail: emailCreated,
+      removeOldEmail: () => removeEmailTemplate(
+        session, accountId, oldEmailId, cancelToken: cancelToken,
+      ),
+      callerTag: 'EmailAPI::updateEmailTemplate',
+      session: session,
+      accountId: accountId,
+    );
+  }
+
+  Future<Email> _postSaveEmailProcessing({
+    required Email savedEmail,
+    required Future<void> Function() removeOldEmail,
+    required String callerTag,
+    required Session session,
+    required AccountId accountId,
+    bool skipMetadataFetch = false,
+  }) async {
+    final emailId = savedEmail.id;
+    if (emailId == null) throw NotFoundEmailIdException();
 
     try {
-      await removeEmailTemplate(
-        session,
-        accountId,
-        oldEmailId,
-        cancelToken: cancelToken,
-      );
+      await removeOldEmail();
     } catch (e) {
-      logWarning('EmailAPI::updateEmailTemplate: Exception = $e');
+      logWarning('$callerTag: remove old email exception = $e');
     }
 
-    return emailCreated;
+    if (!skipMetadataFetch) {
+      try {
+        return await getEmailMetadata(
+          session,
+          accountId,
+          emailId,
+          ThreadConstants.propertiesComposerEmailFetch,
+        );
+      } catch (e) {
+        logWarning('$callerTag: getEmailMetadata exception = $e');
+      }
+    }
+
+    return savedEmail;
   }
 
   Future<({List<EmailId> emailIdsSuccess, Map<Id, SetError> mapErrors})>
@@ -1056,6 +1150,26 @@ class EmailAPI
       debugLabel: 'removeLabelFromThread',
       onGenerateUpdates: (batchIds) =>
           batchIds.generateMapUpdateObjectLabel(labelKeyword, remove: true),
+    );
+  }
+
+  Future<({
+    List<EmailId> emailIdsSuccess,
+    Map<Id, SetError> mapErrors,
+  })> addListLabelToListEmail(
+    Session session,
+    AccountId accountId,
+    List<EmailId> emailIds,
+    List<KeyWordIdentifier> labelKeywords,
+  ) async {
+    return executeBatchSetEmail(
+      session: session,
+      accountId: accountId,
+      emailIds: emailIds,
+      httpClient: _httpClient,
+      debugLabel: 'addListLabelToListEmail',
+      onGenerateUpdates: (batchIds) =>
+          batchIds.generateMapUpdateObjectListLabel(labelKeywords),
     );
   }
 }

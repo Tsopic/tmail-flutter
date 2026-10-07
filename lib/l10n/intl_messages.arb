@@ -1,5 +1,5 @@
 {
-  "@@last_modified": "2026-01-26T09:26:54.654131",
+  "@@last_modified": "2026-10-07T17:48:54.216270",
   "initializing_data": "Initializing data...",
   "@initializing_data": {
     "type": "text",
@@ -236,7 +236,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "header_email_quoted": "On {sentDate}, from {emailAddress}",
+  "header_email_quoted": "On {sentDate}, {emailAddress} wrote:",
   "@header_email_quoted": {
     "type": "text",
     "placeholders_order": [
@@ -246,6 +246,18 @@
     "placeholders": {
       "sentDate": {},
       "emailAddress": {}
+    }
+  },
+  "header_email_quoted_date_time": "{date} at {time}",
+  "@header_email_quoted_date_time": {
+    "type": "text",
+    "placeholders_order": [
+      "date",
+      "time"
+    ],
+    "placeholders": {
+      "date": {},
+      "time": {}
     }
   },
   "prefix_reply_email": "Re:",
@@ -1064,7 +1076,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "toast_message_delete_multiple_email_permanently_success": "{count} Messages has been deleted forever",
+  "toast_message_delete_multiple_email_permanently_success": "{count,plural, =1{1 message has been deleted forever}other{{count} messages have been deleted forever}}",
   "@toast_message_delete_multiple_email_permanently_success": {
     "type": "text",
     "placeholders_order": [
@@ -1116,7 +1128,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "toast_message_empty_trash_folder_success": "All messages has been deleted forever",
+  "toast_message_empty_trash_folder_success": "All messages have been deleted forever",
   "@toast_message_empty_trash_folder_success": {
     "type": "text",
     "placeholders_order": [],
@@ -1256,7 +1268,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "identitiesSettingExplanation": "Select the identity or email address you want to use to send an emails",
+  "identitiesSettingExplanation": "Select the identity or email address you want to use to send emails",
   "@identitiesSettingExplanation": {
     "type": "text",
     "placeholders_order": [],
@@ -1318,6 +1330,12 @@
   },
   "create": "Create",
   "@create": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "confirm": "Confirm",
+  "@confirm": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -1466,6 +1484,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "ssoRedirectFailedMessage": "We could not complete the single sign-on redirection. Please try again.",
+  "@ssoRedirectFailedMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "moveFolder": "Move folder",
   "@moveFolder": {
     "type": "text",
@@ -1520,6 +1544,12 @@
   },
   "noPreviewAvailable": "No preview available",
   "@noPreviewAvailable": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "cannotPreviewPdf": "Cannot preview PDF",
+  "@cannotPreviewPdf": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -1632,6 +1662,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "languageMongolian": "Mongolian",
+  "@languageMongolian": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "languageVietnamese": "Vietnamese",
   "@languageVietnamese": {
     "type": "text",
@@ -1658,6 +1694,12 @@
   },
   "languageItalian": "Italian",
   "@languageItalian": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "languageBrazilianPortuguese": "Portuguese (Brazil)",
+  "@languageBrazilianPortuguese": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -2160,6 +2202,18 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "titleConfirmRuleWithRejectAction": "Reject all emails matching this condition?",
+  "@titleConfirmRuleWithRejectAction": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "messageConfirmationRuleWithRejectAction": "This action is irreversible. Are you sure you want to proceed?",
+  "@messageConfirmationRuleWithRejectAction": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "messageConfirmationDialogDeleteEmailRule": "Do you want to delete rule \"{ruleName}\"?",
   "@messageConfirmationDialogDeleteEmailRule": {
     "type": "text",
@@ -2608,6 +2662,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "openInDrive": "Open in drive",
+  "@openInDrive": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "copySubaddress": "Copy subaddress",
   "@copySubaddress": {
     "type": "text",
@@ -2717,6 +2777,16 @@
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
+  },
+  "sendMessageFailureWithInvalidRecipients": "Failure to send your message, because these recipients are invalid: {invalidRecipients}",
+  "@sendMessageFailureWithInvalidRecipients": {
+    "type": "text",
+    "placeholders_order": [
+      "invalidRecipients"
+    ],
+    "placeholders": {
+      "invalidRecipients": {}
+    }
   },
   "saveEmailAsDraftFailure": "Failure to save your message as drafts.",
   "@saveEmailAsDraftFailure": {
@@ -3026,7 +3096,7 @@
       "maxSize": {}
     }
   },
-  "messageEventActionBannerOrganizerInvited": " has invited you in to a meeting",
+  "messageEventActionBannerOrganizerInvited": " has invited you to a meeting",
   "@messageEventActionBannerOrganizerInvited": {
     "type": "text",
     "placeholders_order": [],
@@ -3086,7 +3156,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "invitationMessageCalendarInformation": " has invited you in to a meeting:",
+  "invitationMessageCalendarInformation": " has invited you to a meeting:",
   "@invitationMessageCalendarInformation": {
     "type": "text",
     "placeholders_order": [],
@@ -3112,6 +3182,30 @@
   },
   "organizer": "Organizer",
   "@organizer": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "attending": "Attending?",
+  "@attending": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "joinTheVideoConference": "Join the video conference",
+  "@joinTheVideoConference": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "copyLink": "Copy link",
+  "@copyLink": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkCopiedToClipboard": "Link copied to clipboard",
+  "@linkCopiedToClipboard": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -4194,6 +4288,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "linkCannotBeOpened": "This link can't be opened",
+  "@linkCannotBeOpened": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "downloadAttachmentInEMLPreviewWarningMessage": "Downloading attachment. You can only download one file at a time.",
   "@downloadAttachmentInEMLPreviewWarningMessage": {
     "type": "text",
@@ -4510,6 +4610,12 @@
   },
   "youAreNotInvitedToThisEventPleaseContactTheOrganizer": "You are not invited to this event. Please contact the organizer.",
   "@youAreNotInvitedToThisEventPleaseContactTheOrganizer": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "seeInYourCalendar": "See in your Calendar",
+  "@seeInYourCalendar": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -5022,42 +5128,6 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "mailComposer": "Mail composer",
-  "@mailComposer": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "focusOnSearch": "Focus on search",
-  "@focusOnSearch": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "openedModal": "Opened modal",
-  "@openedModal": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailboxList": "Mailbox list",
-  "@mailboxList": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "openedMailView": "Opened mail view",
-  "@openedMailView": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "mailboxListWithSelectedMail": "Mailbox list (selected mail)",
-  "@mailboxListWithSelectedMail": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
   "replyToAll": "Reply to all",
   "@replyToAll": {
     "type": "text",
@@ -5162,24 +5232,6 @@
   },
   "youDoNotHaveAnyActionRequiredEmails": "You don’t have any action required emails.",
   "@youDoNotHaveAnyActionRequiredEmails": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "aiNeedsAction": "AI needs-action",
-  "@aiNeedsAction": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "aiNeedsActionToggleDescription": "Enable AI needs-action",
-  "@aiNeedsActionToggleDescription": {
-    "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
-  },
-  "aiNeedsActionSettingExplanation": "Detect emails that need your attention using AI. When turned off, AI will not process any emails.",
-  "@aiNeedsActionSettingExplanation": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -5326,13 +5378,67 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "driveAttachment": "Drive attachment",
+  "@driveAttachment": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentSettingExplanation": "Show or hide the Twake Drive attachment button in the composer",
+  "@driveAttachmentSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentToggleDescription": "Enable Drive attachment button",
+  "@driveAttachmentToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReporting": "Error reporting",
+  "@errorReporting": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReportingSettingExplanation": "Send crash and error reports so the support team can diagnose problems you run into. Your emails, their content and their recipients are never included.",
+  "@errorReportingSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "errorReportingToggleDescription": "Send error reports",
+  "@errorReportingToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentAddedSuccessfully": "Files attached from Drive.",
+  "@driveAttachmentAddedSuccessfully": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveAttachmentTransferFailed": "Failed to attach files from Drive.",
+  "@driveAttachmentTransferFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveNoValidAttachment": "No valid attachment",
+  "@driveNoValidAttachment": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "labelAs": "Label as",
   "@labelAs": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
   },
-  "addLabelToEmailSuccessfullyMessage": "Email added to the \"{labelName}\" label",
+  "addLabelToEmailSuccessfullyMessage": "Label \"{labelName}\" added to email",
   "@addLabelToEmailSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5342,7 +5448,7 @@
       "labelName": {}
     }
   },
-  "addLabelToEmailFailureMessage": "Cannot add email to the \"{labelName}\" label",
+  "addLabelToEmailFailureMessage": "Cannot add label \"{labelName}\" to email",
   "@addLabelToEmailFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5358,7 +5464,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "addLabelToThreadSuccessfullyMessage": "All emails in thread added to the \"{labelName}\" label",
+  "addLabelToThreadSuccessfullyMessage": "Label \"{labelName}\" added to all emails in thread",
   "@addLabelToThreadSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5368,7 +5474,7 @@
       "labelName": {}
     }
   },
-  "addLabelToThreadFailureMessage": "Cannot add all emails in thread to the \"{labelName}\" label",
+  "addLabelToThreadFailureMessage": "Cannot add label \"{labelName}\" to all emails in thread",
   "@addLabelToThreadFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5500,7 +5606,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "removeLabelFromEmailSuccessfullyMessage": "Email removed from the \"{labelName}\" label",
+  "removeLabelFromEmailSuccessfullyMessage": "Label \"{labelName}\" removed from email",
   "@removeLabelFromEmailSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5510,7 +5616,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromEmailFailureMessage": "Cannot remove email from the \"{labelName}\" label",
+  "removeLabelFromEmailFailureMessage": "Cannot remove label \"{labelName}\" from email",
   "@removeLabelFromEmailFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5520,7 +5626,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromThreadSuccessfullyMessage": "All emails in thread removed from the \"{labelName}\" label",
+  "removeLabelFromThreadSuccessfullyMessage": "Label \"{labelName}\" removed from all emails in thread",
   "@removeLabelFromThreadSuccessfullyMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5530,7 +5636,7 @@
       "labelName": {}
     }
   },
-  "removeLabelFromThreadFailureMessage": "Cannot remove all emails in thread from the \"{labelName}\" label",
+  "removeLabelFromThreadFailureMessage": "Cannot remove label \"{labelName}\" from all emails in thread",
   "@removeLabelFromThreadFailureMessage": {
     "type": "text",
     "placeholders_order": [
@@ -5568,6 +5674,132 @@
   },
   "deleteALabelFailure": "Delete a label failure",
   "@deleteALabelFailure": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelDescription": "Description (optional)",
+  "@labelDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "labelDescriptionHintText": "Add a short description to explain what this label is for",
+  "@labelDescriptionHintText": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "notIncludeEvents": "Don't include events",
+  "@notIncludeEvents": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "closeMailDetailView": "Close mail detail view",
+  "@closeMailDetailView": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "allEmail": "All email",
+  "@allEmail": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "allEmailTrashAndSpam": "All Email, trash & spam",
+  "@allEmailTrashAndSpam": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "chooseLabel": "Choose label",
+  "@chooseLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "selectLabel": "Select label",
+  "@selectLabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailSuccessfullyMessage": "Labels have been successfully added to these emails.",
+  "@addListLabelToListEmailSuccessfullyMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailHasSomeFailureMessage": "Labels have been successfully added to some emails.",
+  "@addListLabelToListEmailHasSomeFailureMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "addListLabelToListEmailFailureMessage": "Adding labels to these emails failed",
+  "@addListLabelToListEmailFailureMessage": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "noLabelsYet": "No Labels yet",
+  "@noLabelsYet": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "noLabelsYetMessageDescriptions": "Create your first label to organize your emails more efficiently.",
+  "@noLabelsYetMessageDescriptions": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "createALabel": "Create a label",
+  "@createALabel": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorization": "Label categorisation",
+  "@aiLabelCategorization": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorizationToggleDescription": "Enable label categorisation",
+  "@aiLabelCategorizationToggleDescription": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "aiLabelCategorizationSettingExplanation": "Apply my labels on incoming emails using their description",
+  "@aiLabelCategorizationSettingExplanation": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersSuccess": "Trash subfolders deleted",
+  "@clearTrashSubfoldersSuccess": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersPartialSuccess": "Some subfolders in Trash could not be deleted",
+  "@clearTrashSubfoldersPartialSuccess": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "clearTrashSubfoldersFailed": "Failed to delete subfolders in Trash",
+  "@clearTrashSubfoldersFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "deepLinkCannotBeOpened": "This sign-in link isn't from Twake. Please sign in from the app.",
+  "@deepLinkCannotBeOpened": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}

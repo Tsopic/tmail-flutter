@@ -12,8 +12,8 @@ class SpamReportRepositoryImpl extends SpamReportRepository {
   SpamReportRepositoryImpl(this.mapDataSource);
 
   @override
-  Future<DateTime> getLastTimeDismissedSpamReported() async {
-   return await mapDataSource[DataSourceType.local]!.getLastTimeDismissedSpamReported();
+  Future<int> getLastTimeDismissedSpamReportedMilliseconds() async {
+   return await mapDataSource[DataSourceType.local]!.getLastTimeDismissedSpamReportedMilliseconds();
   }
   
   @override

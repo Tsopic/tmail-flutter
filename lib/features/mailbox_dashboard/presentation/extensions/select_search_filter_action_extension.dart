@@ -6,12 +6,10 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/quick_search_filter.dart';
 
 extension SelectSearchFilterActionExtension on MailboxDashBoardController {
-  void selectStarredSearchFilter() {
-    final listHasKeywordFiltered = searchController.listHasKeywordFiltered;
-    listHasKeywordFiltered.add(KeyWordIdentifier.emailFlagged.value);
-    searchController.updateFilterEmail(
-      hasKeywordOption: Some(listHasKeywordFiltered),
-    );
+  void selectKeywordSearchFilter(KeyWordIdentifier keyword) {
+    final keywords = {...searchController.listHasKeywordFiltered}
+      ..add(keyword.value);
+    searchController.updateFilterEmail(hasKeywordOption: Some(keywords));
     dispatchAction(StartSearchEmailAction());
   }
 
@@ -20,18 +18,23 @@ extension SelectSearchFilterActionExtension on MailboxDashBoardController {
     dispatchAction(StartSearchEmailAction());
   }
 
-  void deleteStarredSearchFilter() {
-    final listHasKeywordFiltered = searchController.listHasKeywordFiltered;
-    listHasKeywordFiltered.remove(KeyWordIdentifier.emailFlagged.value);
-    searchController.updateFilterEmail(
-      hasKeywordOption: Some(listHasKeywordFiltered),
-    );
+  void selectNotIncludeEventsSearchFilter() {
+    searchController.updateFilterEmail(notIncludeEventsOption: const Some(true));
     dispatchAction(StartSearchEmailAction());
+  }
+
+  void deleteStarredSearchFilter() {
+    final keywords = {...searchController.listHasKeywordFiltered}
+      ..remove(KeyWordIdentifier.emailFlagged.value);
+    searchController.updateFilterEmail(hasKeywordOption: Some(keywords));
   }
 
   void deleteUnreadSearchFilter() {
     searchController.updateFilterEmail(unreadOption: const None());
-    dispatchAction(StartSearchEmailAction());
+  }
+
+  void deleteNotIncludeEventsSearchFilter() {
+    searchController.updateFilterEmail(notIncludeEventsOption: const None());
   }
 
   void deleteQuickSearchFilter({required QuickSearchFilter filter}) {
@@ -44,6 +47,9 @@ extension SelectSearchFilterActionExtension on MailboxDashBoardController {
         break;
       case QuickSearchFilter.unread:
         deleteUnreadSearchFilter();
+        break;
+      case QuickSearchFilter.events:
+        deleteNotIncludeEventsSearchFilter();
         break;
       default:
         break;

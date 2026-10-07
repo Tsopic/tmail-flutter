@@ -56,7 +56,8 @@ extension ListPresentationEmailExtension on List<PresentationEmail> {
   ) {
     return any((email) {
       final mailboxContain = email.findMailboxContain(mapMailbox);
-      return mailboxContain?.isArchive != true;
+      return mailboxContain?.isArchive != true &&
+          mailboxContain?.isChildOfTeamMailboxes != true;
     });
   }
 
@@ -119,5 +120,17 @@ extension ListPresentationEmailExtension on List<PresentationEmail> {
     } else {
       return where((email) => email.pushNotificationActivated).toList();
     }
+  }
+
+  /// Selects at most [maxNotifications] emails for push notification display,
+  /// returning the newest emails first (sorted by receivedAt descending).
+  List<PresentationEmail> selectEmailsForNotification({
+    int maxNotifications = 20,
+  }) {
+    if (maxNotifications <= 0) return [];
+    final sorted = toList()
+      ..sort((a, b) => (b.receivedAt?.value ?? DateTime(0))
+          .compareTo(a.receivedAt?.value ?? DateTime(0)));
+    return sorted.take(maxNotifications).toList();
   }
 }

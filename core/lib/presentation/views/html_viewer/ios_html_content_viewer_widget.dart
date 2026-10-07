@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:core/data/constants/constant.dart';
 import 'package:core/presentation/views/html_viewer/html_content_viewer_widget.dart';
+import 'package:core/utils/external_link_policy.dart';
 import 'package:core/utils/html/html_interaction.dart';
 import 'package:core/utils/html/html_utils.dart';
 import 'package:flutter/cupertino.dart';
@@ -19,6 +20,7 @@ class IosHtmlContentViewerWidget extends StatefulWidget {
   final OnMailtoDelegateAction? onMailtoDelegateAction;
   final OnPreviewEMLDelegateAction? onPreviewEMLDelegateAction;
   final OnDownloadAttachmentDelegateAction? onDownloadAttachmentDelegateAction;
+  final OnBlockedLinkAction? onBlockedLinkAction;
 
   const IosHtmlContentViewerWidget({
     Key? key,
@@ -28,6 +30,7 @@ class IosHtmlContentViewerWidget extends StatefulWidget {
     this.onMailtoDelegateAction,
     this.onPreviewEMLDelegateAction,
     this.onDownloadAttachmentDelegateAction,
+    this.onBlockedLinkAction,
   }) : super(key: key);
 
   @override
@@ -91,13 +94,24 @@ class _IosHtmlContentViewerWidgetState extends State<IosHtmlContentViewerWidget>
       return NavigationActionPolicy.CANCEL;
     }
 
-    if (await launcher.canLaunchUrl(Uri.parse(url))) {
-      await launcher.launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication
-      );
-    }
+    await _launchExternalUrl(requestUri);
 
     return NavigationActionPolicy.CANCEL;
+  }
+
+  Future<void> _launchExternalUrl(Uri requestUri) async {
+    if (!ExternalLinkPolicy.canLaunchFromContent(requestUri)) {
+      widget.onBlockedLinkAction?.call(requestUri);
+      return;
+    }
+    if (!await launcher.canLaunchUrl(requestUri)) {
+      widget.onBlockedLinkAction?.call(requestUri);
+      return;
+    }
+
+    await launcher.launchUrl(
+      requestUri,
+      mode: LaunchMode.externalApplication
+    );
   }
 }

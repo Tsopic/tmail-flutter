@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:core/core.dart';
-import 'package:core/presentation/utils/html_transformer/text/new_line_transformer.dart';
-import 'package:core/presentation/utils/html_transformer/text/sanitize_autolink_unescape_html_transformer.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -35,7 +33,6 @@ import 'package:tmail_ui_user/features/email/domain/model/event_action.dart';
 import 'package:tmail_ui_user/features/email/domain/model/mark_read_action.dart';
 import 'package:tmail_ui_user/features/email/domain/model/send_receipt_to_sender_request.dart';
 import 'package:tmail_ui_user/features/email/domain/model/view_entire_message_request.dart';
-import 'package:tmail_ui_user/features/email/domain/state/add_a_label_to_an_email_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/calendar_event_accept_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/calendar_event_counter_accept_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/calendar_event_maybe_state.dart';
@@ -47,10 +44,8 @@ import 'package:tmail_ui_user/features/email/domain/state/mark_as_email_read_sta
 import 'package:tmail_ui_user/features/email/domain/state/mark_as_email_star_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/parse_calendar_event_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/print_email_state.dart';
-import 'package:tmail_ui_user/features/email/domain/state/remove_a_label_from_an_email_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/send_receipt_to_sender_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/unsubscribe_email_state.dart';
-import 'package:tmail_ui_user/features/email/domain/usecases/add_a_label_to_an_email_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/calendar_event_accept_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/calendar_event_counter_accept_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/calendar_event_reject_interactor.dart';
@@ -61,7 +56,6 @@ import 'package:tmail_ui_user/features/email/domain/usecases/mark_as_star_email_
 import 'package:tmail_ui_user/features/email/domain/usecases/maybe_calendar_event_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/parse_calendar_event_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/print_email_interactor.dart';
-import 'package:tmail_ui_user/features/email/domain/usecases/remove_a_label_from_an_email_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/send_receipt_to_sender_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/store_opened_email_interactor.dart';
 import 'package:tmail_ui_user/features/email/presentation/action/email_ui_action.dart';
@@ -86,13 +80,17 @@ import 'package:tmail_ui_user/features/mailbox/presentation/extensions/presentat
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/action/download_ui_action.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/controller/mailbox_dashboard_controller.dart';
 import 'package:tmail_ui_user/features/email/domain/context/email_context_provider.dart';
+import 'package:tmail_ui_user/features/home/data/exceptions/session_exceptions.dart';
+import 'package:tmail_ui_user/features/email/domain/state/move_to_mailbox_state.dart';
+import 'package:tmail_ui_user/features/mailbox/domain/exceptions/mailbox_exception.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/get_trash_mailbox_id_and_path_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/dashboard_routes.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/state/create_new_rule_filter_state.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/state/get_all_identities_state.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/create_new_email_rule_filter_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/get_all_identities_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/extensions/datetime_extension.dart';
-import 'package:tmail_ui_user/features/search/email/presentation/search_email_controller.dart';
+import 'package:tmail_ui_user/features/search/email/presentation/notifier/search_email_presentation_notifier.dart';
 import 'package:tmail_ui_user/features/thread_detail/presentation/extension/close_thread_detail_action.dart';
 import 'package:tmail_ui_user/features/thread_detail/presentation/extension/focus_thread_detail_expanded_email.dart';
 import 'package:tmail_ui_user/features/thread_detail/presentation/extension/mark_collapsed_email_unread_success.dart';
@@ -100,10 +98,10 @@ import 'package:tmail_ui_user/features/thread_detail/presentation/extension/on_t
 import 'package:tmail_ui_user/features/thread_detail/presentation/extension/update_cached_list_email_loaded.dart';
 import 'package:tmail_ui_user/features/thread_detail/presentation/thread_detail_controller.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
+import 'package:tmail_ui_user/main/providers/app_provider_container.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/localizations/localization_service.dart';
 import 'package:tmail_ui_user/main/routes/app_routes.dart';
-import 'package:tmail_ui_user/main/routes/navigation_router.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 import 'package:tmail_ui_user/main/routes/route_utils.dart';
 import 'package:tmail_ui_user/main/utils/app_utils.dart';
@@ -126,8 +124,6 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
   final GetAllIdentitiesInteractor _getAllIdentitiesInteractor;
   final StoreOpenedEmailInteractor _storeOpenedEmailInteractor;
   final PrintEmailInteractor _printEmailInteractor;
-  final AddALabelToAnEmailInteractor addALabelToAnEmailInteractor;
-  final RemoveALabelFromAnEmailInteractor removeALabelFromAnEmailInteractor;
   final EmailId? _currentEmailId;
 
   CreateNewEmailRuleFilterInteractor? _createNewEmailRuleFilterInteractor;
@@ -197,8 +193,6 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
     this._markAsStarEmailInteractor,
     this._getAllIdentitiesInteractor,
     this._storeOpenedEmailInteractor,
-    this.addALabelToAnEmailInteractor,
-    this.removeALabelFromAnEmailInteractor,
     this._printEmailInteractor, {
     EmailId? currentEmailId,
   }) : _currentEmailId = currentEmailId;
@@ -255,10 +249,6 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
       _handlePrintEmailSuccess(success);
     } else if (success is CalendarEventReplySuccess) {
       calendarEventSuccess(success);
-    } else if (success is AddALabelToAnEmailSuccess) {
-      handleAddLabelToEmailSuccess(success);
-    } else if (success is RemoveALabelFromAnEmailSuccess) {
-      handleRemoveLabelFromEmailSuccess(success);
     } else {
       super.handleSuccessViewState(success);
     }
@@ -276,10 +266,6 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
       _showMessageWhenEmailPrintingFailed(failure);
     } else if (failure is CalendarEventReplyFailure) {
       _calendarEventFailure(failure);
-    } else if (failure is AddALabelToAnEmailFailure) {
-      handleAddLabelToEmailFailure(failure);
-    } else if (failure is RemoveALabelFromAnEmailFailure) {
-      handleRemoveLabelFromEmailFailure(failure);
     } else {
       super.handleFailureViewState(failure);
     }
@@ -365,11 +351,27 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
         );
       } else if (action is RemoveLabelFromEmailAction) {
         mailboxDashBoardController.clearEmailUIAction();
-        if (_currentEmailId == null ||
-            action.emailId != _currentEmailId) {
+        final displayedEmailId = _currentEmailId ?? currentEmail?.id;
+        if (displayedEmailId == null || action.emailId != displayedEmailId) {
           return;
         }
-        toggleLabelToEmail(action.emailId, action.label, false);
+        mailboxDashBoardController.toggleLabelToEmail(
+          action.emailId,
+          action.label,
+          false,
+        );
+      } else if (action is SyncUpdateLabelForEmailOnMemory) {
+        mailboxDashBoardController.clearEmailUIAction();
+        final displayedEmailId = _currentEmailId ?? currentEmail?.id;
+        if (displayedEmailId == null || action.emailId != displayedEmailId) {
+          return;
+        }
+
+        syncLabelToSelectedEmailOnMemory(
+          emailId: action.emailId,
+          labelKeyword: action.labelKeyword,
+          remove: action.shouldRemove,
+        );
       }
     }));
 
@@ -748,24 +750,75 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
   }
 
   void moveToTrash(PresentationEmail email) {
-    if (session != null && accountId != null) {
-      final moveActionRequest = emailActionReactor.moveToTrash(
-        email,
-        mapMailbox: emailContext.mapMailboxById,
-        selectedMailbox: emailContext.selectedMailbox.value,
-        isSearchEmailRunning: emailContext.isSearchEmailRunning,
-        mapDefaultMailboxIdByRole: emailContext.mapDefaultMailboxIdByRole,
+    if (session == null) {
+      _emitMoveToTrashFailure(
+        NotFoundSessionException(),
       );
-      if (moveActionRequest == null) return;
-      emailContext.moveToMailbox(
-        session!,
-        accountId!,
-        moveActionRequest.moveRequest,
-        moveActionRequest.emailIdsWithReadStatus,
+      return;
+    }
+
+    if (accountId == null) {
+      _emitMoveToTrashFailure(
+        NotFoundAccountIdException(),
       );
-      if (_threadDetailController?.emailIdsPresentation.length == 1) {
-        _threadDetailController?.closeThreadDetailAction();
-      }
+      return;
+    }
+
+    final currentMailbox = getMailboxContain(email);
+    if (currentMailbox == null) {
+      _emitMoveToTrashFailure(
+        NotFoundMailboxOfEmailException(),
+      );
+      return;
+    }
+
+    final (:trashId, :trashPath) =
+        emailContext.isPopupMode
+            ? (
+                trashId: emailContext.mapDefaultMailboxIdByRole[PresentationMailbox.roleTrash],
+                trashPath: null as String?,
+              )
+            : mailboxDashBoardController.getTrashMailboxIdAndPath(currentMailbox);
+    if (trashId == null) {
+      _emitMoveToTrashFailure(
+        NotFoundTrashMailboxException(),
+      );
+      return;
+    }
+
+    final emailId = email.id;
+    if (emailId == null) {
+      _emitMoveToTrashFailure(
+        NotFoundEmailIdException(),
+      );
+      return;
+    }
+
+    final moveActionRequest = emailActionReactor.buildMoveToTrashRequest(
+      email,
+      trashMailboxId: trashId,
+      currentMailbox: currentMailbox,
+      trashMailboxPath: trashPath,
+    );
+    emailContext.moveToMailbox(
+      session!,
+      accountId!,
+      moveActionRequest.moveRequest,
+      moveActionRequest.emailIdsWithReadStatus,
+    );
+    if (_threadDetailController?.emailIdsPresentation.length == 1) {
+      _threadDetailController?.closeThreadDetailAction();
+    }
+  }
+
+  void _emitMoveToTrashFailure(Exception exception) {
+    if (emailContext.isPopupMode) {
+      emailContext.viewState.value = Left(MoveToMailboxFailure(
+        EmailActionType.moveToTrash,
+        exception: exception,
+      ));
+    } else {
+      mailboxDashBoardController.emitMoveToTrashFailure(exception);
     }
   }
 
@@ -918,8 +971,18 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
         pressEmailAction(actionType, presentationEmail);
         break;
       case EmailActionType.labelAs:
-        if (!isLabelAvailable) return;
-        openAddLabelToEmailDialogModal(presentationEmail);
+        if (!isLabelAvailable) {
+          return;
+        }
+        mailboxDashBoardController.openAddLabelToEmailDialogModal(
+          email: presentationEmail,
+          onCreateANewLabelAction: () {
+            mailboxDashBoardController.labelController.onCreateALabelAction(
+              accountId: accountId,
+              shouldPop: true,
+            );
+          },
+        );
         break;
       default:
         break;
@@ -1056,7 +1119,8 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
     _resetToOriginalValue(isEmailClosing: true);
     _replaceBrowserHistory();
     if (emailContext.isSearchEmailRunning
-      || getBinding<SearchEmailController>()?.searchIsRunning.value == true
+      || (!emailContext.isPopupMode &&
+          appProviderContainer.read(searchEmailPresentationProvider).searchIsRunning)
     ) {
       if (context != null && responsiveUtils.isWebDesktop(context)) {
         emailContext.dispatchRoute(DashboardRoutes.thread);
@@ -1078,22 +1142,16 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
       final selectedMailbox = emailContext.selectedMailbox.value;
       final isSearchRunning = emailContext.isSearchEmailRunning;
       RouteUtils.replaceBrowserHistory(
-        title: isSearchRunning
-          ? 'SearchEmail'
-          : selectedMailbox?.browserRouteTitle ?? '',
+        title: RouteUtils.dashboardBrowserRouteTitle(
+          isSearchRunning: isSearchRunning,
+          selectedMailbox: selectedMailbox,
+        ),
         url: RouteUtils.createUrlWebLocationBar(
           AppRoutes.dashboard,
-          router: NavigationRouter(
-            mailboxId: isSearchRunning
-              ? null
-              : selectedMailbox?.browserRouteMailboxId,
-            labelId: selectedMailbox?.labelId,
-            dashboardType: isSearchRunning
-              ? DashboardType.search
-              : DashboardType.normal,
-            searchQuery: isSearchRunning
-              ? emailContext.searchController.searchQuery
-              : null
+          router: RouteUtils.dashboardRouterForMailboxOrSearch(
+            isSearchRunning: isSearchRunning,
+            selectedMailbox: selectedMailbox,
+            searchQuery: emailContext.searchController.searchQuery,
           )
         )
       );
@@ -1210,16 +1268,7 @@ class SingleEmailController extends BaseController with AppLoaderMixin {
     consumeState(_parseCalendarEventInteractor!.execute(
       accountId,
       blobIds,
-      TransformConfiguration.create(
-        customTextTransformers: const [
-          SanitizeAutolinkUnescapeHtmlTransformer(),
-          StandardizeHtmlSanitizingTransformers(),
-          NewLineTransformer(),
-        ],
-        customDomTransformers: [
-          SanitizeHyperLinkTagInHtmlTransformer(),
-        ]
-      )
+      TransformConfiguration.forCalendarEvent()
     ));
   }
 

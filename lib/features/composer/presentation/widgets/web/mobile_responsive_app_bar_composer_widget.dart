@@ -1,13 +1,17 @@
 import 'package:core/presentation/extensions/color_extension.dart';
+import 'package:core/presentation/extensions/composer_toolbar_button_style.dart';
 import 'package:core/presentation/resources/image_paths.dart';
 import 'package:core/presentation/views/button/tmail_button_widget.dart';
 import 'package:core/utils/platform_info.dart';
 import 'package:custom_pop_up_menu/custom_pop_up_menu.dart';
 import 'package:flutter/material.dart';
+import 'package:scribe/scribe/ai/presentation/widgets/button/ai_assistant_button.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/base/widget/highlight_svg_icon_on_hover.dart';
 import 'package:tmail_ui_user/features/base/widget/popup_item_widget.dart';
 import 'package:tmail_ui_user/features/base/widget/popup_menu_overlay_widget.dart';
 import 'package:tmail_ui_user/features/composer/presentation/styles/mobile_app_bar_composer_widget_style.dart';
+import 'package:tmail_ui_user/features/composer/presentation/widgets/web/external_attachment_composer_button.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
@@ -32,6 +36,8 @@ class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
   final VoidCallback saveToTemplateAction;
   final VoidCallback deleteComposerAction;
   final VoidCallback toggleMarkAsImportantAction;
+  final OnOpenAiAssistantModal? onOpenAiAssistantModal;
+  final String? composerId;
 
   const MobileResponsiveAppBarComposerWidget({
     super.key,
@@ -55,6 +61,8 @@ class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
     required this.saveToTemplateAction,
     required this.deleteComposerAction,
     required this.toggleMarkAsImportantAction,
+    this.onOpenAiAssistantModal,
+    this.composerId,
   });
 
   @override
@@ -66,6 +74,7 @@ class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
       child: Row(
         children: [
           TMailButtonWidget.fromIcon(
+            key: const Key(UiKeys.closeComposerButton),
             icon: imagePaths.icCancel,
             backgroundColor: Colors.transparent,
             tooltipMessage: AppLocalizations.of(context).saveAndClose,
@@ -74,6 +83,14 @@ class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
             onTapActionCallback: onCloseViewAction
           ),
           const Spacer(),
+          if (onOpenAiAssistantModal != null)
+            AiAssistantButton(
+              imagePaths: imagePaths,
+              margin: const EdgeInsetsDirectional.only(
+                end: MobileAppBarComposerWidgetStyle.space,
+              ),
+              onOpenAiAssistantModal: onOpenAiAssistantModal!,
+            ),
           TMailButtonWidget.fromIcon(
             icon: imagePaths.icRichToolbar,
             padding: MobileAppBarComposerWidgetStyle.richTextIconPadding,
@@ -96,6 +113,18 @@ class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
             tooltipMessage: AppLocalizations.of(context).attach_file,
             onTapActionCallback: attachFileAction,
           ),
+          ExternalAttachmentComposerButton(
+            composerId: composerId ?? '',
+            imagePaths: imagePaths,
+            style: ComposerToolbarButtonStyle(
+              tooltipLabel: AppLocalizations.of(context).attach_file,
+              iconColor: MobileAppBarComposerWidgetStyle.iconColor,
+              iconSize: MobileAppBarComposerWidgetStyle.iconSize,
+              margin: const EdgeInsetsDirectional.only(
+                start: MobileAppBarComposerWidgetStyle.space,
+              ),
+            ),
+          ),
           const SizedBox(width: MobileAppBarComposerWidgetStyle.space),
           if (!isCodeViewEnabled)
             TMailButtonWidget.fromIcon(
@@ -108,6 +137,7 @@ class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
             ),
           const SizedBox(width: MobileAppBarComposerWidgetStyle.space),
           TMailButtonWidget.fromIcon(
+            key: const ValueKey(UiKeys.sendEmailButton),
             icon: isSendButtonEnabled
               ? imagePaths.icSendMobile
               : imagePaths.icSendDisable,
@@ -179,6 +209,7 @@ class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
                   },
                 ),
               PopupItemWidget(
+                  key: const Key(UiKeys.saveDraftPopupItem),
                   iconAction: imagePaths.icSaveToDraft,
                   nameAction: AppLocalizations.of(context).saveAsDraft,
                   colorIcon: MobileAppBarComposerWidgetStyle.popupItemIconColor,
@@ -190,6 +221,7 @@ class MobileResponsiveAppBarComposerWidget extends StatelessWidget {
                   },
               ),
               PopupItemWidget(
+                key: const Key(UiKeys.saveTemplatePopupItem),
                 iconAction: imagePaths.icSaveToDraft,
                 nameAction: AppLocalizations.of(context).saveAsTemplate,
                 colorIcon: MobileAppBarComposerWidgetStyle.popupItemIconColor,

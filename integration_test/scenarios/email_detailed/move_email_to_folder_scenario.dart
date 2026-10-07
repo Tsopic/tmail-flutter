@@ -11,7 +11,7 @@ import '../../robots/thread_robot.dart';
 
 class MoveEmailToFolderScenario extends BaseTestScenario {
 
-  const MoveEmailToFolderScenario(super.$);
+  const MoveEmailToFolderScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -47,7 +47,7 @@ class MoveEmailToFolderScenario extends BaseTestScenario {
     _expectEmailWithSubjectInCurrentFolderInvisible(subject);
 
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(appLocalizations.templatesMailboxDisplayName);
+    await mailboxMenuRobot.navigation.openFolder(mailboxMenuRobot.mailboxItemByName(appLocalizations.templatesMailboxDisplayName));
     await _expectEmailWithSubjectInDestinationFolderVisible(subject);
   }
 

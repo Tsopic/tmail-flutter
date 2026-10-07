@@ -10,10 +10,12 @@ import '../../robots/composer_robot.dart';
 import '../../robots/thread_robot.dart';
 
 class SendEmailWithReadReceiptEnabledScenario extends BaseTestScenario {
-  const SendEmailWithReadReceiptEnabledScenario(super.$);
+  const SendEmailWithReadReceiptEnabledScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
+    await robots.commonRobot().waitForMailboxReady();
+
     const additionalRecipient = String.fromEnvironment('ADDITIONAL_MAIL_RECIPIENT');
     const email = String.fromEnvironment('BASIC_AUTH_EMAIL');
     const subject = 'Test read receipt subject';

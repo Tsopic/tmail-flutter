@@ -72,7 +72,9 @@ class TokenRefreshManager {
     _authenticationType = authenticationType;
     onTokenRefreshed = onRefreshed;
 
-    log('TokenRefreshManager::initialize: token expiry = ${token?.expiredTime}');
+    log(
+      'TokenRefreshManager::initialize: token expiry = ${token?.expiredTime}',
+    );
 
     _scheduleRefresh();
     _startAppLifecycleListener();
@@ -80,7 +82,9 @@ class TokenRefreshManager {
 
   /// Update the current token (e.g., after a reactive refresh in the interceptor)
   void updateToken(TokenOIDC newToken) {
-    log('TokenRefreshManager::updateToken: new expiry = ${newToken.expiredTime}');
+    log(
+      'TokenRefreshManager::updateToken: new expiry = ${newToken.expiredTime}',
+    );
     _currentToken = newToken;
     _retryAttempts = 0;
     _scheduleRefresh();
@@ -94,7 +98,9 @@ class TokenRefreshManager {
     if (timeUntilExpiry == null) return;
 
     if (timeUntilExpiry <= _minimumRefreshBuffer) {
-      log('TokenRefreshManager::checkAndRefreshIfNeeded: Token expired or expiring soon');
+      log(
+        'TokenRefreshManager::checkAndRefreshIfNeeded: Token expired or expiring soon',
+      );
       await _performRefresh();
     } else {
       _scheduleRefresh();
@@ -147,8 +153,10 @@ class TokenRefreshManager {
       return;
     }
 
-    log('TokenRefreshManager::_scheduleRefresh: Scheduling in ${refreshDelay.inSeconds}s '
-        '(expires in ${timeUntilExpiry.inSeconds}s)');
+    log(
+      'TokenRefreshManager::_scheduleRefresh: Scheduling in ${refreshDelay.inSeconds}s '
+      '(expires in ${timeUntilExpiry.inSeconds}s)',
+    );
 
     _refreshTimer = Timer(refreshDelay, _performRefresh);
   }
@@ -156,14 +164,17 @@ class TokenRefreshManager {
   Duration _calculateRefreshDelay(Duration timeUntilExpiry) {
     // Calculate refresh at 80% of lifetime
     final refreshAt80Percent = Duration(
-      milliseconds: (timeUntilExpiry.inMilliseconds * _refreshThresholdPercent).round()
+      milliseconds: (timeUntilExpiry.inMilliseconds * _refreshThresholdPercent)
+          .round(),
     );
 
     // Calculate refresh with minimum buffer
     final refreshWithBuffer = timeUntilExpiry - _minimumRefreshBuffer;
 
     // Use whichever is sooner
-    return refreshAt80Percent < refreshWithBuffer ? refreshAt80Percent : refreshWithBuffer;
+    return refreshAt80Percent < refreshWithBuffer
+        ? refreshAt80Percent
+        : refreshWithBuffer;
   }
 
   Future<void> _performRefresh() async {
@@ -190,7 +201,9 @@ class TokenRefreshManager {
         return;
       }
 
-      log('TokenRefreshManager::_performRefresh: Got new token, expiry = ${newToken.expiredTime}');
+      log(
+        'TokenRefreshManager::_performRefresh: Got new token, expiry = ${newToken.expiredTime}',
+      );
 
       _currentToken = newToken;
       _retryAttempts = 0;
@@ -235,9 +248,8 @@ class TokenRefreshManager {
       final currentAccount = await _accountCacheManager.getCurrentAccount();
       if (currentAccount.accountId == null) return null;
 
-      final keychainSession = await _iosSharingManager.getKeychainSharingSession(
-        currentAccount.accountId!
-      );
+      final keychainSession = await _iosSharingManager
+          .getKeychainSharingSession(currentAccount.accountId!);
 
       if (keychainSession?.tokenOIDC != null &&
           keychainSession!.tokenOIDC!.token != _currentToken?.token) {
@@ -256,7 +268,7 @@ class TokenRefreshManager {
       _oidcConfig!.redirectUrl,
       _oidcConfig!.discoveryUrl,
       _oidcConfig!.scopes,
-      _currentToken!.refreshToken,
+      _currentToken!,
     );
   }
 
@@ -290,12 +302,16 @@ class TokenRefreshManager {
     _retryAttempts++;
 
     if (_retryAttempts >= _maxRetryAttempts) {
-      logWarning('TokenRefreshManager::_handleRefreshFailure: Max retries reached');
+      logWarning(
+        'TokenRefreshManager::_handleRefreshFailure: Max retries reached',
+      );
       _retryAttempts = 0;
       return;
     }
 
-    log('TokenRefreshManager::_handleRefreshFailure: Scheduling retry $_retryAttempts/$_maxRetryAttempts');
+    log(
+      'TokenRefreshManager::_handleRefreshFailure: Scheduling retry $_retryAttempts/$_maxRetryAttempts',
+    );
     _refreshTimer = Timer(_retryDelay, _performRefresh);
   }
 

@@ -81,21 +81,19 @@ class AuthenticationClientMobile
     String redirectUrl,
     String discoveryUrl,
     List<String> scopes,
-    String refreshToken,
+    TokenOIDC currentToken,
   ) async {
     try {
       final tokenRequest = getRefreshTokenRequest(
         clientId,
         redirectUrl,
         discoveryUrl,
-        refreshToken,
+        currentToken.refreshToken,
         scopes,
       );
       final tokenResponse = await _appAuth.token(tokenRequest);
       log('$runtimeType::refreshingTokensOIDC(): token refreshed');
-      final tokenOIDC = tokenResponse.toTokenOIDC(
-        maybeAvailableRefreshToken: refreshToken,
-      );
+      final tokenOIDC = tokenResponse.toTokenOIDC(currentToken: currentToken);
       if (tokenOIDC.isTokenValid()) {
         return tokenOIDC;
       } else {
@@ -126,7 +124,7 @@ class AuthenticationClientMobile
       callbackUrlScheme: OIDCConstant.twakeWorkplaceUrlScheme,
       options: const FlutterWebAuth2Options(preferEphemeral: true),
     );
-    log('$runtimeType::signInTwakeWorkplace():Uri = $uri');
+    log('$runtimeType::signInTwakeWorkplace(): callback received');
     return TokenOIDC.fromUri(uri);
   }
 
@@ -139,7 +137,7 @@ class AuthenticationClientMobile
       callbackUrlScheme: OIDCConstant.twakeWorkplaceUrlScheme,
       options: const FlutterWebAuth2Options(preferEphemeral: true),
     );
-    log('$runtimeType::signUpTwakeWorkplace():Uri = $uri');
+    log('$runtimeType::signUpTwakeWorkplace(): callback received');
     return TokenOIDC.fromUri(uri);
   }
 }

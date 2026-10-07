@@ -57,6 +57,9 @@ extension OpenAndCloseComposerExtension on MailboxDashBoardController {
   Future<void> _openComposerOnMobile(ComposerArguments arguments) async {
     BackButtonInterceptor.removeByName(AppRoutes.dashboard);
 
+    final composerId = arguments.composerId ?? DateTime.now().millisecondsSinceEpoch.toString();
+    final argsWithId = arguments.copyWith(composerId: composerId);
+
     bool isTabletPlatform = currentContext != null
         && !responsiveUtils.isScreenWithShortestSide(currentContext!);
 
@@ -70,7 +73,7 @@ extension OpenAndCloseComposerExtension on MailboxDashBoardController {
         () => const ComposerView(),
         binding: ComposerBindings(),
         opaque: false,
-        arguments: arguments,
+        arguments: argsWithId,
       );
 
       if (PlatformInfo.isIOS) {
@@ -80,7 +83,7 @@ extension OpenAndCloseComposerExtension on MailboxDashBoardController {
         );
       }
     } else {
-      result = await push(AppRoutes.composer, arguments: arguments);
+      result = await push(AppRoutes.composer, arguments: argsWithId);
     }
 
     BackButtonInterceptor.add(onBackButtonInterceptor, name: AppRoutes.dashboard);
@@ -124,7 +127,7 @@ extension OpenAndCloseComposerExtension on MailboxDashBoardController {
     }
 
     if (composerId != null) {
-      await removeComposerCacheByIdOnWeb(composerId);
+      await removeComposerCacheById(composerId);
     }
 
     saveTextFormattingMenuState();

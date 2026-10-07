@@ -16,7 +16,9 @@ import 'package:jmap_dart_client/jmap/core/session/session.dart';
 import 'package:model/model.dart';
 import 'package:rule_filter/rule_filter/capability_rule_filter.dart';
 import 'package:tmail_ui_user/features/base/before_reconnect_manager.dart';
+import 'package:tmail_ui_user/features/base/sentry_session_cleanup.dart';
 import 'package:tmail_ui_user/features/base/mixin/emit_state_mixin.dart';
+import 'package:tmail_ui_user/features/base/extensions/discard_web_composers_on_logout_extension.dart';
 import 'package:tmail_ui_user/features/base/extensions/handle_company_server_login_info_extension.dart';
 import 'package:tmail_ui_user/features/base/mixin/logout_mixin.dart';
 import 'package:tmail_ui_user/features/base/mixin/popup_context_menu_action_mixin.dart';
@@ -46,6 +48,7 @@ import 'package:tmail_ui_user/features/push_notification/domain/state/destroy_fi
 import 'package:tmail_ui_user/features/push_notification/domain/state/get_stored_firebase_registration_state.dart';
 import 'package:tmail_ui_user/features/push_notification/domain/usecases/destroy_firebase_registration_interactor.dart';
 import 'package:tmail_ui_user/features/push_notification/domain/usecases/get_stored_firebase_registration_interactor.dart';
+import 'package:tmail_ui_user/features/composer/presentation/manager/attachment_keyword_config_manager.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/bindings/fcm_interactor_bindings.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/bindings/web_socket_interactor_bindings.dart';
 import 'package:tmail_ui_user/features/push_notification/presentation/config/fcm_configuration.dart';
@@ -57,18 +60,22 @@ import 'package:tmail_ui_user/features/push_notification/presentation/services/f
 import 'package:tmail_ui_user/features/push_notification/presentation/services/fcm_service.dart';
 import 'package:tmail_ui_user/main/bindings/network/binding_tag.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
-import 'package:tmail_ui_user/main/exceptions/remote_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/authentication_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/method_level_exception.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/network_exception.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/app_routes.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 import 'package:tmail_ui_user/main/utils/app_config.dart';
 import 'package:tmail_ui_user/main/universal_import/html_stub.dart' as html;
 import 'package:tmail_ui_user/main/utils/toast_manager.dart';
+import 'package:tmail_ui_user/features/base/urgent_exception_handler.dart';
 import 'package:tmail_ui_user/main/utils/twake_app_manager.dart';
 import 'package:uuid/uuid.dart';
 
 abstract class BaseController extends GetxController
-    with PopupContextMenuActionMixin, LogoutMixin, EmitStateMixin {
+    with PopupContextMenuActionMixin, LogoutMixin, EmitStateMixin
+    implements UrgentExceptionHandler {
   final CachingManager cachingManager = Get.find<CachingManager>();
   final LanguageCacheManager languageCacheManager =
       Get.find<LanguageCacheManager>();
@@ -200,6 +207,7 @@ abstract class BaseController extends GetxController
 
   void onDone() {}
 
+  @override
   bool validateUrgentException(dynamic exception) {
     return exception is NoNetworkError ||
         exception is BadCredentialsException ||
@@ -209,13 +217,14 @@ abstract class BaseController extends GetxController
 
   void handleErrorViewState(Object error, StackTrace stackTrace) {}
 
+  @override
   void handleUrgentException({Failure? failure, Exception? exception}) {
     if (PlatformInfo.isWeb) {
       handleUrgentExceptionOnWeb(failure: failure, exception: exception);
     } else if (PlatformInfo.isMobile) {
       handleUrgentExceptionOnMobile(failure: failure, exception: exception);
     } else {
-      throw NoSupportPlatformException();
+      throw const NoSupportPlatformException();
     }
   }
 
@@ -234,7 +243,9 @@ abstract class BaseController extends GetxController
 
   void handleUrgentExceptionOnWeb({Failure? failure, Exception? exception}) {
     logWarning(
-      '$runtimeType::handleUrgentExceptionOnWeb():Failure: $failure | Exception: $exception',
+      '$runtimeType::handleUrgentExceptionOnWeb(): exception=${exception.runtimeType} | '
+      'failure=${failure.runtimeType}',
+      webConsoleEnabled: true,
     );
     if (exception is NoNetworkError) {
       _handleNotNetworkErrorException();
@@ -244,12 +255,26 @@ abstract class BaseController extends GetxController
       handleBadCredentialsException();
     } else if (exception is RefreshTokenFailedException) {
       handleRefreshTokenFailedException();
+    } else {
+      logWarning(
+        '$runtimeType::handleUrgentExceptionOnWeb(): NO branch matched — '
+        'will NOT navigate to login. exception=${exception.runtimeType}',
+        webConsoleEnabled: true,
+      );
     }
   }
 
-  Future<void> _executeBeforeReconnectAndLogOut() async {
+  Future<void> _executeBeforeReconnectAndLogOut({
+    required String reason,
+  }) async {
     twakeAppManager.setExecutingBeforeReconnect(true);
     await executeBeforeReconnect();
+    logError(
+      '$runtimeType::_executeBeforeReconnectAndLogOut: '
+      'forcing logout after web save-and-reconnect | reason=$reason',
+      extras: {'auth_error_type': reason},
+      webConsoleEnabled: true,
+    );
     clearDataAndGoToLoginPage();
   }
 
@@ -262,6 +287,14 @@ abstract class BaseController extends GetxController
         AppLocalizations.of(currentContext!).connectionError,
       );
     }
+  }
+
+  void showBlockedLinkToast() {
+    if (currentOverlayContext == null || currentContext == null) return;
+    appToast.showToastErrorMessage(
+      currentOverlayContext!,
+      AppLocalizations.of(currentContext!).linkCannotBeOpened,
+    );
   }
 
   void _handleNotNetworkErrorException() {
@@ -280,32 +313,54 @@ abstract class BaseController extends GetxController
   }
 
   void handleBadCredentialsException() {
-    log('$runtimeType::handleBadCredentialsException:');
+    log(
+      '$runtimeType::handleBadCredentialsException: hasComposer=${twakeAppManager.hasComposer}',
+      webConsoleEnabled: true,
+    );
     if (twakeAppManager.hasComposer) {
-      _performSaveAndReconnection();
+      _performSaveAndReconnection(reason: 'bad_credentials_401');
     } else {
-      _performReconnection();
+      _performReconnection(reason: 'bad_credentials_401');
     }
   }
 
-  void _performSaveAndReconnection() {
+  void _performSaveAndReconnection({required String reason}) {
     if (PlatformInfo.isWeb) {
-      _executeBeforeReconnectAndLogOut();
+      log(
+        '$runtimeType::_performSaveAndReconnection: web save-and-reconnect path',
+        webConsoleEnabled: true,
+      );
+      _executeBeforeReconnectAndLogOut(reason: reason);
     } else if (PlatformInfo.isMobile) {
+      logError(
+        '$runtimeType::_performSaveAndReconnection: '
+        'forcing logout on mobile after save-and-reconnect | reason=$reason',
+        extras: {'auth_error_type': reason},
+      );
       clearDataAndGoToLoginPage();
     }
   }
 
-  void _performReconnection() {
+  void _performReconnection({required String reason}) {
+    logError(
+      '$runtimeType::_performReconnection: '
+      'forcing logout | reason=$reason',
+      extras: {'auth_error_type': reason},
+      webConsoleEnabled: true,
+    );
     clearDataAndGoToLoginPage();
   }
 
   void handleRefreshTokenFailedException() {
-    log('$runtimeType::handleRefreshTokenFailedException:');
+    log(
+      '$runtimeType::handleRefreshTokenFailedException: '
+      'hasComposer=${twakeAppManager.hasComposer}',
+      webConsoleEnabled: true,
+    );
     if (twakeAppManager.hasComposer) {
-      _performSaveAndReconnection();
+      _performSaveAndReconnection(reason: 'refresh_token_400');
     } else {
-      _performReconnection();
+      _performReconnection(reason: 'refresh_token_400');
     }
   }
 
@@ -489,14 +544,18 @@ abstract class BaseController extends GetxController
           );
         }
       } else {
-        throw NotSupportFCMException();
+        throw const NotSupportFCMException();
       }
     } catch (e) {
       logWarning('$runtimeType::injectFCMBindings(): exception: $e');
     }
   }
 
-  void injectWebSocket(Session? session, AccountId? accountId) {
+  void injectWebSocket({
+    Session? session,
+    AccountId? accountId,
+    bool isLabelAvailable = false,
+  }) {
     try {
       log('$runtimeType::injectWebSocket:', webConsoleEnabled: true);
 
@@ -562,6 +621,7 @@ abstract class BaseController extends GetxController
       WebSocketController.instance.initialize(
         accountId: accountId,
         session: session,
+        isLabelAvailable: isLabelAvailable,
       );
       log(
         '$runtimeType::injectWebSocket: WebSocket initialized successfully',
@@ -607,8 +667,17 @@ abstract class BaseController extends GetxController
 
   void navigateToLoginPage() {
     if (Get.currentRoute == AppRoutes.login) {
+      log(
+        '$runtimeType::navigateToLoginPage: SKIPPED — already on login route',
+        webConsoleEnabled: true,
+      );
       return;
     }
+    log(
+      '$runtimeType::navigateToLoginPage: navigating to login from '
+      'currentRoute=${Get.currentRoute}',
+      webConsoleEnabled: true,
+    );
     pushAndPopAll(
       AppRoutes.login,
       arguments: LoginArguments(LoginFormType.none),
@@ -641,6 +710,7 @@ abstract class BaseController extends GetxController
       return;
     }
 
+    await discardWebComposersOnLogout(session, accountId);
     await cachingManager.clearMailDataCached();
 
     _isFcmEnabled = _isFcmActivated(session, accountId);
@@ -760,27 +830,61 @@ abstract class BaseController extends GetxController
   }
 
   Future<void> clearDataAndGoToLoginPage() async {
-    log('$runtimeType::clearDataAndGoToLoginPage:');
-    SentryManager.instance.clearUser();
+    log(
+      '$runtimeType::clearDataAndGoToLoginPage: clearing data then routing to login',
+      webConsoleEnabled: true,
+    );
     await clearAllData();
+    log(
+      '$runtimeType::clearDataAndGoToLoginPage: data cleared, calling removeAllPageAndGoToLogin',
+      webConsoleEnabled: true,
+    );
     removeAllPageAndGoToLogin();
   }
 
-  Future<void> clearAllData() async {
+  /// Several entry points call this, some without awaiting. Overlapping runs
+  /// used to close Hive while another run was still writing to it, so they are
+  /// serialised through a single shared future.
+  Future<void> clearAllData() =>
+      twakeAppManager.runClearDataOnce(_clearAllData);
+
+  Future<void> _clearAllData() async {
+    await _clearSentryForSessionEnd();
     try {
+      // Read before clear() flips it to none.
+      final wasAuthenticatedWithOidc = isAuthenticatedWithOidc;
+      authorizationInterceptors.clear();
+      authorizationIsolateInterceptors.clear();
       await Future.wait([
-        if (isAuthenticatedWithOidc)
+        if (wasAuthenticatedWithOidc)
           deleteAuthorityOidcInteractor.execute()
         else
           deleteCredentialInteractor.execute(),
         cachingManager.clearAll(),
         languageCacheManager.removeLanguage(),
       ]);
-      authorizationInterceptors.clear();
-      authorizationIsolateInterceptors.clear();
       await cachingManager.closeHive();
     } catch (e) {
       logWarning('BaseController::clearAllData: Cannot clear all data: $e');
+    } finally {
+      AttachmentKeywordConfigManager().clearCache();
+    }
+  }
+
+  Future<void> _clearSentryForSessionEnd() async {
+    try {
+      final sentrySessionCleanup = getBinding<SentrySessionCleanup>();
+      if (sentrySessionCleanup == null) {
+        SentryManager.instance.clearUser();
+        return;
+      }
+      await sentrySessionCleanup.clearForSessionEnd();
+    } catch (e, st) {
+      logError(
+        'BaseController::_clearSentryForSessionEnd: Cannot clear Sentry session',
+        exception: e,
+        stackTrace: st,
+      );
     }
   }
 
@@ -801,7 +905,7 @@ abstract class BaseController extends GetxController
         exception is MethodLevelErrors && exception.message != null
         ? AppLocalizations.of(
             currentContext!,
-          ).unexpectedError('${exception.message!}')
+          ).unexpectedError(exception.message!)
         : AppLocalizations.of(currentContext!).unknownError;
 
     appToast.showToastMessageWithMultipleActions(

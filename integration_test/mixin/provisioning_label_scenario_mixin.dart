@@ -8,6 +8,7 @@ import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 
 import '../models/provisioning_email.dart';
 import '../models/provisioning_label.dart';
+import '../utils/wait_for_mailbox_ready.dart';
 
 mixin ProvisioningLabelScenarioMixin {
   Future<List<Label>> provisionLabels(
@@ -16,6 +17,8 @@ mixin ProvisioningLabelScenarioMixin {
     if (provisioningLabels.isEmpty) {
       return [];
     }
+
+    await waitForMailboxReady();
 
     final dashboardController = getBinding<MailboxDashBoardController>();
     final createLabelInteractor = getBinding<CreateNewLabelInteractor>();

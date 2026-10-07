@@ -1,4 +1,4 @@
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/mailbox_item_widget.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/widgets/sidebar/sidebar_mailbox_item.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/app_bar/default_mobile_app_bar_thread_widget.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
@@ -7,7 +7,7 @@ import '../../robots/mailbox_menu_robot.dart';
 import '../../robots/thread_robot.dart';
 
 class CreateAndHideSubFolderScenario extends BaseTestScenario {
-  const CreateAndHideSubFolderScenario(super.$);
+  const CreateAndHideSubFolderScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -18,20 +18,20 @@ class CreateAndHideSubFolderScenario extends BaseTestScenario {
     final appLocalizations = AppLocalizations();
 
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.longPressMailboxWithName(
-      appLocalizations.inboxMailboxDisplayName,
+    await mailboxMenuRobot.navigation.longPressMailbox(
+      mailboxMenuRobot.mailboxItemByName(appLocalizations.inboxMailboxDisplayName),
     );
-    await mailboxMenuRobot.tapCreateNewSubFolder();
-    await mailboxMenuRobot.enterNewFolderName(subFolderName);
-    await mailboxMenuRobot.confirmCreateNewFolder();
+    await mailboxMenuRobot.folder.tapCreateNewSubFolder();
+    await mailboxMenuRobot.folder.enterNewFolderName(subFolderName);
+    await mailboxMenuRobot.folder.confirmCreateNewFolder();
     await _expectMailboxWithNameVisible(subFolderName);
 
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.expandMailboxWithName(
-      appLocalizations.inboxMailboxDisplayName
+    await mailboxMenuRobot.navigation.expandMailbox(
+      mailboxMenuRobot.mailboxItemByName(appLocalizations.inboxMailboxDisplayName),
     );
-    await mailboxMenuRobot.longPressMailboxWithName(subFolderName);
-    await mailboxMenuRobot.tapHideMailbox();
+    await mailboxMenuRobot.navigation.longPressMailbox(mailboxMenuRobot.mailboxItemByName(subFolderName));
+    await mailboxMenuRobot.folder.tapHideMailbox();
     await _expectMailboxWithNameHaveNoChildren(
       appLocalizations.inboxMailboxDisplayName
     );
@@ -49,8 +49,8 @@ class CreateAndHideSubFolderScenario extends BaseTestScenario {
 
   Future<void> _expectMailboxWithNameHaveNoChildren(String name) async {
     await expectViewVisible(
-      $(MailboxItemWidget)
-        .which<MailboxItemWidget>((widget) {
+      $(SidebarMailboxItem)
+        .which<SidebarMailboxItem>((widget) {
           return widget.mailboxNode.item.name?.name.toLowerCase() ==
             name.toLowerCase() && !widget.mailboxNode.hasChildren();
         })

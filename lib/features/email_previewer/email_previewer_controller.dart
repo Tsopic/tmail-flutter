@@ -6,6 +6,7 @@ import 'package:core/data/network/download/download_manager.dart';
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
 import 'package:core/utils/app_logger.dart';
+import 'package:core/utils/external_link_policy.dart';
 import 'package:core/utils/html/html_utils.dart';
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
@@ -225,8 +226,21 @@ class EmailPreviewerController extends ReloadableController {
     }
   }
 
+  @visibleForTesting
+  static bool opensWithNoOpener(Uri uri, {required bool isEmlPreview}) =>
+      !isEmlPreview && !uri.isScheme(RouteUtils.mailtoPrefix);
+
   void _openNewWindowByHyperLink(Uri uri) {
-    bool isEMlPreview = uri.toString().startsWith(RouteUtils.emailEMLPreviewerRoutePath);
+    final isEMlPreview = uri.toString().startsWith(RouteUtils.emailEMLPreviewerRoutePath);
+
+    // Links come from the previewed (untrusted) message: only follow the
+    // application's own EML preview route and the shared allow-list.
+    if (!isEMlPreview && !ExternalLinkPolicy.canLaunchFromContent(uri)) {
+      logWarning('EmailPreviewerController::_openNewWindowByHyperLink: blocked scheme ${uri.scheme}');
+      showBlockedLinkToast();
+      return;
+    }
+
     final url = _standardizeURL(uri);
     log('EmailPreviewerController::_openNewWindowByHyperLink: url = $url');
 
@@ -234,6 +248,7 @@ class EmailPreviewerController extends ReloadableController {
       url,
       isFullScreen: !isEMlPreview,
       isCenter: false,
+      noOpener: opensWithNoOpener(uri, isEmlPreview: isEMlPreview),
     );
 
     if (!isOpen && currentOverlayContext != null && currentContext != null) {

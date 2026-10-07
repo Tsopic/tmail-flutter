@@ -11,9 +11,13 @@ import 'package:core/presentation/utils/html_transformer/dom/remove_collapsed_si
 import 'package:core/presentation/utils/html_transformer/dom/remove_lazy_loading_for_background_image_transformers.dart';
 import 'package:core/presentation/utils/html_transformer/dom/remove_lazy_loading_image_transformers.dart';
 import 'package:core/presentation/utils/html_transformer/dom/remove_max_width_in_image_style_transformers.dart';
+import 'package:core/presentation/utils/html_transformer/dom/remove_negative_margin_float_transformers.dart';
+import 'package:core/presentation/utils/html_transformer/dom/autolink_text_node_transformer.dart';
 import 'package:core/presentation/utils/html_transformer/dom/remove_style_tag_outside_transformers.dart';
+import 'package:core/presentation/utils/html_transformer/dom/responsive_table_cell_transformer.dart';
 import 'package:core/presentation/utils/html_transformer/dom/sanitize_hyper_link_tag_in_html_transformers.dart';
 import 'package:core/presentation/utils/html_transformer/dom/script_transformers.dart';
+import 'package:core/presentation/utils/html_transformer/text/new_line_transformer.dart';
 import 'package:core/presentation/utils/html_transformer/dom/signature_transformers.dart';
 import 'package:core/presentation/utils/html_transformer/text/standardize_html_sanitizing_transformers.dart';
 import 'package:core/utils/platform_info.dart';
@@ -58,12 +62,20 @@ class TransformConfiguration {
       const NormalizeLineHeightInStyleTransformer(),
     ]
   );
+  /// Reloading a draft feeds its HTML back into the composer's editable
+  /// webview, so unlike [forPreviewEmail]/[forDraftsEmail] (read-only), the
+  /// sanitizer here must let `contenteditable` survive - otherwise a drive
+  /// link card loses its `contenteditable="false"` guard and becomes an
+  /// editable region inside the editor.
   factory TransformConfiguration.forEditDraftsEmail() => TransformConfiguration.create(
     customDomTransformers: [
       ...TransformConfiguration.forDraftsEmail().domTransformers,
       if (PlatformInfo.isWeb)
         const HideDraftSignatureTransformer()
-    ]
+    ],
+    customTextTransformers: const [
+      StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable']),
+    ],
   );
 
   factory TransformConfiguration.forPreviewEmailOnWeb() => TransformConfiguration.create(
@@ -76,13 +88,25 @@ class TransformConfiguration {
       const AddLazyLoadingForBackgroundImageTransformer(),
       const RemoveCollapsedSignatureButtonTransformer(),
       const NormalizeLineHeightInStyleTransformer(),
-    ]
+      const ResponsiveTableCellTransformer(),
+      const RemoveNegativeMarginFloatTransformer(),
+    ],
+    customTextTransformers: const [
+      StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable']),
+    ],
   );
 
-  factory TransformConfiguration.forPreviewEmail() => TransformConfiguration.standardConfiguration;
+  factory TransformConfiguration.forPreviewEmail() => TransformConfiguration.create(
+    customTextTransformers: const [
+      StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable']),
+    ],
+  );
 
   factory TransformConfiguration.forRestoreEmail() => TransformConfiguration.create(
-    customDomTransformers: [const ImageTransformer()]
+    customDomTransformers: [const ImageTransformer()],
+    customTextTransformers: const [
+      StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable']),
+    ],
   );
 
   factory TransformConfiguration.forPrintEmail() => TransformConfiguration.fromDomTransformers([
@@ -100,8 +124,29 @@ class TransformConfiguration {
        const BlockCodeTransformer(),
        SanitizeHyperLinkTagInHtmlTransformer(),
        const ImageTransformer(),
+       const NormalizeLineHeightInStyleTransformer(),
      ],
    );
+
+  /// Signature HTML inserted into the composer editor. Kept minimal — only
+  /// degenerate `line-height` values are stripped — because the inserted
+  /// signature becomes part of the email that is sent and must not be
+  /// rewritten by display-only transformers.
+  factory TransformConfiguration.forComposerSignature() =>
+      TransformConfiguration.fromDomTransformers([
+        const NormalizeLineHeightInStyleTransformer(),
+      ]);
+
+  factory TransformConfiguration.forCalendarEvent() => TransformConfiguration.create(
+    customTextTransformers: const [
+      StandardizeHtmlSanitizingTransformers(),
+      NewLineTransformer(),
+    ],
+    customDomTransformers: [
+      const AutolinkTextNodeTransformer(),
+      SanitizeHyperLinkTagInHtmlTransformer(),
+    ],
+  );
 
   /// Provides easy access to a standard configuration that does not block external images.
   static TransformConfiguration standardConfiguration = TransformConfiguration(
@@ -139,6 +184,8 @@ class TransformConfiguration {
     const AddLazyLoadingForBackgroundImageTransformer(),
     const RemoveCollapsedSignatureButtonTransformer(),
     const NormalizeLineHeightInStyleTransformer(),
+    const ResponsiveTableCellTransformer(),
+    const RemoveNegativeMarginFloatTransformer(),
   ];
 
   static const List<TextTransformer> standardTextTransformers = [

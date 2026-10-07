@@ -18,6 +18,7 @@ import 'package:jmap_dart_client/jmap/mail/email/email.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_filter_condition.dart';
 import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
 import 'package:model/model.dart';
+import 'package:tmail_ui_user/main/exceptions/remote/method_level_exception.dart';
 import 'package:tmail_ui_user/features/mailbox/data/datasource/state_datasource.dart';
 import 'package:tmail_ui_user/features/mailbox/data/extensions/state_extension.dart';
 import 'package:tmail_ui_user/features/mailbox/data/model/state_type.dart';
@@ -32,7 +33,6 @@ import 'package:tmail_ui_user/features/thread/domain/model/search_email.dart';
 import 'package:tmail_ui_user/features/thread/domain/repository/thread_repository.dart';
 
 class ThreadRepositoryImpl extends ThreadRepository {
-
   final Map<DataSourceType, ThreadDataSource> mapDataSource;
   final StateDataSource stateDataSource;
 
@@ -41,44 +41,59 @@ class ThreadRepositoryImpl extends ThreadRepository {
   @override
   Stream<EmailsResponse> getAllEmail(
     Session session,
-    AccountId accountId,
-    {
-      UnsignedInt? limit,
-      int? position,
-      Set<Comparator>? sort,
-      EmailFilter? emailFilter,
-      Properties? propertiesCreated,
-      Properties? propertiesUpdated,
-      bool getLatestChanges = true,
-    }
-  ) async* {
-    log('ThreadRepositoryImpl::getAllEmail(): filter = ${emailFilter?.mailboxId}');
-    final localEmailResponse = await Future.wait([
-      mapDataSource[DataSourceType.local]!.getAllEmailCache(
-        accountId,
-        session.username,
-        inMailboxId: emailFilter?.mailboxId,
-        sort: sort,
-        limit: limit,
-        filterOption: emailFilter?.filterOption),
-      stateDataSource.getState(accountId, session.username, StateType.email)
-    ]).then((List response) {
-      return EmailsResponse(emailList: response.first, state: response.last);
-    });
+    AccountId accountId, {
+    UnsignedInt? limit,
+    int? position,
+    Set<Comparator>? sort,
+    EmailFilter? emailFilter,
+    Properties? propertiesCreated,
+    Properties? propertiesUpdated,
+    bool getLatestChanges = true,
+  }) async* {
+    log(
+      'ThreadRepositoryImpl::getAllEmail(): filter = ${emailFilter?.mailboxId}',
+    );
+    final localEmailResponse =
+        await Future.wait([
+          mapDataSource[DataSourceType.local]!.getAllEmailCache(
+            accountId,
+            session.username,
+            inMailboxId: emailFilter?.mailboxId,
+            sort: sort,
+            limit: limit,
+            filterOption: emailFilter?.filterOption,
+          ),
+          stateDataSource.getState(
+            accountId,
+            session.username,
+            StateType.email,
+          ),
+        ]).then((List response) {
+          return EmailsResponse(
+            emailList: response.first,
+            state: response.last,
+          );
+        });
 
     EmailsResponse? networkEmailResponse;
 
-    if (!localEmailResponse.hasEmails()
-        || (localEmailResponse.emailList?.length ?? 0) < ThreadConstants.defaultLimit.value) {
-      networkEmailResponse = await mapDataSource[DataSourceType.network]!.getAllEmail(
-        session,
-        accountId,
-        limit: limit,
-        position: position,
-        sort: sort,
-        filter: emailFilter?.filter,
-        properties: propertiesCreated);
-      if (_isApproveFilterOption(emailFilter?.filterOption, networkEmailResponse.emailList)) {
+    if (!localEmailResponse.hasEmails() ||
+        (localEmailResponse.emailList?.length ?? 0) <
+            ThreadConstants.defaultLimit.value) {
+      networkEmailResponse = await mapDataSource[DataSourceType.network]!
+          .getAllEmail(
+            session,
+            accountId,
+            limit: limit,
+            position: position,
+            sort: sort,
+            filter: emailFilter?.filter,
+            properties: propertiesCreated,
+          );
+      if (_isApproveFilterOption(
+        emailFilter?.filterOption,
+        networkEmailResponse.emailList,
+      )) {
         _getFirstPage(
           session,
           accountId,
@@ -89,6 +104,17 @@ class ThreadRepositoryImpl extends ThreadRepository {
           propertiesCreated: propertiesCreated,
         );
       }
+      logTrace(
+        'ThreadRepositoryImpl::getAllEmail(): '
+        'CachedEmail = ${localEmailResponse.emailList?.length}, '
+        'CachedNotFoundEmailIds = ${localEmailResponse.notFoundEmailIds?.length}, '
+        'CachedState = ${localEmailResponse.state?.value}, '
+        'NetworkEmail = ${networkEmailResponse.emailList?.length}, '
+        'NetworkNotFoundEmailIds = ${networkEmailResponse.notFoundEmailIds?.length}, '
+        'NetworkState = ${networkEmailResponse.state?.value}, '
+        'Limit = ${limit?.value}, '
+        'MailboxId = ${emailFilter?.mailboxId?.asString}',
+      );
       yield networkEmailResponse;
     } else {
       yield localEmailResponse;
@@ -104,37 +130,61 @@ class ThreadRepositoryImpl extends ThreadRepository {
     }
 
     if (localEmailResponse.hasState()) {
-      log('ThreadRepositoryImpl::getAllEmail(): filter = ${emailFilter?.mailboxId} local has state: ${localEmailResponse.state}');
+      log(
+        'ThreadRepositoryImpl::getAllEmail(): filter = ${emailFilter?.mailboxId} local has state: ${localEmailResponse.state}',
+      );
       if (getLatestChanges) {
         await _synchronizeCacheWithChanges(
           session,
           accountId,
           localEmailResponse.state!,
           propertiesCreated: propertiesCreated,
-          propertiesUpdated: propertiesUpdated
+          propertiesUpdated: propertiesUpdated,
         );
       }
     } else {
       if (networkEmailResponse != null) {
-        log('ThreadRepositoryImpl::getAllEmail(): filter = ${emailFilter?.mailboxId} no local state -> update from network: ${networkEmailResponse.state}');
+        log(
+          'ThreadRepositoryImpl::getAllEmail(): filter = ${emailFilter?.mailboxId} no local state -> update from network: ${networkEmailResponse.state}',
+        );
         if (networkEmailResponse.state != null) {
-          await _updateState(accountId, session.username, networkEmailResponse.state!);
+          await _updateState(
+            accountId,
+            session.username,
+            networkEmailResponse.state!,
+          );
         }
       }
     }
 
-    final newEmailResponse = await Future.wait([
-      mapDataSource[DataSourceType.local]!.getAllEmailCache(
-        accountId,
-        session.username,
-        inMailboxId: emailFilter?.mailboxId,
-        sort: sort,
-        limit: limit,
-        filterOption: emailFilter?.filterOption),
-      stateDataSource.getState(accountId, session.username, StateType.email)
-    ]).then((List response) {
-      return EmailsResponse(emailList: response.first, state: response.last);
-    });
+    final newEmailResponse =
+        await Future.wait([
+          mapDataSource[DataSourceType.local]!.getAllEmailCache(
+            accountId,
+            session.username,
+            inMailboxId: emailFilter?.mailboxId,
+            sort: sort,
+            limit: limit,
+            filterOption: emailFilter?.filterOption,
+          ),
+          stateDataSource.getState(
+            accountId,
+            session.username,
+            StateType.email,
+          ),
+        ]).then((List response) {
+          return EmailsResponse(
+            emailList: response.first,
+            state: response.last,
+          );
+        });
+
+    logTrace(
+      'ThreadRepositoryImpl::getAllEmail(): '
+      'DisplayedCachedEmail = ${newEmailResponse.emailList?.length}, '
+      'DisplayedNotFoundEmailIds = ${newEmailResponse.notFoundEmailIds?.length}, '
+      'DisplayedState = ${newEmailResponse.state?.value}',
+    );
 
     yield newEmailResponse;
   }
@@ -147,6 +197,7 @@ class ThreadRepositoryImpl extends ThreadRepository {
     int? position,
     Set<Comparator>? sort,
     EmailFilter? emailFilter,
+    bool? collapseThreads,
     Properties? propertiesCreated,
   }) async* {
     jmap.State? cachedState;
@@ -171,25 +222,31 @@ class ThreadRepositoryImpl extends ThreadRepository {
     );
 
     // Query fresh emails from server
-    final serverResponse = await mapDataSource[DataSourceType.network]!.getAllEmail(
-      session,
-      accountId,
-      limit: limit,
-      position: position,
-      sort: sort,
-      filter: emailFilter?.filter,
-      properties: propertiesCreated,
-    );
+    final serverResponse = await mapDataSource[DataSourceType.network]!
+        .getAllEmail(
+          session,
+          accountId,
+          limit: limit,
+          position: position,
+          sort: sort,
+          filter: emailFilter?.filter,
+          collapseThreads: collapseThreads,
+          properties: propertiesCreated,
+        );
 
     final serverCount = serverResponse.emailList?.length ?? 0;
+    final notFoundEmailIds = serverResponse.notFoundEmailIds ?? [];
+    final stateResponse = cachedState ?? serverResponse.state;
 
-    log(
+    logTrace(
       'ThreadRepositoryImpl::forceQueryAllEmailsForWeb(): '
-      'Server email count = $serverCount',
+      'collapseThreads = $collapseThreads, '
+      'ServerEmailCount = $serverCount, '
+      'ServerNotFoundEmailIds = ${notFoundEmailIds.length}, '
+      'StateResponse = ${stateResponse?.value}',
     );
 
-    if (serverCount > 0 ||
-        (serverResponse.notFoundEmailIds?.isNotEmpty ?? false)) {
+    if (serverCount > 0 || notFoundEmailIds.isNotEmpty) {
       await _updateEmailCache(
         accountId,
         session.username,
@@ -201,43 +258,48 @@ class ThreadRepositoryImpl extends ThreadRepository {
     // Combine server list + keep existing state
     yield EmailsResponse(
       emailList: serverResponse.emailList,
-      state: cachedState ?? serverResponse.state,
+      state: stateResponse,
     );
   }
 
-  bool _isApproveFilterOption(FilterMessageOption? filterOption, List<Email>? listEmailResponse) {
-    return filterOption != FilterMessageOption.all && listEmailResponse!.isNotEmpty;
+  bool _isApproveFilterOption(
+    FilterMessageOption? filterOption,
+    List<Email>? listEmailResponse,
+  ) {
+    return filterOption != FilterMessageOption.all &&
+        listEmailResponse!.isNotEmpty;
   }
 
   Future<EmailsResponse> _getFirstPage(
     Session session,
-    AccountId accountId,
-    {
-      Set<Comparator>? sort,
-      UnsignedInt? limit,
-      int? position,
-      MailboxId? mailboxId,
-      Properties? propertiesCreated,
-      Filter? filter,
-    }
-  ) async {
-      final networkEmailResponse = await mapDataSource[DataSourceType.network]!.getAllEmail(
-        session,
-        accountId,
-        limit: limit ?? ThreadConstants.defaultLimit,
-        position: position,
-        sort: sort,
-        filter: filter ?? EmailFilterCondition(inMailbox: mailboxId),
-        properties: propertiesCreated,
-      );
-      await _updateEmailCache(
-        accountId,
-        session.username,
-        newCreated: networkEmailResponse.emailList,
-        newDestroyed: networkEmailResponse.notFoundEmailIds,
-      );
+    AccountId accountId, {
+    Set<Comparator>? sort,
+    UnsignedInt? limit,
+    int? position,
+    MailboxId? mailboxId,
+    Properties? propertiesCreated,
+    Filter? filter,
+    bool? collapseThreads,
+  }) async {
+    final networkEmailResponse = await mapDataSource[DataSourceType.network]!
+        .getAllEmail(
+          session,
+          accountId,
+          limit: limit ?? ThreadConstants.defaultLimit,
+          position: position,
+          sort: sort,
+          filter: filter ?? EmailFilterCondition(inMailbox: mailboxId),
+          properties: propertiesCreated,
+          collapseThreads: collapseThreads,
+        );
+    await _updateEmailCache(
+      accountId,
+      session.username,
+      newCreated: networkEmailResponse.emailList,
+      newDestroyed: networkEmailResponse.notFoundEmailIds,
+    );
 
-      return networkEmailResponse;
+    return networkEmailResponse;
   }
 
   @visibleForTesting
@@ -245,34 +307,39 @@ class ThreadRepositoryImpl extends ThreadRepository {
     List<Email>? emailUpdated,
     Properties? updatedProperties,
     List<Email>? emailCacheList,
-  }) =>
-      _combineEmailCache(
-        emailUpdated: emailUpdated,
-        updatedProperties: updatedProperties,
-        emailCacheList: emailCacheList,
-      );
+  }) => _combineEmailCache(
+    emailUpdated: emailUpdated,
+    updatedProperties: updatedProperties,
+    emailCacheList: emailCacheList,
+  );
 
   Future<List<Email>?> _combineEmailCache({
     List<Email>? emailUpdated,
     Properties? updatedProperties,
-    List<Email>? emailCacheList
+    List<Email>? emailCacheList,
   }) async {
     if (emailUpdated == null || emailUpdated.isEmpty) return emailUpdated;
 
     if (updatedProperties == null) return null;
 
-    if (updatedProperties.value.containsAll(ThreadConstants.propertiesDefault.value)) {
-      log('ThreadRepositoryImpl::_combineEmailCache(): Update use properties default');
+    if (updatedProperties.value.containsAll(
+      ThreadConstants.propertiesDefault.value,
+    )) {
+      log(
+        'ThreadRepositoryImpl::_combineEmailCache(): Update use properties default',
+      );
       return emailUpdated;
     }
 
     final combinedEmails = emailUpdated
         .map((email) => _combineUpdatedWithEmailInCache(email, emailCacheList))
         .where((record) => record.oldEmail != null)
-        .map((record) => record.oldEmail!.combineEmail(
-          record.updatedEmail,
-          updatedProperties,
-        ))
+        .map(
+          (record) => record.oldEmail!.combineEmail(
+            record.updatedEmail,
+            updatedProperties,
+          ),
+        )
         .toList();
 
     return combinedEmails;
@@ -282,8 +349,7 @@ class ThreadRepositoryImpl extends ThreadRepository {
   ({Email updatedEmail, Email? oldEmail}) combineUpdatedWithEmailInCache(
     Email updatedEmail,
     List<Email>? emailCacheList,
-  ) =>
-      _combineUpdatedWithEmailInCache(updatedEmail, emailCacheList);
+  ) => _combineUpdatedWithEmailInCache(updatedEmail, emailCacheList);
 
   ({Email updatedEmail, Email? oldEmail}) _combineUpdatedWithEmailInCache(
     Email updatedEmail,
@@ -293,9 +359,13 @@ class ThreadRepositoryImpl extends ThreadRepository {
         ? emailCacheList?.findEmailById(updatedEmail.id!)
         : null;
     if (oldEmail != null) {
-      log('ThredRepositoryImpl::_combineUpdatedWithEmailInCache(): cache hit for this email -> ${oldEmail.id} - ${oldEmail.subject} - ${oldEmail.keywords} - ${oldEmail.mailboxIds} - new update in $updatedEmail');
+      log(
+        'ThredRepositoryImpl::_combineUpdatedWithEmailInCache(): cache hit for this email -> ${oldEmail.id} - ${oldEmail.subject} - ${oldEmail.keywords} - ${oldEmail.mailboxIds} - new update in $updatedEmail',
+      );
     } else {
-      log('ThreadRepositoryImpl::_combineUpdatedWithEmailInCache(): cache miss for emailId ${updatedEmail.id}');
+      log(
+        'ThreadRepositoryImpl::_combineUpdatedWithEmailInCache(): cache miss for emailId ${updatedEmail.id}',
+      );
     }
     return (oldEmail: oldEmail, updatedEmail: updatedEmail);
   }
@@ -305,14 +375,15 @@ class ThreadRepositoryImpl extends ThreadRepository {
     UserName userName, {
     List<Email>? newUpdated,
     List<Email>? newCreated,
-    List<EmailId>? newDestroyed
+    List<EmailId>? newDestroyed,
   }) async {
     await mapDataSource[DataSourceType.local]!.update(
       accountId,
       userName,
       updated: newUpdated,
       created: newCreated,
-      destroyed: newDestroyed);
+      destroyed: newDestroyed,
+    );
   }
 
   Future<void> _updateState(
@@ -332,40 +403,49 @@ class ThreadRepositoryImpl extends ThreadRepository {
   Stream<EmailsResponse> refreshChanges(
     Session session,
     AccountId accountId,
-    jmap.State currentState,
-    {
-      Set<Comparator>? sort,
-      UnsignedInt? limit,
-      EmailFilter? emailFilter,
-      Properties? propertiesCreated,
-      Properties? propertiesUpdated,
-    }
-  ) async* {
+    jmap.State currentState, {
+    Set<Comparator>? sort,
+    UnsignedInt? limit,
+    EmailFilter? emailFilter,
+    Properties? propertiesCreated,
+    Properties? propertiesUpdated,
+    bool? collapseThreads,
+  }) async* {
     log('ThreadRepositoryImpl::refreshChanges(): $currentState');
     final emailChangeResponse = await _synchronizeCacheWithChanges(
       session,
       accountId,
       currentState,
       propertiesCreated: propertiesCreated,
-      propertiesUpdated: propertiesUpdated
+      propertiesUpdated: propertiesUpdated,
     );
 
-    final newEmailResponse = await Future.wait([
-      mapDataSource[DataSourceType.local]!.getAllEmailCache(
-        accountId,
-        session.username,
-        inMailboxId: emailFilter?.mailboxId,
-        sort: sort,
-        limit: limit,
-        filterOption: emailFilter?.filterOption,
-      ),
-      stateDataSource.getState(accountId, session.username, StateType.email)
-    ]).then((List response) {
-      return EmailsResponse(emailList: response.first, state: response.last);
-    });
+    final newEmailResponse =
+        await Future.wait([
+          mapDataSource[DataSourceType.local]!.getAllEmailCache(
+            accountId,
+            session.username,
+            inMailboxId: emailFilter?.mailboxId,
+            sort: sort,
+            limit: limit,
+            filterOption: emailFilter?.filterOption,
+          ),
+          stateDataSource.getState(
+            accountId,
+            session.username,
+            StateType.email,
+          ),
+        ]).then((List response) {
+          return EmailsResponse(
+            emailList: response.first,
+            state: response.last,
+          );
+        });
 
-    if (!newEmailResponse.hasEmails()
-        || (newEmailResponse.emailList?.length ?? 0) < ThreadConstants.defaultLimit.value) {
+    if (!newEmailResponse.hasEmails() ||
+        (newEmailResponse.emailList?.length ?? 0) <
+            ThreadConstants.defaultLimit.value ||
+        collapseThreads == true) {
       final networkEmailResponse = await _getFirstPage(
         session,
         accountId,
@@ -374,10 +454,32 @@ class ThreadRepositoryImpl extends ThreadRepository {
         filter: emailFilter?.filter,
         mailboxId: emailFilter?.mailboxId,
         propertiesCreated: propertiesCreated,
+        collapseThreads: collapseThreads,
       );
-
-      yield networkEmailResponse.copyWith(emailChangeResponse: emailChangeResponse);
+      logTrace(
+        'ThreadRepositoryImpl::refreshChanges():'
+        'collapseThreads = $collapseThreads, '
+        'CountEmailCached = ${newEmailResponse.emailList?.length}, '
+        'EmailStateCache = ${newEmailResponse.state?.value}, '
+        'InMailboxId = ${emailFilter?.mailboxId?.asString}, '
+        'Limit = ${limit?.value.toInt()}, '
+        'DefaultLimit = ${ThreadConstants.defaultLimit.value.toInt()}, '
+        'CountEmailNetwork = ${networkEmailResponse.emailList?.length}, '
+        'EmailStateNetwork = ${networkEmailResponse.state?.value}, ',
+      );
+      yield networkEmailResponse.copyWith(
+        emailChangeResponse: emailChangeResponse,
+      );
     } else {
+      logTrace(
+        'ThreadRepositoryImpl::refreshChanges():'
+        'collapseThreads = $collapseThreads, '
+        'CountEmailCached = ${newEmailResponse.emailList?.length}, '
+        'EmailStateCache = ${newEmailResponse.state?.value}, '
+        'InMailboxId = ${emailFilter?.mailboxId?.asString}, '
+        'Limit = ${limit?.value.toInt()}, '
+        'DefaultLimit = ${ThreadConstants.defaultLimit.value.toInt()}, ',
+      );
       yield newEmailResponse.copyWith(emailChangeResponse: emailChangeResponse);
     }
   }
@@ -393,10 +495,20 @@ class ThreadRepositoryImpl extends ThreadRepository {
         newDestroyed: response.notFoundEmailIds,
       );
     }
+    logTrace(
+      'ThreadRepositoryImpl::loadMoreEmails(): '
+      'collapseThreads = ${emailRequest.collapseThreads},'
+      'emailList = ${response.emailList?.length},'
+      'notFoundEmailIds = ${response.notFoundEmailIds?.length}, '
+      'existNotFoundEmails = ${response.existNotFoundEmails}, '
+      'state = ${response.state?.value}',
+    );
     yield response;
   }
 
-  Future<EmailsResponse> _getAllEmailsWithoutLastEmailId(GetEmailRequest emailRequest) async {
+  Future<EmailsResponse> _getAllEmailsWithoutLastEmailId(
+    GetEmailRequest emailRequest,
+  ) async {
     final emailResponse = await mapDataSource[DataSourceType.network]!
         .getAllEmail(
           emailRequest.session,
@@ -405,14 +517,21 @@ class ThreadRepositoryImpl extends ThreadRepository {
           position: emailRequest.position,
           sort: emailRequest.sort,
           filter: emailRequest.filter,
-          properties: emailRequest.properties)
+          collapseThreads: emailRequest.collapseThreads,
+          properties: emailRequest.properties,
+        )
         .then((response) {
           final listEmails = response.emailList;
-          if (emailRequest.lastEmailId != null && listEmails?.isNotEmpty == true) {
-            listEmails?.removeWhere((email) => email.id == emailRequest.lastEmailId);
+          final serverEmailCount = listEmails?.length ?? 0;
+          if (emailRequest.lastEmailId != null &&
+              listEmails?.isNotEmpty == true) {
+            listEmails?.removeWhere(
+              (email) => email.id == emailRequest.lastEmailId,
+            );
           }
           return EmailsResponse(
             emailList: listEmails,
+            serverEmailCount: serverEmailCount,
             state: response.state,
             notFoundEmailIds: response.notFoundEmailIds,
           );
@@ -424,47 +543,51 @@ class ThreadRepositoryImpl extends ThreadRepository {
   @override
   Future<List<SearchEmail>> searchEmails(
     Session session,
-    AccountId accountId,
-    {
-      UnsignedInt? limit,
-      int? position,
-      Set<Comparator>? sort,
-      Filter? filter,
-      Properties? properties
-    }
-  ) async {
-    final searchEmailsResponse = await mapDataSource[DataSourceType.network]!.searchEmails(
-      session,
-      accountId,
-      limit: limit,
-      position: position,
-      sort: sort,
-      filter: filter,
-      properties: properties);
+    AccountId accountId, {
+    UnsignedInt? limit,
+    int? position,
+    Set<Comparator>? sort,
+    Filter? filter,
+    bool? collapseThreads,
+    Properties? properties,
+  }) async {
+    final searchEmailsResponse = await mapDataSource[DataSourceType.network]!
+        .searchEmails(
+          session,
+          accountId,
+          limit: limit,
+          position: position,
+          sort: sort,
+          filter: filter,
+          collapseThreads: collapseThreads,
+          properties: properties,
+        );
 
     return searchEmailsResponse.toSearchEmails ?? [];
   }
 
   @override
   Future<List<EmailId>> emptyTrashFolder(
-    Session session, 
-    AccountId accountId, 
+    Session session,
+    AccountId accountId,
     MailboxId trashMailboxId,
     int totalEmails,
-    StreamController<dartz.Either<Failure, Success>> onProgressController
+    StreamController<dartz.Either<Failure, Success>> onProgressController,
   ) async {
-    final listEmailIdDeleted = await mapDataSource[DataSourceType.network]!.emptyMailboxFolder(
-      session,
-      accountId,
-      trashMailboxId,
-      totalEmails,
-      onProgressController
-    );
+    final listEmailIdDeleted = await mapDataSource[DataSourceType.network]!
+        .emptyMailboxFolder(
+          session,
+          accountId,
+          trashMailboxId,
+          totalEmails,
+          onProgressController,
+        );
 
     await _updateEmailCache(
       accountId,
       session.username,
-      newDestroyed: listEmailIdDeleted);
+      newDestroyed: listEmailIdDeleted,
+    );
 
     return listEmailIdDeleted;
   }
@@ -472,57 +595,55 @@ class ThreadRepositoryImpl extends ThreadRepository {
   Future<EmailChangeResponse?> _synchronizeCacheWithChanges(
     Session session,
     AccountId accountId,
-    jmap.State currentState,
-    {
-      Properties? propertiesCreated,
-      Properties? propertiesUpdated,
-    }
-  ) async {
-    final localEmailList = await mapDataSource[DataSourceType.local]!.getAllEmailCache(accountId, session.username);
+    jmap.State currentState, {
+    Properties? propertiesCreated,
+    Properties? propertiesUpdated,
+  }) async {
+    final localEmailList = await mapDataSource[DataSourceType.local]!
+        .getAllEmailCache(accountId, session.username);
 
-    EmailChangeResponse? emailChangeResponse;
-    bool hasMoreChanges = true;
-    jmap.State? sinceState = currentState;
-
-    while(hasMoreChanges && sinceState != null) {
-      log('ThreadRepositoryImpl::_synchronizeCacheWithChanges(): sinceState = $sinceState');
-      final changesResponse = await mapDataSource[DataSourceType.network]!.getChanges(
-        session,
-        accountId,
-        sinceState,
-        propertiesCreated: propertiesCreated,
-        propertiesUpdated: propertiesUpdated);
-
-      hasMoreChanges = changesResponse.hasMoreChanges;
-      sinceState = changesResponse.newStateChanges;
-
-      if (emailChangeResponse != null) {
-        emailChangeResponse.union(changesResponse);
-      } else {
-        emailChangeResponse = changesResponse;
-      }
-    }
+    final emailChangeResponse = await mapDataSource[DataSourceType.network]!
+        .getAllEmailChanges(
+          session,
+          accountId,
+          currentState,
+          propertiesCreated: propertiesCreated,
+          propertiesUpdated: propertiesUpdated,
+        );
 
     if (emailChangeResponse != null) {
+      // Never advance the cache to Email/get's current state after an incomplete
+      // changes drain: unprocessed updates and deletions would be skipped.
+      if (emailChangeResponse.hasMoreChanges) {
+        throw CannotCalculateChangesMethodResponseException();
+      }
       final newEmailUpdated = await _combineEmailCache(
-          emailUpdated: emailChangeResponse.updated,
-          updatedProperties: emailChangeResponse.updatedProperties,
-          emailCacheList: localEmailList);
+        emailUpdated: emailChangeResponse.updated,
+        updatedProperties: emailChangeResponse.updatedProperties,
+        emailCacheList: localEmailList,
+      );
 
-      log('ThreadRepositoryImpl::_synchronizeCacheWithChanges(): [Changes]: '
-          'created = ${emailChangeResponse.created?.length} - '
-          'updated = ${newEmailUpdated?.length} - '
-          'destroyed = ${emailChangeResponse.destroyed?.length}');
+      log(
+        'ThreadRepositoryImpl::_synchronizeCacheWithChanges(): [Changes]: '
+        'created = ${emailChangeResponse.created?.length} - '
+        'updated = ${newEmailUpdated?.length} - '
+        'destroyed = ${emailChangeResponse.destroyed?.length}',
+      );
 
       await _updateEmailCache(
-          accountId,
-          session.username,
-          newCreated: emailChangeResponse.created,
-          newUpdated: newEmailUpdated,
-          newDestroyed: emailChangeResponse.destroyed);
+        accountId,
+        session.username,
+        newCreated: emailChangeResponse.created,
+        newUpdated: newEmailUpdated,
+        newDestroyed: emailChangeResponse.destroyed,
+      );
 
       if (emailChangeResponse.newStateEmail != null) {
-        await _updateState(accountId, session.username, emailChangeResponse.newStateEmail!);
+        await _updateState(
+          accountId,
+          session.username,
+          emailChangeResponse.newStateEmail!,
+        );
       }
     }
 
@@ -533,32 +654,39 @@ class ThreadRepositoryImpl extends ThreadRepository {
   Future<PresentationEmail> getEmailById(
     Session session,
     AccountId accountId,
-    EmailId emailId,
-    {Properties? properties}
-  ) {
-    return mapDataSource[DataSourceType.network]!.getEmailById(session, accountId, emailId, properties: properties);
+    EmailId emailId, {
+    Properties? properties,
+  }) {
+    return mapDataSource[DataSourceType.network]!.getEmailById(
+      session,
+      accountId,
+      emailId,
+      properties: properties,
+    );
   }
 
   @override
   Future<List<EmailId>> emptySpamFolder(
-    Session session, 
-    AccountId accountId, 
+    Session session,
+    AccountId accountId,
     MailboxId spamMailboxId,
     int totalEmails,
-    StreamController<dartz.Either<Failure, Success>> onProgressController
+    StreamController<dartz.Either<Failure, Success>> onProgressController,
   ) async {
-    final listEmailIdDeleted = await mapDataSource[DataSourceType.network]!.emptyMailboxFolder(
-      session,
-      accountId,
-      spamMailboxId,
-      totalEmails,
-      onProgressController
-    );
+    final listEmailIdDeleted = await mapDataSource[DataSourceType.network]!
+        .emptyMailboxFolder(
+          session,
+          accountId,
+          spamMailboxId,
+          totalEmails,
+          onProgressController,
+        );
 
     await _updateEmailCache(
       accountId,
       session.username,
-      newDestroyed: listEmailIdDeleted);
+      newDestroyed: listEmailIdDeleted,
+    );
 
     return listEmailIdDeleted;
   }

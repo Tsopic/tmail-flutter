@@ -15,6 +15,7 @@ import 'package:tmail_ui_user/features/mailbox/presentation/styles/trailing_mail
 import 'package:tmail_ui_user/features/mailbox/presentation/utils/mailbox_method_action_define.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/widgets/empty_mailbox_popup_dialog_widget.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/widgets/mailbox_expand_button.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/widgets/trailing_mailbox_item_widget.dart';
 
 class LabelMailboxItemWidget extends StatefulWidget {
@@ -140,8 +141,9 @@ class _LabelMailboxItemWidgetState extends State<LabelMailboxItemWidget> {
           Offstage(
             offstage: !_shouldShowMorePopupMenu,
             child: TMailButtonWidget.fromIcon(
+              key: const ValueKey(UiKeys.mailboxMoreActionButton),
               margin: _responsiveUtils.isDesktop(context) &&
-                      widget.mailboxNode.item.allowedHasEmptyAction
+                      widget.mailboxNode.allowedHasEmptyAction
                   ? EdgeInsets.zero
                   : TrailingMailboxItemWidgetStyles.menuIconMargin,
               icon: _imagePaths.icMoreVertical,
@@ -214,7 +216,7 @@ class _LabelMailboxItemWidgetState extends State<LabelMailboxItemWidget> {
 
   bool _showCleanButton(BuildContext context) {
     return _responsiveUtils.isWebDesktop(context) &&
-        widget.mailboxNode.item.allowedHasEmptyAction;
+        widget.mailboxNode.allowedHasEmptyAction;
   }
 
   bool _showMoreButton(BuildContext context) => PlatformInfo.isWeb;

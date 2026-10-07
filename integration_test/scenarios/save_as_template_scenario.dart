@@ -8,10 +8,12 @@ import '../robots/mailbox_menu_robot.dart';
 import '../robots/thread_robot.dart';
 
 class SaveAsTemplateScenario extends BaseTestScenario {
-  const SaveAsTemplateScenario(super.$);
+  const SaveAsTemplateScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
+    await robots.commonRobot().waitForMailboxReady();
+
     final imagePaths = ImagePaths();
     final appLocalizations = AppLocalizations();
     final mailboxMenuRobot = MailboxMenuRobot($);
@@ -19,8 +21,8 @@ class SaveAsTemplateScenario extends BaseTestScenario {
     final composerRobot = ComposerRobot($);
 
     await threadRobot.openMailbox();
-    await mailboxMenuRobot.openFolderByName(
-      appLocalizations.templatesMailboxDisplayName,
+    await mailboxMenuRobot.navigation.openFolder(
+      mailboxMenuRobot.mailboxItemByName(appLocalizations.templatesMailboxDisplayName),
     );
     
     await threadRobot.openComposer();

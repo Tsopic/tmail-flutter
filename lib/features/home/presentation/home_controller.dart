@@ -4,8 +4,6 @@ import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
 import 'package:core/utils/app_logger.dart';
 import 'package:core/utils/platform_info.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:get/get.dart';
 import 'package:jmap_dart_client/jmap/core/session/session.dart';
 import 'package:model/account/personal_account.dart';
@@ -68,7 +66,6 @@ class HomeController extends ReloadableController {
   @override
   void onInit() {
     if (PlatformInfo.isMobile) {
-      _initFlutterDownloader();
       _registerReceivingFileSharing();
       _registerDeepLinks();
     }
@@ -93,16 +90,13 @@ class HomeController extends ReloadableController {
 
   @override
   void onCancelReconnectWhenSessionExpired() {
+    logError(
+      '$runtimeType::onCancelReconnectWhenSessionExpired: '
+      'forcing logout — user cancelled session-expired reconnect dialog',
+      stackTrace: StackTrace.current,
+    );
     clearDataAndGoToLoginPage();
   }
-
-  void _initFlutterDownloader() {
-    FlutterDownloader
-      .initialize(debug: kDebugMode)
-      .then((_) => FlutterDownloader.registerCallback(downloadCallback));
-  }
-
-  static void downloadCallback(String id, int status, int progress) {}
 
   Future<void> _handleNavigateToScreen() async {
     await Future.delayed(2.seconds);
@@ -300,6 +294,11 @@ class HomeController extends ReloadableController {
     } else if (failure is CheckOIDCIsAvailableFailure) {
       handleCheckOIDCIsAvailableFailure();
     } else if (isGetTokenOIDCFailure(failure)) {
+      logError(
+        '$runtimeType::handleFailureViewState: '
+        'OIDC sign-in flow failed (${failure.runtimeType}) — redirecting to login',
+        stackTrace: StackTrace.current,
+      );
       goToLogin();
     } else {
       super.handleFailureViewState(failure);
@@ -345,6 +344,11 @@ class HomeController extends ReloadableController {
     if (failure is CheckOIDCIsAvailableFailure) {
       handleCheckOIDCIsAvailableFailure();
     } else if (isGetTokenOIDCFailure(failure)) {
+      logError(
+        '$runtimeType::handleUrgentExceptionOnWeb: '
+        'OIDC sign-in flow failed urgently (${failure.runtimeType}) — redirecting to login',
+        stackTrace: StackTrace.current,
+      );
       goToLogin();
     } else {
       super.handleUrgentExceptionOnWeb(failure: failure, exception: exception);
@@ -354,6 +358,12 @@ class HomeController extends ReloadableController {
   @override
   void handleErrorViewState(Object error, StackTrace stackTrace) {
     if (PlatformInfo.isWeb) {
+      logError(
+        '$runtimeType::handleErrorViewState: '
+        'unhandled stream error on Home (web) — redirecting to login',
+        exception: error,
+        stackTrace: stackTrace,
+      );
       goToLogin();
     }
   }

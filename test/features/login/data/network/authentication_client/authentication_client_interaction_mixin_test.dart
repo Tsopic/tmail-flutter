@@ -66,53 +66,62 @@ void main() {
       );
     });
 
-    test('should throw MissingAuthorizationEndpointException when authorization_endpoint is null', () {
-      // arrange
-      final discoveryResponse = OIDCDiscoveryResponse(
-        null, // authorization_endpoint is null
-        'https://example.com/token',
-        'https://example.com/logout',
-        'https://example.com/userinfo',
-      );
+    test(
+      'should throw MissingAuthorizationEndpointException when authorization_endpoint is null',
+      () {
+        // arrange
+        final discoveryResponse = OIDCDiscoveryResponse(
+          null, // authorization_endpoint is null
+          'https://example.com/token',
+          'https://example.com/logout',
+          'https://example.com/userinfo',
+        );
 
-      // act & assert
-      expect(
-        () => client.validateOidcDiscoveryResponse(discoveryResponse),
-        throwsA(isA<MissingAuthorizationEndpointException>()),
-      );
-    });
+        // act & assert
+        expect(
+          () => client.validateOidcDiscoveryResponse(discoveryResponse),
+          throwsA(isA<MissingAuthorizationEndpointException>()),
+        );
+      },
+    );
 
-    test('should throw MissingTokenEndpointException when token_endpoint is null', () {
-      // arrange
-      final discoveryResponse = OIDCDiscoveryResponse(
-        'https://example.com/auth',
-        null, // token_endpoint is null
-        'https://example.com/logout',
-        'https://example.com/userinfo',
-      );
+    test(
+      'should throw MissingTokenEndpointException when token_endpoint is null',
+      () {
+        // arrange
+        final discoveryResponse = OIDCDiscoveryResponse(
+          'https://example.com/auth',
+          null, // token_endpoint is null
+          'https://example.com/logout',
+          'https://example.com/userinfo',
+        );
 
-      // act & assert
-      expect(
-        () => client.validateOidcDiscoveryResponse(discoveryResponse),
-        throwsA(isA<MissingTokenEndpointException>()),
-      );
-    });
+        // act & assert
+        expect(
+          () => client.validateOidcDiscoveryResponse(discoveryResponse),
+          throwsA(isA<MissingTokenEndpointException>()),
+        );
+      },
+    );
 
-    test('should throw MissingAuthorizationEndpointException first when both are null', () {
-      // arrange
-      final discoveryResponse = OIDCDiscoveryResponse(
-        null, // authorization_endpoint is null
-        null, // token_endpoint is null
-        'https://example.com/logout',
-        'https://example.com/userinfo',
-      );
+    test(
+      'should throw MissingAuthorizationEndpointException first when both are null',
+      () {
+        // arrange
+        final discoveryResponse = OIDCDiscoveryResponse(
+          null, // authorization_endpoint is null
+          null, // token_endpoint is null
+          'https://example.com/logout',
+          'https://example.com/userinfo',
+        );
 
-      // act & assert - should throw authorization exception first
-      expect(
-        () => client.validateOidcDiscoveryResponse(discoveryResponse),
-        throwsA(isA<MissingAuthorizationEndpointException>()),
-      );
-    });
+        // act & assert - should throw authorization exception first
+        expect(
+          () => client.validateOidcDiscoveryResponse(discoveryResponse),
+          throwsA(isA<MissingAuthorizationEndpointException>()),
+        );
+      },
+    );
   });
 
   group('getEndSessionRequest', () {
@@ -136,70 +145,104 @@ void main() {
       );
 
       // act
-      final result = client.getEndSessionRequest(tokenId, config, discoveryResponse);
+      final result = client.getEndSessionRequest(
+        tokenId,
+        config,
+        discoveryResponse,
+      );
 
       // assert
       expect(result, isNull);
     });
 
-    test('should return EndSessionRequest when end_session_endpoint is present', () {
-      // arrange
-      final tokenId = TokenId('test-token-id');
-      final config = createTestConfig();
-      final discoveryResponse = OIDCDiscoveryResponse(
-        'https://example.com/auth',
-        'https://example.com/token',
-        'https://example.com/logout',
-        'https://example.com/userinfo',
-      );
+    test(
+      'should return EndSessionRequest when end_session_endpoint is present',
+      () {
+        // arrange
+        final tokenId = TokenId('test-token-id');
+        final config = createTestConfig();
+        final discoveryResponse = OIDCDiscoveryResponse(
+          'https://example.com/auth',
+          'https://example.com/token',
+          'https://example.com/logout',
+          'https://example.com/userinfo',
+        );
 
-      // act
-      final result = client.getEndSessionRequest(tokenId, config, discoveryResponse);
+        // act
+        final result = client.getEndSessionRequest(
+          tokenId,
+          config,
+          discoveryResponse,
+        );
 
-      // assert
-      expect(result, isNotNull);
-      expect(result!.idTokenHint, 'test-token-id');
-    });
+        // assert
+        expect(result, isNotNull);
+        expect(result!.idTokenHint, 'test-token-id');
+      },
+    );
 
-    test('should include service configuration when auth and token endpoints present', () {
-      // arrange
-      final tokenId = TokenId('test-token-id');
-      final config = createTestConfig();
-      final discoveryResponse = OIDCDiscoveryResponse(
-        'https://example.com/auth',
-        'https://example.com/token',
-        'https://example.com/logout',
-        'https://example.com/userinfo',
-      );
+    test(
+      'should include service configuration when auth and token endpoints present',
+      () {
+        // arrange
+        final tokenId = TokenId('test-token-id');
+        final config = createTestConfig();
+        final discoveryResponse = OIDCDiscoveryResponse(
+          'https://example.com/auth',
+          'https://example.com/token',
+          'https://example.com/logout',
+          'https://example.com/userinfo',
+        );
 
-      // act
-      final result = client.getEndSessionRequest(tokenId, config, discoveryResponse);
+        // act
+        final result = client.getEndSessionRequest(
+          tokenId,
+          config,
+          discoveryResponse,
+        );
 
-      // assert
-      expect(result, isNotNull);
-      expect(result!.serviceConfiguration, isNotNull);
-      expect(result.serviceConfiguration!.authorizationEndpoint, 'https://example.com/auth');
-      expect(result.serviceConfiguration!.tokenEndpoint, 'https://example.com/token');
-      expect(result.serviceConfiguration!.endSessionEndpoint, 'https://example.com/logout');
-    });
+        // assert
+        expect(result, isNotNull);
+        expect(result!.serviceConfiguration, isNotNull);
+        expect(
+          result.serviceConfiguration!.authorizationEndpoint,
+          'https://example.com/auth',
+        );
+        expect(
+          result.serviceConfiguration!.tokenEndpoint,
+          'https://example.com/token',
+        );
+        expect(
+          result.serviceConfiguration!.endSessionEndpoint,
+          'https://example.com/logout',
+        );
+      },
+    );
 
-    test('should have null service configuration when auth endpoint is missing', () {
-      // arrange
-      final tokenId = TokenId('test-token-id');
-      final config = createTestConfig();
-      final discoveryResponse = OIDCDiscoveryResponse(
-        null, // authorization_endpoint is null
-        'https://example.com/token',
-        'https://example.com/logout',
-        'https://example.com/userinfo',
-      );
+    test(
+      'should have null service configuration when auth endpoint is missing',
+      () {
+        // arrange
+        final tokenId = TokenId('test-token-id');
+        final config = createTestConfig();
+        final discoveryResponse = OIDCDiscoveryResponse(
+          null, // authorization_endpoint is null
+          'https://example.com/token',
+          'https://example.com/logout',
+          'https://example.com/userinfo',
+        );
 
-      // act
-      final result = client.getEndSessionRequest(tokenId, config, discoveryResponse);
+        // act
+        final result = client.getEndSessionRequest(
+          tokenId,
+          config,
+          discoveryResponse,
+        );
 
-      // assert
-      expect(result, isNotNull);
-      expect(result!.serviceConfiguration, isNull);
-    });
+        // assert
+        expect(result, isNotNull);
+        expect(result!.serviceConfiguration, isNull);
+      },
+    );
   });
 }

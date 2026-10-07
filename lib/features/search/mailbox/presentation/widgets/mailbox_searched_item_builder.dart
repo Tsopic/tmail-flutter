@@ -204,6 +204,9 @@ class _MailboxSearchedItemBuilderState extends State<MailboxSearchedItemBuilder>
         : _imagePaths.icHideFolder,
       width: 20,
       height: 20,
+      colorFilter: widget.presentationMailbox.allowedToDisplay
+          ? AppColor.primaryLinShare.asFilter()
+          : null,
       fit: BoxFit.fill
     );
   }

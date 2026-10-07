@@ -1,9 +1,10 @@
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/mailbox_view.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/label_mailbox_item_widget.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/mailbox_item_widget.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/widgets/sidebar/sidebar_mailbox_item.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 import '../../base/base_test_scenario.dart';
@@ -13,7 +14,7 @@ import '../../robots/thread_robot.dart';
 
 class EmptyTrashScenario extends BaseTestScenario {
 
-  const EmptyTrashScenario(super.$);
+  const EmptyTrashScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -24,7 +25,7 @@ class EmptyTrashScenario extends BaseTestScenario {
     final mailboxMenuRobot = MailboxMenuRobot($);
     final appLocalizations = AppLocalizations();
 
-    await provisionEmail(
+    await robots.commonRobot().provisionEmail(
       [
         ProvisioningEmail(
           toEmail: emailUser,
@@ -40,14 +41,13 @@ class EmptyTrashScenario extends BaseTestScenario {
     await _expectMailboxViewVisible();
     await _expectFolderVisible(appLocalizations.trashMailboxDisplayName);
 
-    await mailboxMenuRobot.openFolderByName(
-      appLocalizations.trashMailboxDisplayName,
+    await mailboxMenuRobot.navigation.openFolder(
+      mailboxMenuRobot.mailboxItemByName(appLocalizations.trashMailboxDisplayName),
     );
-    await $.pumpAndSettle();
     await _expectEmptyTrashBannerVisible();
     await _expectEmailWithSubjectVisible(subject);
 
-    await threadRobot.tapEmptyTrashBanner();
+    await threadRobot.emptyTrash.tapEmptyTrashBanner();
     await _expectEmptyTrashConfirmDialogVisible(appLocalizations);
     await threadRobot.tapDeleteAllButtonOnEmptyTrashConfirmDialog(
       appLocalizations,
@@ -59,13 +59,13 @@ class EmptyTrashScenario extends BaseTestScenario {
   Future<void> _expectMailboxViewVisible() => expectViewVisible($(MailboxView));
 
   Future<void> _expectFolderVisible(String folderName) {
-    return expectViewVisible($(MailboxItemWidget)
-        .$(LabelMailboxItemWidget)
+    return expectViewVisible($(SidebarMailboxItem)
         .$(find.text(folderName)));
   }
 
-  Future<void> _expectEmptyTrashBannerVisible() =>
-      expectViewVisible($(#empty_trash_banner));
+  Future<void> _expectEmptyTrashBannerVisible() async {
+    await expectViewVisible($(#empty_trash_banner));
+  }
 
   Future<void> _expectEmailWithSubjectVisible(String subject) =>
       expectViewVisible($(subject));
@@ -75,5 +75,5 @@ class EmptyTrashScenario extends BaseTestScenario {
   ) => expectViewVisible($(appLocalizations.empty_trash_dialog_message));
 
   Future<void> _expectEmptyViewVisible() =>
-      expectViewVisible($(#empty_thread_view));
+      expectViewVisible($(const Key(UiKeys.emptyThreadView)));
 }

@@ -20,6 +20,7 @@ class TopBarThreadSelection extends StatelessWidget{
   final OnEmailActionTypeAction? onEmailActionTypeAction;
   final VoidCallback? onCancelSelection;
   final ImagePaths imagePaths;
+  final bool isLabelAvailable;
 
   const TopBarThreadSelection (
     this.listEmail,
@@ -27,6 +28,7 @@ class TopBarThreadSelection extends StatelessWidget{
     this.imagePaths,
     {
       super.key,
+      required this.isLabelAvailable,
       this.onEmailActionTypeAction,
       this.onCancelSelection,
     }
@@ -104,6 +106,18 @@ class TopBarThreadSelection extends StatelessWidget{
           EmailActionType.moveToMailbox,
         ),
       ),
+      if (isLabelAvailable)
+        TMailButtonWidget.fromIcon(
+          icon: imagePaths.icTag,
+          iconSize: TopBarThreadSelectionStyle.iconSize,
+          iconColor: TopBarThreadSelectionStyle.iconColor,
+          tooltipMessage: AppLocalizations.of(context).labelAs,
+          backgroundColor: Colors.transparent,
+          onTapActionCallback: () => onEmailActionTypeAction?.call(
+            List.from(listEmail),
+            EmailActionType.labelAs,
+          ),
+        ),
       TMailButtonWidget.fromIcon(
         icon: !isMarkAsSpamEnabled ? imagePaths.icNotSpam : imagePaths.icSpam,
         backgroundColor: Colors.transparent,

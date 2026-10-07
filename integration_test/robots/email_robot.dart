@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/base/widget/labels/tag_widget.dart';
 import 'package:tmail_ui_user/features/email/presentation/widgets/attachment_item_widget.dart';
+import 'package:tmail_ui_user/features/email/presentation/widgets/calendar_event/calendar_event_card_widget.dart';
 import 'package:tmail_ui_user/features/email/presentation/widgets/email_subject_widget.dart';
 import 'package:tmail_ui_user/features/email/presentation/widgets/email_view_back_button.dart';
 import 'package:tmail_ui_user/features/email/presentation/widgets/information_sender_and_receiver_builder.dart';
@@ -19,8 +21,7 @@ class EmailRobot extends CoreRobot {
   }
 
   Future<void> tapDownloadAllButton() async {
-    await $(#download_all_attachments_button).tap();
-    await $.pumpAndSettle();
+    await $(const ValueKey(UiKeys.downloadAllAttachmentsButton)).tap();
   }
 
   Future<void> onTapReplyEmail() async {
@@ -49,6 +50,10 @@ class EmailRobot extends CoreRobot {
 
   Future<void> tapEmailDetailedStarButton() async {
     await $(AppLocalizations().starred).tap();
+  }
+
+  Future<void> tapEmailDetailedLabelAsOptionInContextMenu() async {
+    await $(#labelAs_action).tap();
   }
 
   Future<void> tapEmailDetailedUnstarButton() async {
@@ -93,6 +98,18 @@ class EmailRobot extends CoreRobot {
         .$(TagWidget)
         .which<TagWidget>((widget) => widget.text == labelDisplayName)
         .$(InkWell)
+        .tap();
+  }
+
+  Future<void> tapDeleteThreadButton() async {
+    await $(#delete_thread_button).tap();
+  }
+
+  Future<void> tapMailToAttendeesEventActionButton(
+    AppLocalizations appLocalizations,
+  ) async {
+    await $(CalendarEventCardWidget)
+        .$(appLocalizations.mailToAttendees)
         .tap();
   }
 }

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:core/presentation/utils/html_transformer/text/standardize_html_sanitizing_transformers.dart';
 
+import '../../../test/fixtures/html_email_corpus.dart';
+
 void main() {
   group('StandardizeHtmlSanitizingTransformers.process', () {
     const transformer = StandardizeHtmlSanitizingTransformers();
@@ -167,6 +169,41 @@ void main() {
         expect(
             sanitize('<img src="cid:email123">'),
             equals('<img src="cid:email123">'));
+      });
+
+      test('SHOULD strip contenteditable on <a> BY DEFAULT (email preview)', () {
+        const html = '<a href="https://example.com" contenteditable="false">card</a>';
+        expect(
+            sanitize(html),
+            equals('<a href="https://example.com">card</a>'));
+      });
+
+      test('SHOULD preserve contenteditable="false" on the Drive link card <a> WHEN allowAttributes opts in', () {
+        const driveCardTransformer =
+            StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable']);
+        const html = '<a href="https://example.com" class="tmail-file-link-card" contenteditable="false">card</a>';
+        expect(
+            driveCardTransformer.process(html, htmlEscape).trim(),
+            equals('<a href="https://example.com" class="tmail-file-link-card" contenteditable="false">card</a>'));
+      });
+
+      test('SHOULD strip contenteditable FROM non-Drive-card elements EVEN WHEN allowAttributes opts in', () {
+        const driveCardTransformer =
+            StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable']);
+        const html = '<a href="https://example.com" contenteditable="false">plain link</a>'
+            '<div contenteditable="false">editable island</div>';
+        expect(
+            driveCardTransformer.process(html, htmlEscape).trim(),
+            equals('<a href="https://example.com">plain link</a><div>editable island</div>'));
+      });
+
+      test('SHOULD strip mixed-case CONTENTEDITABLE FROM non-Drive-card elements WHEN allowAttributes opts in', () {
+        const driveCardTransformer =
+            StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable']);
+        const html = '<div CONTENTEDITABLE="false">editable island</div>';
+        expect(
+            driveCardTransformer.process(html, htmlEscape).trim(),
+            equals('<div>editable island</div>'));
       });
     });
 
@@ -457,6 +494,76 @@ void main() {
         expect(out.contains('input'), isFalse);
         expect(out.contains('iframe'), isFalse);
       });
+    });
+
+    group('Backslash namespace / path patterns in HTML text nodes', () {
+      test('SHOULD preserve backslash namespace inside <code> tag', () {
+        final out = sanitize(HtmlEmailCorpus.htmlWithBackslashInCode);
+        expect(out, contains(r'\App\DB\Exception\AuthFailed'));
+        expect(out, contains('access denied'));
+      });
+
+      test('SHOULD preserve backslash namespace across multiple text nodes', () {
+        final out = sanitize(HtmlEmailCorpus.htmlWithBackslashMultipleNodes);
+        expect(out, allOf(contains('NotFound'), contains('Dispatcher')));
+      });
+
+      test('SHOULD preserve backslash namespace AND keep hyperlink in same email', () {
+        final out = sanitize(HtmlEmailCorpus.htmlWithBackslashAndLink);
+        expect(out, contains(r'\App\DB\Exception\AuthFailed'));
+        expect(out, contains('href="https://docs.example.com/errors"'));
+      });
+
+      test('SHOULD preserve Windows file path with backslashes inside <code>', () {
+        final out = sanitize(HtmlEmailCorpus.htmlWithWindowsPath);
+        expect(out, contains(r'C:\Users\Admin'));
+        expect(out, contains('error.log'));
+      });
+
+      test('SHOULD preserve Go package path with backslash separators', () {
+        final out = sanitize(HtmlEmailCorpus.htmlWithGoPath);
+        expect(out, allOf(contains(r'\github.com\org\repo'), contains('handler')));
+      });
+
+      // Bare \XX-only text nodes (no surrounding words) are still stripped by the
+      // sanitizer. Real HTML emails wrap such content in <code>/<pre> — verified above.
+      test(
+        'SHOULD NOT produce blank paragraphs when text nodes contain only backslash-hex',
+        skip: 'Known limitation: sanitizer strips bare \\XX-only text in <p>. '
+              'Real emails use <code>/<pre> for such content.',
+        () {
+          final out = sanitize(HtmlEmailCorpus.htmlAllHexBackslashParagraphs);
+          expect(out, isNot(contains('<p></p>')));
+          expect(out, allOf(contains('Path'), contains('Config')));
+        },
+      );
+    });
+
+    group('link schemes follow ExternalLinkPolicy', () {
+      for (final href in const [
+        'tel:+33123456789',
+        'sms:+33123456789',
+        'webcal://x/f.ics',
+        'geo:1,2',
+        'https://a.b',
+        'mailto:a@b.c',
+      ]) {
+        test('SHOULD keep href $href', () {
+          expect(sanitize('<a href="$href">l</a>'), contains('href="$href"'));
+        });
+      }
+
+      for (final href in const [
+        'twakemail.mobile://openApp',
+        'intent://scan/#Intent;scheme=zxing;end',
+        'javascript:alert(1)',
+      ]) {
+        test('SHOULD drop href $href', () {
+          final out = sanitize('<a href="$href">l</a>');
+          expect(out, isNot(contains('href')));
+          expect(out, contains('l'));
+        });
+      }
     });
   });
 }

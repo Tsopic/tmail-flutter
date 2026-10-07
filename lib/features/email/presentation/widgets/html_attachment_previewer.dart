@@ -24,6 +24,7 @@ class HtmlAttachmentPreviewer extends StatefulWidget {
     required this.mailToClicked,
     required this.downloadAttachmentClicked,
     required this.responsiveUtils,
+    required this.onBlockedLinkAction,
   });
 
   final String title;
@@ -31,6 +32,7 @@ class HtmlAttachmentPreviewer extends StatefulWidget {
   final OnMailtoClicked mailToClicked;
   final VoidCallback downloadAttachmentClicked;
   final ResponsiveUtils responsiveUtils;
+  final OnBlockedLinkAction onBlockedLinkAction;
 
   @override
   State<HtmlAttachmentPreviewer> createState() => _HtmlAttachmentPreviewerState();
@@ -142,13 +144,26 @@ class _HtmlAttachmentPreviewerState extends State<HtmlAttachmentPreviewer> {
           ),
       )
       : HtmlContentViewer(
-          contentHtml: widget.htmlContent,
-          initialWidth: width,
-          direction: AppUtils.getCurrentDirection(context),
-          onMailtoDelegateAction: (uri) async {
-            widget.mailToClicked(uri);
-          },
-          keepWidthWhileLoading: true,
+          configuration: HtmlContentViewerConfiguration(
+            content: HtmlContentViewerContent(
+              html: widget.htmlContent,
+              direction: AppUtils.getCurrentDirection(context),
+            ),
+            layout: HtmlContentViewerLayout(
+              viewport: HtmlContentViewerViewport(
+                constraints: BoxConstraints.tightFor(width: width),
+              ),
+            ),
+            behavior: HtmlContentViewerBehavior(features: {
+              HtmlContentViewerFeature.keepWidthWhileLoading,
+            }),
+            callbacks: HtmlContentViewerCallbacks(
+              onMailto: (uri) async {
+                widget.mailToClicked(uri);
+              },
+              onBlockedLink: widget.onBlockedLinkAction,
+            ),
+          ),
       );
   }
 }

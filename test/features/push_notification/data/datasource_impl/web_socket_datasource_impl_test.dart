@@ -16,14 +16,17 @@ import 'package:tmail_ui_user/features/push_notification/data/datasource/web_soc
 import 'package:tmail_ui_user/features/push_notification/data/datasource_impl/web_socket_datasource_impl.dart';
 import 'package:tmail_ui_user/features/push_notification/data/network/web_socket_api.dart';
 import 'package:tmail_ui_user/features/push_notification/domain/exceptions/web_socket_exceptions.dart';
-import 'package:tmail_ui_user/main/exceptions/exception_thrower.dart';
+import 'package:tmail_ui_user/main/exceptions/thrower/exception_thrower.dart';
 
 import '../datasource/strategies/mocks/mock_authorization_interceptors.dart';
 
 // Mock classes
 class MockWebSocketApi implements WebSocketApi {
   @override
-  Future<String> getWebSocketTicket(Session session, AccountId accountId) async {
+  Future<String> getWebSocketTicket(
+    Session session,
+    AccountId accountId,
+  ) async {
     return 'test-ticket';
   }
 }
@@ -41,7 +44,11 @@ class MockAuthStrategy implements WebSocketAuthStrategy {
   MockAuthStrategy(this.uriToReturn);
 
   @override
-  Future<Uri> buildConnectionUri(Uri baseUri, Session session, AccountId accountId) async {
+  Future<Uri> buildConnectionUri(
+    Uri baseUri,
+    Session session,
+    AccountId accountId,
+  ) async {
     return uriToReturn;
   }
 }
@@ -50,7 +57,7 @@ class MockAuthStrategySelector extends WebSocketAuthStrategySelector {
   final WebSocketAuthStrategy strategyToReturn;
 
   MockAuthStrategySelector(this.strategyToReturn)
-      : super(MockWebSocketApi(), MockAuthorizationInterceptors());
+    : super(MockWebSocketApi(), MockAuthorizationInterceptors());
 
   @override
   WebSocketAuthStrategy selectStrategy(Session session) {
@@ -84,25 +91,21 @@ void main() {
   });
 
   Session createSession({
-    required Map<CapabilityIdentifier, CapabilityProperties> sessionCapabilities,
+    required Map<CapabilityIdentifier, CapabilityProperties>
+    sessionCapabilities,
   }) {
-    final account = Account(
-      AccountName('Test Account'),
-      true,
-      false,
-      {
-        CapabilityIdentifier.jmapCore: CoreCapability(
-          maxSizeUpload: UnsignedInt(50000000),
-          maxConcurrentUpload: UnsignedInt(4),
-          maxSizeRequest: UnsignedInt(10000000),
-          maxConcurrentRequests: UnsignedInt(4),
-          maxCallsInRequest: UnsignedInt(16),
-          maxObjectsInGet: UnsignedInt(500),
-          maxObjectsInSet: UnsignedInt(500),
-          collationAlgorithms: {},
-        ),
-      },
-    );
+    final account = Account(AccountName('Test Account'), true, false, {
+      CapabilityIdentifier.jmapCore: CoreCapability(
+        maxSizeUpload: UnsignedInt(50000000),
+        maxConcurrentUpload: UnsignedInt(4),
+        maxSizeRequest: UnsignedInt(10000000),
+        maxConcurrentRequests: UnsignedInt(4),
+        maxCallsInRequest: UnsignedInt(16),
+        maxObjectsInGet: UnsignedInt(500),
+        maxObjectsInSet: UnsignedInt(500),
+        collationAlgorithms: {},
+      ),
+    });
 
     return Session(
       sessionCapabilities,
@@ -119,147 +122,159 @@ void main() {
 
   group('WebSocketDatasourceImpl', () {
     group('capability validation', () {
-      test('should throw WebSocketPushNotSupportedException when capability is missing', () async {
-        final mockStrategy = MockAuthStrategy(testWebSocketUri);
-        final strategySelector = MockAuthStrategySelector(mockStrategy);
-        final datasource = WebSocketDatasourceImpl(
-          capabilityProvider,
-          strategySelector,
-          exceptionThrower,
-        );
+      test(
+        'should throw WebSocketPushNotSupportedException when capability is missing',
+        () async {
+          final mockStrategy = MockAuthStrategy(testWebSocketUri);
+          final strategySelector = MockAuthStrategySelector(mockStrategy);
+          final datasource = WebSocketDatasourceImpl(
+            capabilityProvider,
+            strategySelector,
+            exceptionThrower,
+          );
 
-        final session = createSession(
-          sessionCapabilities: {
-            CapabilityIdentifier.jmapCore: CoreCapability(
-              maxSizeUpload: UnsignedInt(50000000),
-              maxConcurrentUpload: UnsignedInt(4),
-              maxSizeRequest: UnsignedInt(10000000),
-              maxConcurrentRequests: UnsignedInt(4),
-              maxCallsInRequest: UnsignedInt(16),
-              maxObjectsInGet: UnsignedInt(500),
-              maxObjectsInSet: UnsignedInt(500),
-              collationAlgorithms: {},
-            ),
-          },
-        );
+          final session = createSession(
+            sessionCapabilities: {
+              CapabilityIdentifier.jmapCore: CoreCapability(
+                maxSizeUpload: UnsignedInt(50000000),
+                maxConcurrentUpload: UnsignedInt(4),
+                maxSizeRequest: UnsignedInt(10000000),
+                maxConcurrentRequests: UnsignedInt(4),
+                maxCallsInRequest: UnsignedInt(16),
+                maxObjectsInGet: UnsignedInt(500),
+                maxObjectsInSet: UnsignedInt(500),
+                collationAlgorithms: {},
+              ),
+            },
+          );
 
-        expect(
-          () => datasource.getWebSocketChannel(session, testAccountId),
-          throwsA(isA<WebSocketPushNotSupportedException>()),
-        );
-      });
+          expect(
+            () => datasource.getWebSocketChannel(session, testAccountId),
+            throwsA(isA<WebSocketPushNotSupportedException>()),
+          );
+        },
+      );
 
-      test('should throw WebSocketPushNotSupportedException when supportsPush is false', () async {
-        final mockStrategy = MockAuthStrategy(testWebSocketUri);
-        final strategySelector = MockAuthStrategySelector(mockStrategy);
-        final datasource = WebSocketDatasourceImpl(
-          capabilityProvider,
-          strategySelector,
-          exceptionThrower,
-        );
+      test(
+        'should throw WebSocketPushNotSupportedException when supportsPush is false',
+        () async {
+          final mockStrategy = MockAuthStrategy(testWebSocketUri);
+          final strategySelector = MockAuthStrategySelector(mockStrategy);
+          final datasource = WebSocketDatasourceImpl(
+            capabilityProvider,
+            strategySelector,
+            exceptionThrower,
+          );
 
-        final session = createSession(
-          sessionCapabilities: {
-            CapabilityIdentifier.jmapCore: CoreCapability(
-              maxSizeUpload: UnsignedInt(50000000),
-              maxConcurrentUpload: UnsignedInt(4),
-              maxSizeRequest: UnsignedInt(10000000),
-              maxConcurrentRequests: UnsignedInt(4),
-              maxCallsInRequest: UnsignedInt(16),
-              maxObjectsInGet: UnsignedInt(500),
-              maxObjectsInSet: UnsignedInt(500),
-              collationAlgorithms: {},
-            ),
-            CapabilityIdentifier.jmapWebSocket: WebSocketCapability(
-              url: testWebSocketUri,
-              supportsPush: false,
-            ),
-          },
-        );
+          final session = createSession(
+            sessionCapabilities: {
+              CapabilityIdentifier.jmapCore: CoreCapability(
+                maxSizeUpload: UnsignedInt(50000000),
+                maxConcurrentUpload: UnsignedInt(4),
+                maxSizeRequest: UnsignedInt(10000000),
+                maxConcurrentRequests: UnsignedInt(4),
+                maxCallsInRequest: UnsignedInt(16),
+                maxObjectsInGet: UnsignedInt(500),
+                maxObjectsInSet: UnsignedInt(500),
+                collationAlgorithms: {},
+              ),
+              CapabilityIdentifier.jmapWebSocket: WebSocketCapability(
+                url: testWebSocketUri,
+                supportsPush: false,
+              ),
+            },
+          );
 
-        expect(
-          () => datasource.getWebSocketChannel(session, testAccountId),
-          throwsA(isA<WebSocketPushNotSupportedException>()),
-        );
-      });
+          expect(
+            () => datasource.getWebSocketChannel(session, testAccountId),
+            throwsA(isA<WebSocketPushNotSupportedException>()),
+          );
+        },
+      );
 
-      test('should throw WebSocketUriUnavailableException when URL is null', () async {
-        final mockStrategy = MockAuthStrategy(testWebSocketUri);
-        final strategySelector = MockAuthStrategySelector(mockStrategy);
-        final datasource = WebSocketDatasourceImpl(
-          capabilityProvider,
-          strategySelector,
-          exceptionThrower,
-        );
+      test(
+        'should throw WebSocketUriUnavailableException when URL is null',
+        () async {
+          final mockStrategy = MockAuthStrategy(testWebSocketUri);
+          final strategySelector = MockAuthStrategySelector(mockStrategy);
+          final datasource = WebSocketDatasourceImpl(
+            capabilityProvider,
+            strategySelector,
+            exceptionThrower,
+          );
 
-        final session = createSession(
-          sessionCapabilities: {
-            CapabilityIdentifier.jmapCore: CoreCapability(
-              maxSizeUpload: UnsignedInt(50000000),
-              maxConcurrentUpload: UnsignedInt(4),
-              maxSizeRequest: UnsignedInt(10000000),
-              maxConcurrentRequests: UnsignedInt(4),
-              maxCallsInRequest: UnsignedInt(16),
-              maxObjectsInGet: UnsignedInt(500),
-              maxObjectsInSet: UnsignedInt(500),
-              collationAlgorithms: {},
-            ),
-            CapabilityIdentifier.jmapWebSocket: WebSocketCapability(
-              url: null,
-              supportsPush: true,
-            ),
-          },
-        );
+          final session = createSession(
+            sessionCapabilities: {
+              CapabilityIdentifier.jmapCore: CoreCapability(
+                maxSizeUpload: UnsignedInt(50000000),
+                maxConcurrentUpload: UnsignedInt(4),
+                maxSizeRequest: UnsignedInt(10000000),
+                maxConcurrentRequests: UnsignedInt(4),
+                maxCallsInRequest: UnsignedInt(16),
+                maxObjectsInGet: UnsignedInt(500),
+                maxObjectsInSet: UnsignedInt(500),
+                collationAlgorithms: {},
+              ),
+              CapabilityIdentifier.jmapWebSocket: WebSocketCapability(
+                url: null,
+                supportsPush: true,
+              ),
+            },
+          );
 
-        expect(
-          () => datasource.getWebSocketChannel(session, testAccountId),
-          throwsA(isA<WebSocketUriUnavailableException>()),
-        );
-      });
+          expect(
+            () => datasource.getWebSocketChannel(session, testAccountId),
+            throwsA(isA<WebSocketUriUnavailableException>()),
+          );
+        },
+      );
     });
 
     group('integration scenarios', () {
-      test('should work with Stalwart-style session (supportsPush null)', () async {
-        final mockStrategy = MockAuthStrategy(
-          Uri.parse('wss://mail.example.com/jmap/ws?access_token=token'),
-        );
-        final strategySelector = MockAuthStrategySelector(mockStrategy);
-        final datasource = WebSocketDatasourceImpl(
-          capabilityProvider,
-          strategySelector,
-          exceptionThrower,
-        );
+      test(
+        'should work with Stalwart-style session (supportsPush null)',
+        () async {
+          final mockStrategy = MockAuthStrategy(
+            Uri.parse('wss://mail.example.com/jmap/ws?access_token=token'),
+          );
+          final strategySelector = MockAuthStrategySelector(mockStrategy);
+          final datasource = WebSocketDatasourceImpl(
+            capabilityProvider,
+            strategySelector,
+            exceptionThrower,
+          );
 
-        final session = createSession(
-          sessionCapabilities: {
-            CapabilityIdentifier.jmapCore: CoreCapability(
-              maxSizeUpload: UnsignedInt(50000000),
-              maxConcurrentUpload: UnsignedInt(4),
-              maxSizeRequest: UnsignedInt(10000000),
-              maxConcurrentRequests: UnsignedInt(4),
-              maxCallsInRequest: UnsignedInt(16),
-              maxObjectsInGet: UnsignedInt(500),
-              maxObjectsInSet: UnsignedInt(500),
-              collationAlgorithms: {},
-            ),
-            CapabilityIdentifier.jmapWebSocket: WebSocketCapability(
-              url: testWebSocketUri,
-              supportsPush: null, // Stalwart-style
-            ),
-          },
-        );
+          final session = createSession(
+            sessionCapabilities: {
+              CapabilityIdentifier.jmapCore: CoreCapability(
+                maxSizeUpload: UnsignedInt(50000000),
+                maxConcurrentUpload: UnsignedInt(4),
+                maxSizeRequest: UnsignedInt(10000000),
+                maxConcurrentRequests: UnsignedInt(4),
+                maxCallsInRequest: UnsignedInt(16),
+                maxObjectsInGet: UnsignedInt(500),
+                maxObjectsInSet: UnsignedInt(500),
+                collationAlgorithms: {},
+              ),
+              CapabilityIdentifier.jmapWebSocket: WebSocketCapability(
+                url: testWebSocketUri,
+                supportsPush: null, // Stalwart-style
+              ),
+            },
+          );
 
-        // This should not throw - supportsPush null is treated as "supports push"
-        // Note: Actual WebSocket connection will fail in test environment,
-        // but capability validation should pass
-        try {
-          await datasource.getWebSocketChannel(session, testAccountId);
-        } catch (e) {
-          // Expected to fail at actual WebSocket connection, not at validation
-          expect(e, isNot(isA<WebSocketPushNotSupportedException>()));
-          expect(e, isNot(isA<WebSocketUriUnavailableException>()));
-        }
-      });
+          // This should not throw - supportsPush null is treated as "supports push"
+          // Note: Actual WebSocket connection will fail in test environment,
+          // but capability validation should pass
+          try {
+            await datasource.getWebSocketChannel(session, testAccountId);
+          } catch (e) {
+            // Expected to fail at actual WebSocket connection, not at validation
+            expect(e, isNot(isA<WebSocketPushNotSupportedException>()));
+            expect(e, isNot(isA<WebSocketUriUnavailableException>()));
+          }
+        },
+      );
 
       test('should work with James-style session (ticket capability)', () async {
         final mockStrategy = MockAuthStrategy(

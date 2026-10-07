@@ -45,7 +45,6 @@ import 'package:tmail_ui_user/features/email/domain/usecases/get_email_content_i
 import 'package:tmail_ui_user/features/email/domain/usecases/mark_as_email_read_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/mark_as_star_email_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/print_email_interactor.dart';
-import 'package:tmail_ui_user/features/email/presentation/extensions/presentation_email_extension.dart';
 import 'package:tmail_ui_user/features/email/presentation/model/context_item_email_action.dart';
 import 'package:tmail_ui_user/features/email/presentation/model/email_loaded.dart';
 import 'package:tmail_ui_user/features/email/presentation/model/email_unsubscribe.dart';
@@ -53,6 +52,7 @@ import 'package:tmail_ui_user/features/email/presentation/model/popup_menu_item_
 import 'package:tmail_ui_user/features/email/presentation/utils/email_utils.dart';
 import 'package:tmail_ui_user/features/email/presentation/widgets/email_address_bottom_sheet_builder.dart';
 import 'package:tmail_ui_user/features/email/presentation/widgets/email_address_dialog_builder.dart';
+import 'package:tmail_ui_user/features/labels/presentation/mixin/label_sub_menu_mixin.dart';
 import 'package:tmail_ui_user/features/labels/presentation/widgets/label_item_context_menu.dart';
 import 'package:tmail_ui_user/features/labels/presentation/widgets/label_list_context_menu.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_actions.dart';
@@ -82,7 +82,13 @@ typedef OpenPopupMenuActionGroup = Future<void> Function(
   PopupMenuActionGroupWidget popupMenuWidget,
 );
 
-class EmailActionReactor {
+typedef OnHandleEmailByActionType = void Function(
+  EmailActionType actionType,
+  PresentationEmail presentationEmail,
+  PresentationMailbox? mailboxContain,
+);
+
+class EmailActionReactor with LabelSubMenuMixin {
   EmailActionReactor(
     this._markAsEmailReadInteractor,
     this._markAsStarEmailInteractor,
@@ -160,30 +166,20 @@ class EmailActionReactor {
   ({
     MoveToMailboxRequest moveRequest,
     Map<EmailId, bool> emailIdsWithReadStatus
-  })? moveToTrash(
+  }) buildMoveToTrashRequest(
     PresentationEmail presentationEmail, {
-    required Map<MailboxId, PresentationMailbox> mapMailbox,
-    required PresentationMailbox? selectedMailbox,
-    required bool isSearchEmailRunning,
-    required Map<Role, MailboxId> mapDefaultMailboxIdByRole,
+    required MailboxId trashMailboxId,
+    required PresentationMailbox currentMailbox,
+    String? trashMailboxPath,
   }) {
-    final trashMailboxId = mapDefaultMailboxIdByRole[
-      PresentationMailbox.roleTrash
-    ];
-    final currentMailbox = _getMailboxContain(
-      presentationEmail,
-      mapMailbox: mapMailbox,
-      isSearchEmailRunning: isSearchEmailRunning,
-      selectedMailbox: selectedMailbox,
-    );
-    if (trashMailboxId == null || currentMailbox == null) return null;
-
     return (
       moveRequest: MoveToMailboxRequest(
         {currentMailbox.id: [presentationEmail.id!]},
         trashMailboxId,
         MoveAction.moving,
-        EmailActionType.moveToTrash),
+        EmailActionType.moveToTrash,
+        destinationPath: trashMailboxPath,
+      ),
       emailIdsWithReadStatus: {presentationEmail.id!: presentationEmail.hasRead},
     );
   }
@@ -491,6 +487,7 @@ class EmailActionReactor {
     required bool isLabelAvailable,
     required OpenBottomSheetContextMenuAction openBottomSheetContextMenu,
     required OpenPopupMenuActionGroup openPopupMenu,
+    required OnCreateANewLabelAction onCreateANewLabelAction,
     List<Label>? labels,
     OnSelectLabelAction? onSelectLabelAction,
   }) {
@@ -507,14 +504,13 @@ class EmailActionReactor {
       if (EmailUtils.isReplyToListEnabled(presentationEmail.listPost ?? '') &&
           additionalActions.contains(EmailActionType.replyToList))
         EmailActionType.replyToList,
-      if (isLabelAvailable && labels?.isNotEmpty == true)
-        EmailActionType.labelAs,
       if (PlatformInfo.isWeb &&
           PlatformInfo.isCanvasKit &&
           additionalActions.contains(EmailActionType.printAll))
         EmailActionType.printAll,
       if (additionalActions.contains(EmailActionType.moveToMailbox))
         EmailActionType.moveToMailbox,
+      if (isLabelAvailable) EmailActionType.labelAs,
       if (additionalActions.contains(EmailActionType.markAsStarred) &&
           additionalActions.contains(EmailActionType.unMarkAsStarred))
         presentationEmail.hasStarred
@@ -575,7 +571,7 @@ class EmailActionReactor {
           imagePaths,
           key: '${actionType.name}_action',
           category: actionType.category,
-          submenu: _getEmailActionSubmenu(
+          submenu: buildLabelSubmenuForEmail(
             actionType: actionType,
             imagePaths: imagePaths,
             presentationEmail: presentationEmail,
@@ -585,6 +581,11 @@ class EmailActionReactor {
               submenuController.hide();
               popBack();
             },
+            onCreateANewLabelAction: () {
+              submenuController.hide();
+              popBack();
+              onCreateANewLabelAction();
+            },
           ),
         );
       }).toList();
@@ -593,7 +594,7 @@ class EmailActionReactor {
         actions: popupMenuItemEmailActions,
         submenuController: submenuController,
         onActionSelected: (action) {
-          if (_shouldHandleAction(action.action)) {
+          if (shouldHandleAction(action.action)) {
             handleEmailAction(presentationEmail, action.action);
           }
         },
@@ -605,36 +606,6 @@ class EmailActionReactor {
         popupMenuWidget,
       ).whenComplete(submenuController.hide);
     }
-  }
-
-  bool _shouldHandleAction(EmailActionType action) {
-    if (action != EmailActionType.labelAs) {
-      return true;
-    }
-
-    return PlatformInfo.isWebTouchDevice || PlatformInfo.isMobile;
-  }
-
-  Widget? _getEmailActionSubmenu({
-    required EmailActionType actionType,
-    required ImagePaths imagePaths,
-    required PresentationEmail presentationEmail,
-    required List<Label>? labels,
-    OnSelectLabelAction? onSelectLabelAction,
-  }) {
-    if (actionType == EmailActionType.labelAs && labels?.isNotEmpty == true) {
-      final listLabels = labels ?? [];
-      final emailLabels = presentationEmail.getLabelList(listLabels);
-
-      return LabelListContextMenu(
-        labelList: listLabels,
-        emailLabels: emailLabels,
-        imagePaths: imagePaths,
-        onSelectLabelAction: (label, isSelected) =>
-            onSelectLabelAction?.call(label, isSelected),
-      );
-    }
-    return null;
   }
 
   bool _canDeletePermanently(

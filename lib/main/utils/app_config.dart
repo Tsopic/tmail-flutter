@@ -12,6 +12,7 @@ class AppConfig {
   static const int defaultLimitAutocomplete = 8;
 
   static const String appDashboardConfigurationPath = "configurations/app_dashboard.json";
+  static const String attachmentKeywordsConfigurationPath = "configurations/attachment_keywords.json";
   static const String iOSKeychainSharingGroupId = 'KUT463DS29.com.linagora.ios.teammail.shared';
   static const String iOSKeychainSharingService = 'com.linagora.ios.teammail.sessions';
   static const String saasPlatform = 'saas';
@@ -74,8 +75,14 @@ class AppConfig {
 
   static bool get isCozyIntegrationEnabled => dotenv.get('COZY_INTEGRATION', fallback: 'false') == 'true';
 
-  static String get cozyExternalBridgeVersion => dotenv.get('COZY_EXTERNAL_BRIDGE_VERSION', fallback: '0.16.1');
+  static String get cozyExternalBridgeVersion => dotenv.get('COZY_EXTERNAL_BRIDGE_VERSION', fallback: '1.3.0');
 
   static bool get isForceEmailQueryEnabled =>
       dotenv.get('FORCE_EMAIL_QUERY', fallback: 'false') == 'true';
+
+  /// Hosts an openApp deep link may point the app to.
+  static List<String> get deepLinkAllowedHosts => [
+    Uri.parse(saasRegistrationUrl).host,
+    Uri.parse(saasJmapServerUrl).host,
+  ];
 }

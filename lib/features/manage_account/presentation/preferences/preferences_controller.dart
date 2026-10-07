@@ -1,6 +1,5 @@
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
-import 'package:core/utils/platform_info.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -8,38 +7,57 @@ import 'package:server_settings/server_settings/tmail_server_settings.dart';
 import 'package:tmail_ui_user/features/base/base_controller.dart';
 import 'package:tmail_ui_user/features/home/data/exceptions/session_exceptions.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/loader_status.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/ai_scribe_config.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/label_config.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/preferences_config.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/quoted_content_config.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/sentry_ecosystem.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/preferences_setting.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/spam_report_config.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/model/preferences/thread_detail_config.dart';
+import 'package:tmail_ui_user/features/manage_account/presentation/preferences/model/preference_option.dart';
+import 'package:tmail_ui_user/features/manage_account/presentation/preferences/model/preference_option_registry.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/state/get_local_settings_state.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/state/update_local_settings_state.dart';
 import 'package:tmail_ui_user/features/manage_account/domain/usecases/get_local_settings_interactor.dart';
-import 'package:tmail_ui_user/features/manage_account/domain/usecases/update_local_settings_interactor.dart';
 import 'package:tmail_ui_user/features/manage_account/presentation/manage_account_dashboard_controller.dart';
-import 'package:tmail_ui_user/features/manage_account/presentation/model/preferences_option_type.dart';
+import 'package:tmail_ui_user/features/manage_account/presentation/providers/experimental_preferences_revealed_provider.dart';
+import 'package:tmail_ui_user/features/manage_account/presentation/providers/reveal_experimental_preferences_provider.dart';
+import 'package:tmail_ui_user/main/providers/settings/local_settings_notifier.dart';
+import 'package:tmail_ui_user/main/providers/app_provider_container.dart';
 import 'package:tmail_ui_user/features/server_settings/domain/state/get_server_setting_state.dart';
 import 'package:tmail_ui_user/features/server_settings/domain/state/update_server_setting_state.dart';
 import 'package:tmail_ui_user/features/server_settings/domain/usecases/get_server_setting_interactor.dart';
-import 'package:tmail_ui_user/features/server_settings/domain/usecases/update_server_setting_interactor.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 
 class PreferencesController extends BaseController {
   PreferencesController(
     this._getServerSettingInteractor,
-    this._updateServerSettingInteractor,
     this._getLocalSettingInteractor,
-    this._updateLocalSettingsInteractor,
-  );
+    this._preferenceOptionRegistry, {
+    SentryEcosystem? sentryEcosystem,
+  }) : _sentryEcosystem = sentryEcosystem;
 
   final GetServerSettingInteractor _getServerSettingInteractor;
-  final UpdateServerSettingInteractor _updateServerSettingInteractor;
   final GetLocalSettingsInteractor _getLocalSettingInteractor;
-  final UpdateLocalSettingsInteractor _updateLocalSettingsInteractor;
+  final PreferenceOptionRegistry _preferenceOptionRegistry;
+  final SentryEcosystem? _sentryEcosystem;
+
+  PreferenceOptionRegistry get registry => _preferenceOptionRegistry;
+
+  /// A snapshot of all state the registered options read from.
+  PreferencesContext get preferencesContext => (
+    session: accountDashboardController.sessionCurrent,
+    accountId: accountDashboardController.accountId.value,
+    serverOptions: settingOption.value,
+    localSettings: localSettings.value,
+    isAIScribeAvailable: isAIScribeCapabilityAvailable,
+    isAICapabilitySupported: isAICapabilitySupported,
+    isLabelVisibilityEnabled:
+        accountDashboardController.isLabelVisibilityEnabled.value,
+  );
+
+  Future<void> revealExperimentalPreferences() async {
+    await appProviderContainer.read(
+      revealExperimentalPreferencesProvider.future,
+    );
+    appProviderContainer.invalidate(experimentalPreferencesRevealedProvider);
+  }
 
   final settingOption = Rxn<TMailServerSettingOptions>();
   final localSettings = Rx<PreferencesSetting>(PreferencesSetting.initial());
@@ -48,18 +66,20 @@ class PreferencesController extends BaseController {
   LoaderStatus _localSettingLoaderStatus = LoaderStatus.idle;
 
   bool get isLoading => viewState.value.fold(
-    (failure) => false, 
-    (success) => success is GettingServerSetting || success is UpdatingServerSetting);
+    (failure) => false,
+    (success) =>
+        success is GettingServerSetting || success is UpdatingServerSetting,
+  );
 
-  final accountDashboardController = Get.find<ManageAccountDashBoardController>();
+  final accountDashboardController =
+      Get.find<ManageAccountDashBoardController>();
 
   bool get isAICapabilitySupported {
     return accountDashboardController.isAICapabilitySupported;
   }
 
   bool get isAIScribeCapabilityAvailable {
-    return accountDashboardController.isAIScribeCapabilityAvailable &&
-        !PlatformInfo.isMobile;
+    return accountDashboardController.isAIScribeCapabilityAvailable;
   }
 
   @override
@@ -88,6 +108,9 @@ class PreferencesController extends BaseController {
       _updateLocalSettingOptionValue(success.preferencesSetting);
     } else if (success is UpdateLocalSettingsSuccess) {
       _updateLocalSettingOptionValue(success.preferencesSetting);
+      appProviderContainer
+          .read(localSettingsProvider.notifier)
+          .update(success.preferencesSetting);
     } else if (success is GettingLocalSettingsState) {
       _localSettingLoaderStatus = LoaderStatus.loading;
     } else {
@@ -118,12 +141,24 @@ class PreferencesController extends BaseController {
     if (currentOverlayContext != null && currentContext != null) {
       appToast.showToastErrorMessage(
         currentOverlayContext!,
-        AppLocalizations.of(currentContext!).an_error_occurred);
+        AppLocalizations.of(currentContext!).an_error_occurred,
+      );
     }
   }
 
-  void _updateSettingOptionValue({required TMailServerSettingOptions? newSettingOption}) {
+  void _updateSettingOptionValue({
+    required TMailServerSettingOptions? newSettingOption,
+  }) {
     settingOption.value = newSettingOption;
+    if (newSettingOption == null) return;
+
+    // Applied only once the server acknowledged the value. A null payload
+    // means the fetch failed, not that the user cleared their choice, so the
+    // consent already in effect must survive it.
+    applySentryReportingConsent(
+      _sentryEcosystem,
+      newSettingOption.sentryUserOptIn,
+    );
   }
 
   void _updateLocalSettingOptionValue(PreferencesSetting preferencesSetting) {
@@ -136,93 +171,18 @@ class PreferencesController extends BaseController {
     if (accountId != null) {
       consumeState(_getServerSettingInteractor.execute(accountId));
     } else {
-      consumeState(Stream.value(Left(GetServerSettingFailure(NotFoundAccountIdException()))));
-    }
-  }
-
-  void updateStateSettingOption(
-    PreferencesOptionType optionType,
-    bool isEnabled,
-  ) {
-    if (optionType.isLocal) {
-      _updateLocalPreferencesSetting(optionType, isEnabled);
-    } else {
-      _updateServerPreferencesSetting(optionType, isEnabled);
-    }
-  }
-
-  void _updateLocalPreferencesSetting(
-    PreferencesOptionType optionType,
-    bool isEnabled,
-  ) {
-    PreferencesConfig? config;
-    switch(optionType) {
-      case PreferencesOptionType.thread:
-        config = ThreadDetailConfig(isEnabled: !isEnabled);
-        break;
-      case PreferencesOptionType.spamReport:
-        config = SpamReportConfig(isEnabled: !isEnabled);
-        break;
-      case PreferencesOptionType.aiScribe:
-        config = AIScribeConfig(isEnabled: !isEnabled);
-        break;
-      case PreferencesOptionType.label:
-        config = LabelConfig(isEnabled: !isEnabled);
-        break;
-      case PreferencesOptionType.quotedContent:
-        config = QuotedContentConfig(isHiddenByDefault: !isEnabled);
-        break;
-      default:
-        break;
-    }
-
-    if (config != null) {
-      consumeState(_updateLocalSettingsInteractor.execute(config));
-    }
-  }
-
-  void _updateServerPreferencesSetting(
-    PreferencesOptionType optionType,
-    bool isEnabled,
-  ) {
-    TMailServerSettingOptions? newSettingOption;
-    switch(optionType) {
-      case PreferencesOptionType.readReceipt:
-        newSettingOption = settingOption.value?.copyWith(
-          alwaysReadReceipts: !isEnabled,
-        );
-        break;
-      case PreferencesOptionType.senderPriority:
-        newSettingOption = settingOption.value?.copyWith(
-          displaySenderPriority: !isEnabled,
-        );
-        break;
-      case PreferencesOptionType.aiNeedsAction:
-        newSettingOption = settingOption.value?.copyWith(
-          aiNeedsActionEnabled: !isEnabled,
-        );
-        break;
-      default:
-        break;
-    }
-
-    final session = accountDashboardController.sessionCurrent;
-    final accountId = accountDashboardController.accountId.value;
-    if (session != null && accountId != null && newSettingOption != null) {
-      consumeState(
-        _updateServerSettingInteractor.execute(
-          session,
-          accountId,
-          newSettingOption,
-        ),
-      );
-    } else {
       consumeState(
         Stream.value(
-          Left(UpdateServerSettingFailure(NotFoundAccountIdException())),
+          Left(GetServerSettingFailure(NotFoundAccountIdException())),
         ),
       );
     }
+  }
+
+  void updateStateSettingOption(PreferenceOption option, bool currentValue) {
+    consumeState(
+      option.toggle(currentValue: currentValue, context: preferencesContext),
+    );
   }
 
   @override

@@ -10,13 +10,14 @@ import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_bu
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 import '../base/base_test_scenario.dart';
+import '../utils/wait_for_condition.dart';
 import '../robots/composer_robot.dart';
 import '../robots/email_robot.dart';
 import '../robots/search_robot.dart';
 import '../robots/thread_robot.dart';
 
 class ReplyEmailWithContentContainImageBase64DataScenario extends BaseTestScenario {
-  const ReplyEmailWithContentContainImageBase64DataScenario(super.$);
+  const ReplyEmailWithContentContainImageBase64DataScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -56,10 +57,8 @@ class ReplyEmailWithContentContainImageBase64DataScenario extends BaseTestScenar
 
     await composerRobot.sendEmail(imagePaths);
     await _expectSendEmailSuccessToast(appLocalizations);
-    await Future.delayed(const Duration(seconds: 3));
 
     await emailRobot.onTapBackButton();
-    await $.pumpAndSettle(duration: const Duration(seconds: 3));
     await searchRobot.tapBackButton();
     await _expectEmailCidWithSubject(emailSubject);
 
@@ -67,7 +66,9 @@ class ReplyEmailWithContentContainImageBase64DataScenario extends BaseTestScenar
       '${appLocalizations.prefix_reply_email} $emailSubject'
     );
     await _expectEmailViewVisible();
-    await Future.delayed(const Duration(seconds: 3));
+    await waitForCondition(
+      () async => $(HtmlContentViewer).evaluate().isNotEmpty,
+    );
     await _ensureHtmlContentViewerVisible();
     await _expectEmailViewWithCidImage();
   }
@@ -94,7 +95,7 @@ class ReplyEmailWithContentContainImageBase64DataScenario extends BaseTestScenar
 
   Future<void> _expectSendEmailSuccessToast(AppLocalizations appLocalizations) async {
     await expectViewVisible(
-      $(find.text(appLocalizations.message_has_been_sent_successfully)),
+      $(appLocalizations.message_has_been_sent_successfully),
     );
   }
 

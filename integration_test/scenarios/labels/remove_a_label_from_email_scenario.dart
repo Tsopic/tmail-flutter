@@ -2,19 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:labels/labels.dart';
 import 'package:tmail_ui_user/features/email/presentation/widgets/email_subject_widget.dart';
 import 'package:tmail_ui_user/features/labels/presentation/widgets/label_widget.dart';
-import 'package:tmail_ui_user/features/mailbox/presentation/widgets/labels/label_list_view.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/widgets/sidebar/sidebar_label_item.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_builder.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 import '../../base/base_test_scenario.dart';
 import '../../mixin/provisioning_label_scenario_mixin.dart';
 import '../../robots/email_robot.dart';
-import '../../robots/label_robot.dart';
+import '../../robots/labels/label_robot.dart';
 import '../../robots/thread_robot.dart';
 
 class RemoveALabelFromEmailScenario extends BaseTestScenario
     with ProvisioningLabelScenarioMixin {
-  const RemoveALabelFromEmailScenario(super.$);
+  const RemoveALabelFromEmailScenario(super.$, super.robots);
 
   @override
   Future<void> runTestLogic() async {
@@ -32,7 +32,7 @@ class RemoveALabelFromEmailScenario extends BaseTestScenario
 
     final firstLabel = labels.first;
     final labelDisplayName = firstLabel.safeDisplayName;
-    await provisionEmail(
+    await robots.commonRobot().provisionEmail(
       buildEmailsForLabel(
         label: firstLabel,
         toEmail: emailUser,
@@ -56,7 +56,7 @@ class RemoveALabelFromEmailScenario extends BaseTestScenario
   }
 
   Future<void> _expectLabelListViewVisible() =>
-      expectViewVisible($(LabelListView));
+      expectViewVisible($(SidebarLabelItem));
 
   Future<void> _expectEmailListDisplayedCorrectByTag(
     String labelDisplayName,

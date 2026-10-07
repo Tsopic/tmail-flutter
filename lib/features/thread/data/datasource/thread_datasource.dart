@@ -28,6 +28,7 @@ abstract class ThreadDataSource {
       int? position,
       Set<Comparator>? sort,
       Filter? filter,
+      bool? collapseThreads,
       Properties? properties
     }
   );
@@ -40,6 +41,7 @@ abstract class ThreadDataSource {
       int? position,
       Set<Comparator>? sort,
       Filter? filter,
+      bool? collapseThreads,
       Properties? properties
     }
   );
@@ -52,6 +54,22 @@ abstract class ThreadDataSource {
       Properties? propertiesCreated,
       Properties? propertiesUpdated,
       int? maxCreatedEmailsToFetch,
+    }
+  );
+
+  /// Drains every page of `Email/changes` starting from [sinceState] and
+  /// returns the accumulated result (or `null` when there were no changes).
+  ///
+  /// Pagination is bounded: it stops as soon as the server stops advancing the
+  /// state cursor or a hard iteration cap is reached, so a stale/looping state
+  /// can no longer fan out into hundreds of back-to-back requests.
+  Future<EmailChangeResponse?> getAllEmailChanges(
+    Session session,
+    AccountId accountId,
+    State sinceState,
+    {
+      Properties? propertiesCreated,
+      Properties? propertiesUpdated
     }
   );
 

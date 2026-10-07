@@ -40,7 +40,7 @@ if [[ "${GITHUB_REF_TYPE:-}" == "tag" && -n "${GITHUB_REF_NAME:-}" ]]; then
 fi
 
 # Fallback: highest semver-like tag in repository.
-latest_tag="$(git tag --list "v*.*.*" --sort=-version:refname | head -n 1)"
+latest_tag="$(git tag --list "v*.*.*" --sort=-version:refname | sed -n '1p')"
 if [[ -n "$latest_tag" ]]; then
   version="$(normalize_version "$latest_tag")"
   if is_semver_core "$version"; then
