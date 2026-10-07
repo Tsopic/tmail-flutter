@@ -39,15 +39,21 @@ if [[ "${GITHUB_REF_TYPE:-}" == "tag" && -n "${GITHUB_REF_NAME:-}" ]]; then
   fi
 fi
 
-# Fallback: highest semver-like tag in repository.
+# Fallback: highest published tag or committed app version. A fork may import
+# newer code before publishing its next tag; prebuild must not downgrade it.
 latest_tag="$(git tag --list "v*.*.*" --sort=-version:refname | sed -n '1p')"
-if [[ -n "$latest_tag" ]]; then
-  version="$(normalize_version "$latest_tag")"
+manifest_version="$(sed -n 's/^version:[[:space:]]*\([^[:space:]+]*\).*$/\1/p' pubspec.yaml 2>/dev/null || true)"
+candidates=()
+for candidate in "$latest_tag" "$manifest_version"; do
+  version="$(normalize_version "$candidate")"
   if is_semver_core "$version"; then
-    echo "$version"
-    exit 0
+    candidates+=("$version")
   fi
+done
+if (( ${#candidates[@]} )); then
+  printf '%s\n' "${candidates[@]}" | sort -V | tail -n 1
+  exit 0
 fi
 
-echo "Unable to resolve version from explicit input, CI tag context, or repository tags" >&2
+echo "Unable to resolve version from explicit input, CI tag context, repository tags, or pubspec.yaml" >&2
 exit 1
