@@ -1,5 +1,7 @@
 import 'package:get/get.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:core/utils/platform_info.dart';
+import 'package:core/presentation/state/failure.dart';
 import 'package:jmap_dart_client/jmap/identities/identity.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_address.dart';
 import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
@@ -11,6 +13,8 @@ import 'package:model/extensions/session_extension.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
 import 'package:model/upload/file_info.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/upload_attachment_state.dart';
+import 'package:tmail_ui_user/features/composer/domain/state/send_email_state.dart';
+import 'package:tmail_ui_user/features/composer/domain/exceptions/set_method_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/create_new_and_send_email_interactor.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/upload_attachment_interactor.dart';
 import 'package:tmail_ui_user/features/composer/presentation/composer_bindings.dart';
@@ -29,9 +33,7 @@ import '../../utils/wait_for_mailbox_ready.dart' as wait_for_mailbox_ready;
 abstract class AbstractCommonRobot extends CoreRobot {
   AbstractCommonRobot(super.$);
 
-  Future<void> waitForMailboxReady({
-    Duration timeout = TestTimeouts.long,
-  }) =>
+  Future<void> waitForMailboxReady({Duration timeout = TestTimeouts.long}) =>
       wait_for_mailbox_ready.waitForMailboxReady(timeout: timeout);
 
   Future<void> provisionEmail(
@@ -50,39 +52,70 @@ abstract class AbstractCommonRobot extends CoreRobot {
 
     final identity = await _getIdentity();
 
-    if (identity == null) return;
+    expect(
+      identity,
+      isNotNull,
+      reason: 'Fixture provisioning requires a sending identity.',
+    );
 
     // Provision emails
-    await Future.wait(provisioningEmails.map((provisioningEmail) async {
-      final attachments =
-          await Future.wait(provisioningEmail.fileInfos.map(uploadAttachments));
+    await Future.wait(
+      provisioningEmails.map((provisioningEmail) async {
+        final attachments = await Future.wait(
+          provisioningEmail.fileInfos.map(uploadAttachments),
+        );
 
-      // Create and send email
-      return await createNewAndSendEmailInteractor
-          .execute(
-            createEmailRequest: CreateEmailRequest(
-              session: mailboxDashBoardController.sessionCurrent!,
-              accountId: mailboxDashBoardController.accountId.value!,
-              emailActionType: EmailActionType.compose,
-              ownEmailAddress: mailboxDashBoardController.ownEmailAddress.value,
-              subject: provisioningEmail.subject,
-              emailContent: provisioningEmail.content,
-              toRecipients: {EmailAddress(null, provisioningEmail.toEmail)},
-              outboxMailboxId:
-                  mailboxDashBoardController.outboxMailbox?.mailboxId,
-              sentMailboxId: folderLocationRole != null
-                  ? mailboxDashBoardController
-                      .mapDefaultMailboxIdByRole[folderLocationRole]
-                  : mailboxDashBoardController
-                      .mapDefaultMailboxIdByRole[PresentationMailbox.roleSent],
-              identity: identity,
-              attachments: attachments,
-              hasRequestReadReceipt: requestReadReceipt,
-              keywords: provisioningEmail.labels.keywords,
-            ),
-          )
-          .last;
-    }));
+        // Create and send email
+        final result = await createNewAndSendEmailInteractor
+            .execute(
+              createEmailRequest: CreateEmailRequest(
+                session: mailboxDashBoardController.sessionCurrent!,
+                accountId: mailboxDashBoardController.accountId.value!,
+                emailActionType: EmailActionType.compose,
+                ownEmailAddress:
+                    mailboxDashBoardController.ownEmailAddress.value,
+                subject: provisioningEmail.subject,
+                emailContent: provisioningEmail.content,
+                toRecipients: {EmailAddress(null, provisioningEmail.toEmail)},
+                outboxMailboxId:
+                    mailboxDashBoardController.outboxMailbox?.mailboxId,
+                sentMailboxId: folderLocationRole != null
+                    ? mailboxDashBoardController
+                          .mapDefaultMailboxIdByRole[folderLocationRole]
+                    : mailboxDashBoardController
+                          .mapDefaultMailboxIdByRole[PresentationMailbox
+                          .roleSent],
+                identity: identity,
+                attachments: attachments,
+                hasRequestReadReceipt: requestReadReceipt,
+                keywords: provisioningEmail.labels.keywords,
+              ),
+            )
+            .last;
+        result.fold(
+          (failure) {
+            final exception = failure is FeatureFailure
+                ? failure.exception
+                : null;
+            final errorTypes = exception is SetMethodException
+                ? exception.mapErrors.values.map((error) => error.type).toSet()
+                : const {};
+            fail(
+              'Fixture provisioning failed: ${failure.runtimeType}; '
+              'exception=${exception.runtimeType}; JMAP error types=$errorTypes; '
+              'fixture account=${mailboxDashBoardController.accountId.value}; '
+              'attachmentBlobIds=${attachments.map((attachment) => attachment.blobId).toList()}; '
+              'attachmentSizes=${attachments.map((attachment) => attachment.size).toList()}.',
+            );
+          },
+          (success) => expect(
+            success,
+            isA<SendEmailSuccess>(),
+            reason: 'Fixture provisioning must complete with SendEmailSuccess.',
+          ),
+        );
+      }),
+    );
 
     // Web e2e browser storage can retain mailbox data from a preceding test.
     // A normal refresh may return that cache while the server-side provisioning
@@ -105,15 +138,12 @@ abstract class AbstractCommonRobot extends CoreRobot {
           mailboxDashBoardController.accountId.value!,
         )
         .last;
-    return getAllIdentities.fold(
-      (failure) => null,
-      (success) {
-        if (success is GetAllIdentitiesSuccess) {
-          return success.identities?.firstOrNull;
-        }
-        return null;
-      },
-    );
+    return getAllIdentities.fold((failure) => null, (success) {
+      if (success is GetAllIdentitiesSuccess) {
+        return success.identities?.firstOrNull;
+      }
+      return null;
+    });
   }
 
   Future<Attachment> uploadAttachments(FileInfo fileInfo) async {
@@ -125,23 +155,23 @@ abstract class AbstractCommonRobot extends CoreRobot {
     );
 
     final uploadAttachmentInteractor = Get.find<UploadAttachmentInteractor>();
-    final uploadAttachmentState =
-        await uploadAttachmentInteractor.execute(fileInfo, uploadUri).last;
-    final attachment = await uploadAttachmentState.fold(
-      (failure) => null,
-      (success) async {
-        if (success is UploadAttachmentSuccess) {
-          final uploadAttachment =
-              await success.uploadAttachment.progressState.last;
-          return uploadAttachment.fold(
-            (failure) => null,
-            (success) => success is SuccessAttachmentUploadState
-                ? success.attachment
-                : null,
-          );
-        }
-      },
-    );
+    final uploadAttachmentState = await uploadAttachmentInteractor
+        .execute(fileInfo, uploadUri)
+        .last;
+    final attachment = await uploadAttachmentState.fold((failure) => null, (
+      success,
+    ) async {
+      if (success is UploadAttachmentSuccess) {
+        final uploadAttachment =
+            await success.uploadAttachment.progressState.last;
+        return uploadAttachment.fold(
+          (failure) => null,
+          (success) => success is SuccessAttachmentUploadState
+              ? success.attachment
+              : null,
+        );
+      }
+    });
     // If attachment is null, the test will fail anyway,
     // so we can ignore the null check
     return attachment!;
