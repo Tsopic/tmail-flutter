@@ -35,7 +35,7 @@ class ThreadRobot extends CoreRobot {
           widget.key == const Key(UiKeys.composeEmailButton),
       description: 'visible sidebar or floating compose action',
     ).hitTestable();
-    await $(composeAction).first.tap();
+    await $(composeAction).tap();
   }
 
   Future<void> openSearchView() async {

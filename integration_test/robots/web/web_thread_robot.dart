@@ -1,10 +1,12 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:labels/extensions/label_extension.dart';
 import 'package:patrol/patrol.dart';
 import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/search_input_form_widget.dart';
+import 'package:tmail_ui_user/features/thread/presentation/thread_controller.dart';
 import 'package:tmail_ui_user/features/thread/presentation/widgets/email_tile_web_builder.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
@@ -42,9 +44,10 @@ class WebThreadEmptyTrashRobot extends ThreadEmptyTrashRobot {
 
 class WebThreadRobot extends ThreadRobot implements AbstractThreadRobot {
   WebThreadRobot(PatrolIntegrationTester $)
-      : super($, emptyTrashRobot: WebThreadEmptyTrashRobot($));
+    : super($, emptyTrashRobot: WebThreadEmptyTrashRobot($));
 
   static const Duration _emailOpenPumpDuration = Duration(seconds: 2);
+  static const Duration _emailListRefreshInterval = Duration(seconds: 5);
 
   @override
   Future<void> openAppGrid() async {
@@ -65,8 +68,9 @@ class WebThreadRobot extends ThreadRobot implements AbstractThreadRobot {
   Future<void> openEmailWithLabel(String labelDisplayName) async {
     final email = $(EmailTileBuilder).which<EmailTileBuilder>(
       (view) =>
-          view.labels
-              ?.any((label) => label.safeDisplayName == labelDisplayName) ==
+          view.labels?.any(
+            (label) => label.safeDisplayName == labelDisplayName,
+          ) ==
           true,
     );
     await _openEmailTile(email);
@@ -98,9 +102,21 @@ class WebThreadRobot extends ThreadRobot implements AbstractThreadRobot {
   Future<void> _openEmailTile(PatrolFinder emailFinder) async {
     // Web XHR callbacks need an event-loop yield, which waitUntilVisible's
     // frame-only retry loop does not provide.
+    //
+    // On a cold backend, SMTP delivery can finish after provisionEmail's refresh.
+    // Re-query periodically so opening the fixture does not depend on a push
+    // update arriving before the timeout.
+    final sinceLastRefresh = Stopwatch()..start();
     await waitForCondition(() async {
       await $.pump();
-      return emailFinder.evaluate().isNotEmpty;
+      if (emailFinder.evaluate().isNotEmpty) return true;
+      if (sinceLastRefresh.elapsed >= _emailListRefreshInterval) {
+        sinceLastRefresh.reset();
+        await Get.find<ThreadController>().refreshAllEmail(
+          shouldClearCache: true,
+        );
+      }
+      return false;
     });
     await emailFinder.tap();
     await $.pump(_emailOpenPumpDuration);
