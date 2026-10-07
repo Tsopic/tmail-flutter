@@ -28,7 +28,14 @@ class ThreadRobot extends CoreRobot {
         super($);
 
   Future<void> openComposer() async {
-    await $(const ValueKey(UiKeys.composeEmailButton)).$(InkWell).tap();
+    final composeAction = find.byWidgetPredicate(
+      (widget) =>
+          widget.key == const Key(UiKeys.composeEmailPrimaryAction) ||
+          widget.key == const Key('compose_email_button_collapsed') ||
+          widget.key == const Key(UiKeys.composeEmailButton),
+      description: 'visible sidebar or floating compose action',
+    ).hitTestable();
+    await $(composeAction).first.tap();
   }
 
   Future<void> openSearchView() async {
