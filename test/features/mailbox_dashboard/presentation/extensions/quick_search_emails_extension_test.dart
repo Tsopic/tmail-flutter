@@ -28,23 +28,7 @@ LogicFilterOperator _assertSearchAndFilter(Filter filter, String query) {
   final andFilter = filter as LogicFilterOperator;
   expect(andFilter.operator, Operator.AND);
   expect(andFilter.conditions.length, 2);
-  final textAlternatives = andFilter.conditions
-      .whereType<LogicFilterOperator>()
-      .singleWhere(
-        (condition) =>
-            condition.conditions.contains(EmailFilterCondition(text: query)),
-      );
-  expect(textAlternatives.operator, Operator.OR);
-  expect(
-    textAlternatives.conditions,
-    containsAll(<Filter>{
-      EmailFilterCondition(text: query),
-      EmailFilterCondition(from: query),
-      EmailFilterCondition(to: query),
-      EmailFilterCondition(cc: query),
-      EmailFilterCondition(bcc: query),
-    }),
-  );
+  expect(andFilter.conditions, contains(EmailFilterCondition(text: query)));
   return andFilter;
 }
 
@@ -170,7 +154,7 @@ void main() {
         final andFilter = _assertSearchAndFilter(captured, query);
         final shared = andFilter.conditions
             .whereType<EmailFilterCondition>()
-            .single;
+            .singleWhere((condition) => condition.text == null);
         expect(shared.after, equals(start));
         expect(shared.before, equals(end));
       },
@@ -207,7 +191,7 @@ void main() {
         final andFilter = _assertSearchAndFilter(captured, query);
         final shared = andFilter.conditions
             .whereType<EmailFilterCondition>()
-            .single;
+            .singleWhere((condition) => condition.text == null);
         expect(shared.subject, equals('invoice'));
         expect(shared.inMailbox, equals(mailbox.id));
         expect(shared.notKeyword, equals(KeyWordIdentifier.emailSeen.value));

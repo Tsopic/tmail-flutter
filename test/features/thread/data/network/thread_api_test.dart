@@ -183,6 +183,28 @@ void main() {
         ]
       };
 
+      test('autocomplete omits SearchSnippet/get and keeps Email/query result references', () async {
+        final request = generateRequest(filter: filter);
+        final calls = request['methodCalls'] as List;
+        calls.removeAt(1);
+        calls.last[2] = 'c1';
+        final email = SearchEmail(id: EmailId(Id('autocomplete')), preview: 'regular preview', searchSnippetSubject: null, searchSnippetPreview: null);
+        final response = generateResponse(foundSearchEmails: [email], notFoundEmailIds: []);
+        final responses = response['methodResponses'] as List;
+        responses.removeAt(1);
+        responses.last[2] = 'c1';
+        dioAdapter.onPost('', (server) => server.reply(200, response), data: request);
+
+        final result = await threadApi.searchEmails(
+          SessionFixtures.aliceSession,
+          AccountFixtures.aliceAccountId,
+          filter: filter,
+          fetchSearchSnippets: false,
+        );
+        expect(result.searchSnippets, isNull);
+        expect(result.emailList?.single.preview, 'regular preview');
+      });
+
       test(
         'should return SearchEmailResponse including search snippets '
         'when search snippet method return values',

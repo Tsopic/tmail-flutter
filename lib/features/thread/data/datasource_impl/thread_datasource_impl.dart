@@ -75,6 +75,7 @@ class ThreadDataSourceImpl extends ThreadDataSource {
       Filter? filter,
       bool? collapseThreads,
       Properties? properties,
+      bool fetchSearchSnippets = true,
     }
   ) {
     return Future.sync(() async {
@@ -86,7 +87,8 @@ class ThreadDataSourceImpl extends ThreadDataSource {
         sort: sort,
         filter: filter,
         collapseThreads: collapseThreads,
-        properties: properties);
+        properties: properties,
+        fetchSearchSnippets: fetchSearchSnippets);
     }).catchError(_exceptionThrower.throwException);
   }
 
