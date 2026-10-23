@@ -76,17 +76,12 @@ void main() {
         accountId: accountId,
         query: query,
       );
-      // When sortOrderType is null, SearchEmailFilter defaults to relevance,
-      // which returns an explicit receivedAt DESC comparator in our fork
-      final expectedSort = SearchEmailFilter.defaultSortOrder
-          .getSortOrder()
-          .toNullable();
       verify(
         quickSearchEmailInteractor.execute(
           session,
           accountId,
           limit: anyNamed('limit'),
-          sort: expectedSort,
+          sort: null,
           filter: anyNamed('filter'),
           properties: anyNamed('properties'),
         ),
@@ -118,6 +113,37 @@ void main() {
         ).called(1);
       },
     );
+
+    for (final sortOrder in [
+      EmailSortOrderType.relevance,
+      EmailSortOrderType.mostRecent,
+    ]) {
+      test('autocomplete preserves $sortOrder semantics', () async {
+        when(searchController.committedSearchFilter).thenReturn(
+          SearchEmailFilter(sortOrderType: sortOrder),
+        );
+        await searchController.quickSearchEmails(
+          session: session,
+          accountId: accountId,
+          query: query,
+        );
+        final sort = verify(quickSearchEmailInteractor.execute(
+          session,
+          accountId,
+          limit: anyNamed('limit'),
+          sort: captureAnyNamed('sort'),
+          filter: anyNamed('filter'),
+          properties: anyNamed('properties'),
+        )).captured.single;
+        if (sortOrder == EmailSortOrderType.relevance) {
+          expect(sort, isNull);
+        } else {
+          expect((sort as Set).map((value) => value.toJson()).toList(), [
+            {'property': 'receivedAt', 'isAscending': false},
+          ]);
+        }
+      });
+    }
 
     test(
       'should pass committed custom date bounds to the suggestion filter',

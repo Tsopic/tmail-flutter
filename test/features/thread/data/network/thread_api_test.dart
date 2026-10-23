@@ -8,6 +8,7 @@ import 'package:jmap_dart_client/jmap/core/filter/filter.dart';
 import 'package:jmap_dart_client/jmap/core/id.dart';
 import 'package:jmap_dart_client/jmap/core/properties/properties.dart';
 import 'package:jmap_dart_client/jmap/core/state.dart';
+import 'package:jmap_dart_client/jmap/core/sort/comparator.dart';
 import 'package:jmap_dart_client/jmap/core/unsigned_int.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_filter_condition.dart';
@@ -19,6 +20,8 @@ import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
 import 'package:model/extensions/account_id_extensions.dart';
 import 'package:model/extensions/email_id_extensions.dart';
 import 'package:tmail_ui_user/features/thread/data/network/thread_api.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/email_sort_order_type.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/model/search/search_email_filter.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_email.dart';
 import 'package:tmail_ui_user/features/thread/domain/model/search_emails_response.dart';
 
@@ -182,6 +185,44 @@ void main() {
           ]
         ]
       };
+
+      for (final fetchSnippets in [false, true]) {
+        for (final sortCase in [
+          (name: 'default relevance', sort: SearchEmailFilter.defaultSortOrder.getSortOrder().toNullable(), expected: null),
+          (name: 'explicit relevance', sort: EmailSortOrderType.relevance.getSortOrder().toNullable(), expected: null),
+          (name: 'omitted sort', sort: null, expected: null),
+          (name: 'empty sort', sort: <Comparator>{}, expected: <Map<String, dynamic>>[]),
+          (name: 'most recent', sort: EmailSortOrderType.mostRecent.getSortOrder().toNullable(), expected: [{'isAscending': false, 'property': 'receivedAt'}]),
+          (name: 'oldest', sort: EmailSortOrderType.oldest.getSortOrder().toNullable(), expected: [{'isAscending': true, 'property': 'receivedAt'}]),
+        ]) {
+          test('${fetchSnippets ? "full search" : "autocomplete"} payload: ${sortCase.name}', () async {
+            final request = generateRequest(filter: filter);
+            final calls = request['methodCalls'] as List;
+            if (sortCase.expected != null) {
+              calls.first[1]['sort'] = sortCase.expected;
+            }
+            final response = generateResponse(foundSearchEmails: [], notFoundEmailIds: []);
+            if (!fetchSnippets) {
+              calls.removeAt(1);
+              calls.last[2] = 'c1';
+              final responses = response['methodResponses'] as List;
+              responses.removeAt(1);
+              responses.last[2] = 'c1';
+            }
+            // Exact request matching catches date fallbacks and unexpected comparators.
+            dioAdapter.onPost('', (server) => server.reply(200, response), data: request);
+
+            final result = await threadApi.searchEmails(
+              SessionFixtures.aliceSession,
+              AccountFixtures.aliceAccountId,
+              filter: filter,
+              sort: sortCase.sort,
+              fetchSearchSnippets: fetchSnippets,
+            );
+            expect(result.emailList, isEmpty);
+          });
+        }
+      }
 
       test('autocomplete omits SearchSnippet/get and keeps Email/query result references', () async {
         final request = generateRequest(filter: filter);
