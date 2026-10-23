@@ -36,7 +36,8 @@ class QuickSearchEmailInteractor {
         sort: sort,
         filter: filter,
         collapseThreads: collapseThreads,
-        properties: properties);
+        properties: properties,
+        fetchSearchSnippets: false);
 
       final presentationEmailList = emailList
         .map((email) => email.toPresentationEmail(

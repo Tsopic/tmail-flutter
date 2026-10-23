@@ -42,7 +42,8 @@ abstract class ThreadDataSource {
       Set<Comparator>? sort,
       Filter? filter,
       bool? collapseThreads,
-      Properties? properties
+      Properties? properties,
+      bool fetchSearchSnippets = true,
     }
   );
 

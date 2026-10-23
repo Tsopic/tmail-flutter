@@ -59,11 +59,8 @@ enum EmailSortOrderType {
               ..setIsAscending(true))
         );
       case EmailSortOrderType.relevance:
-        return Some(
-          <Comparator>{}
-            ..add(EmailComparator(EmailComparatorProperty.receivedAt)
-              ..setIsAscending(false))
-        );
+        // Let the server rank text matches, including its date tie-breaker.
+        return const None();
       case EmailSortOrderType.senderAscending:
         return Some(
           <Comparator>{}
@@ -112,7 +109,8 @@ enum EmailSortOrderType {
   }
 
   bool isScrollByPosition() {
-    return this == EmailSortOrderType.subjectDescending ||
+    return this == EmailSortOrderType.relevance ||
+      this == EmailSortOrderType.subjectDescending ||
       this == EmailSortOrderType.subjectAscending ||
       this == EmailSortOrderType.senderDescending ||
       this == EmailSortOrderType.senderAscending ||

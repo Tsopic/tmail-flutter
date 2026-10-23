@@ -28,23 +28,7 @@ LogicFilterOperator _assertSearchAndFilter(Filter filter, String query) {
   final andFilter = filter as LogicFilterOperator;
   expect(andFilter.operator, Operator.AND);
   expect(andFilter.conditions.length, 2);
-  final textAlternatives = andFilter.conditions
-      .whereType<LogicFilterOperator>()
-      .singleWhere(
-        (condition) =>
-            condition.conditions.contains(EmailFilterCondition(text: query)),
-      );
-  expect(textAlternatives.operator, Operator.OR);
-  expect(
-    textAlternatives.conditions,
-    containsAll(<Filter>{
-      EmailFilterCondition(text: query),
-      EmailFilterCondition(from: query),
-      EmailFilterCondition(to: query),
-      EmailFilterCondition(cc: query),
-      EmailFilterCondition(bcc: query),
-    }),
-  );
+  expect(andFilter.conditions, contains(EmailFilterCondition(text: query)));
   return andFilter;
 }
 
@@ -92,17 +76,12 @@ void main() {
         accountId: accountId,
         query: query,
       );
-      // When sortOrderType is null, SearchEmailFilter defaults to relevance,
-      // which returns an explicit receivedAt DESC comparator in our fork
-      final expectedSort = SearchEmailFilter.defaultSortOrder
-          .getSortOrder()
-          .toNullable();
       verify(
         quickSearchEmailInteractor.execute(
           session,
           accountId,
           limit: anyNamed('limit'),
-          sort: expectedSort,
+          sort: null,
           filter: anyNamed('filter'),
           properties: anyNamed('properties'),
         ),
@@ -134,6 +113,37 @@ void main() {
         ).called(1);
       },
     );
+
+    for (final sortOrder in [
+      EmailSortOrderType.relevance,
+      EmailSortOrderType.mostRecent,
+    ]) {
+      test('autocomplete preserves $sortOrder semantics', () async {
+        when(searchController.committedSearchFilter).thenReturn(
+          SearchEmailFilter(sortOrderType: sortOrder),
+        );
+        await searchController.quickSearchEmails(
+          session: session,
+          accountId: accountId,
+          query: query,
+        );
+        final sort = verify(quickSearchEmailInteractor.execute(
+          session,
+          accountId,
+          limit: anyNamed('limit'),
+          sort: captureAnyNamed('sort'),
+          filter: anyNamed('filter'),
+          properties: anyNamed('properties'),
+        )).captured.single;
+        if (sortOrder == EmailSortOrderType.relevance) {
+          expect(sort, isNull);
+        } else {
+          expect((sort as Set).map((value) => value.toJson()).toList(), [
+            {'property': 'receivedAt', 'isAscending': false},
+          ]);
+        }
+      });
+    }
 
     test(
       'should pass committed custom date bounds to the suggestion filter',
@@ -170,7 +180,7 @@ void main() {
         final andFilter = _assertSearchAndFilter(captured, query);
         final shared = andFilter.conditions
             .whereType<EmailFilterCondition>()
-            .single;
+            .singleWhere((condition) => condition.text == null);
         expect(shared.after, equals(start));
         expect(shared.before, equals(end));
       },
@@ -207,7 +217,7 @@ void main() {
         final andFilter = _assertSearchAndFilter(captured, query);
         final shared = andFilter.conditions
             .whereType<EmailFilterCondition>()
-            .single;
+            .singleWhere((condition) => condition.text == null);
         expect(shared.subject, equals('invoice'));
         expect(shared.inMailbox, equals(mailbox.id));
         expect(shared.notKeyword, equals(KeyWordIdentifier.emailSeen.value));

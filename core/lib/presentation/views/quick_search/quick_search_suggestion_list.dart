@@ -12,6 +12,7 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 class QuickSearchSuggestionList<T, P, R> extends StatefulWidget {
   final QuickSearchSuggestionsBox? suggestionsBox;
   final TextEditingController? controller;
+  final FocusNode? focusNode;
   final bool getImmediateSuggestions;
   final SuggestionSelectionCallback<T>? onSuggestionSelected;
   final SuggestionsCallback<T>? suggestionsCallback;
@@ -51,6 +52,7 @@ class QuickSearchSuggestionList<T, P, R> extends StatefulWidget {
     super.key,
     required this.suggestionsBox,
     this.controller,
+    this.focusNode,
     this.getImmediateSuggestions = false,
     this.onSuggestionSelected,
     this.suggestionsCallback,
@@ -102,6 +104,7 @@ class QuickSearchSuggestionListState<T, P, R>
   bool? _isLoading;
   AnimationController? _animationController;
   String? _lastTextValue;
+  int _requestGeneration = 0;
   late final ScrollController _scrollController =
       widget.scrollController ?? ScrollController();
   late final Debouncer<String> _deBouncerSuggestion;
@@ -140,28 +143,16 @@ class QuickSearchSuggestionListState<T, P, R>
     );
     if (!mounted) return;
 
-    if (_isLoading == true) return;
-
-    if (widget.minCharsForSuggestions != null &&
-        queryString.length <= widget.minCharsForSuggestions!) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      final recentItems = await _getListRecent(queryString);
-      if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-        _suggestions = null;
-        _contacts = null;
-        _recentItems = recentItems;
-        _suggestionsValid = true;
-      });
-    } else {
-      await invalidateSuggestions();
-    }
+    if (queryString != widget.controller!.text.trim()) return;
+    await invalidateSuggestions();
   }
+
+  bool _isCurrentRequest(int generation, String query) =>
+      mounted &&
+      !widget.hideSuggestionsBox &&
+      (widget.focusNode?.hasFocus ?? true) &&
+      generation == _requestGeneration &&
+      query == widget.controller!.text.trim();
 
   void _textInputControllerListener() {
     // If we came here because of a change in selected text, not because of
@@ -172,14 +163,52 @@ class QuickSearchSuggestionListState<T, P, R>
     );
     if (queryString == _lastTextValue) return;
 
+    // Invalidate immediately, before the debounce fires. An older response
+    // must never appear under the new text (including an A -> B -> A edit).
+    _requestGeneration++;
+    setState(() {
+      _suggestions = null;
+      _contacts = null;
+      _recentItems = null;
+    });
     _lastTextValue = queryString;
-    _deBouncerSuggestion.value = queryString;
+    if (widget.focusNode?.hasFocus ?? true) {
+      _deBouncerSuggestion.value = queryString;
+    }
+  }
+
+  void _focusListener() {
+    if (widget.focusNode?.hasFocus ?? true) {
+      invalidateSuggestions();
+    } else {
+      // Submit/blur cancels pending work and logically cancels in-flight
+      // callbacks, whose transport does not expose a cancellation token.
+      _requestGeneration++;
+      _deBouncerSuggestion.cancel();
+      _suggestionsValid = false;
+    }
   }
 
   @override
   void didUpdateWidget(QuickSearchSuggestionList<T, P, R> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    widget.controller!.addListener(_textInputControllerListener);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_focusListener);
+      widget.focusNode?.addListener(_focusListener);
+      _requestGeneration++;
+      _suggestionsValid = false;
+    }
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.removeListener(_textInputControllerListener);
+      widget.controller?.addListener(_textInputControllerListener);
+      _lastTextValue = null;
+      _textInputControllerListener();
+    }
+    if (widget.hideSuggestionsBox != oldWidget.hideSuggestionsBox) {
+      _requestGeneration++;
+      _deBouncerSuggestion.cancel();
+      _suggestionsValid = false;
+    }
     _getSuggestions();
   }
 
@@ -202,9 +231,10 @@ class QuickSearchSuggestionListState<T, P, R>
       duration: widget.animationDuration,
     );
 
-    _suggestionsValid = widget.minCharsForSuggestions! > 0 ? true : false;
+    _suggestionsValid = (widget.minCharsForSuggestions ?? 0) > 0;
     _isLoading = false;
-    _lastTextValue = widget.controller!.text;
+    _lastTextValue = widget.controller!.text.trim();
+    widget.focusNode?.addListener(_focusListener);
 
     if (widget.getImmediateSuggestions) {
       _getSuggestions();
@@ -222,22 +252,28 @@ class QuickSearchSuggestionListState<T, P, R>
   }
 
   Future<void> _getSuggestions() async {
-    if (_suggestionsValid || widget.hideSuggestionsBox) return;
+    if (_suggestionsValid ||
+        widget.hideSuggestionsBox ||
+        !(widget.focusNode?.hasFocus ?? true)) {
+      return;
+    }
 
     if (!mounted) return;
 
     _suggestionsValid = true;
 
     final queryString = widget.controller!.text.trim();
+    final generation = ++_requestGeneration;
 
     setState(() {
       _animationController?.forward(from: 1.0);
       _isLoading = true;
     });
 
-    if (queryString.isEmpty) {
+    if (queryString.isEmpty ||
+        queryString.length <= (widget.minCharsForSuggestions ?? 0)) {
       final recentItems = await _getListRecent(queryString);
-      if (!mounted) return;
+      if (!_isCurrentRequest(generation, queryString)) return;
 
       setState(() {
         _animationController?.forward(from: widget.animationStart);
@@ -259,6 +295,8 @@ class QuickSearchSuggestionListState<T, P, R>
         _getListContact(queryString),
     ]);
 
+    if (!_isCurrentRequest(generation, queryString)) return;
+
     if (tupleListItems.isEmpty ||
         tupleListItems.every((item) => item == null || item.isEmpty)) {
       recentItems = await _getListRecent(queryString);
@@ -269,7 +307,7 @@ class QuickSearchSuggestionListState<T, P, R>
           : null;
     }
 
-    if (!mounted) return;
+    if (!_isCurrentRequest(generation, queryString)) return;
     setState(() {
       final animationStart = suggestions?.isNotEmpty == true
           ? widget.animationStart
@@ -284,6 +322,9 @@ class QuickSearchSuggestionListState<T, P, R>
 
   @override
   void dispose() {
+    _requestGeneration++;
+    widget.controller?.removeListener(_textInputControllerListener);
+    widget.focusNode?.removeListener(_focusListener);
     _animationController?.dispose();
     _animationController = null;
     _deBouncerSuggestionStreamSubscriptions.cancel();

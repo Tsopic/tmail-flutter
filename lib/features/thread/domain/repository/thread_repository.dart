@@ -80,6 +80,7 @@ abstract class ThreadRepository {
       Filter? filter,
       bool? collapseThreads,
       Properties? properties,
+    bool fetchSearchSnippets = true,
     }
   );
 
