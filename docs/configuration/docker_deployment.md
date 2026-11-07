@@ -147,3 +147,4 @@ location / {
 - [OIDC Configuration](oidc_configuration.md)
 - [FCM Configuration](fcm_configuration.md)
 - [WebSocket Echo Ping](ws_echo_ping_configuration.md)
+- [Server Search](search_configuration.md)

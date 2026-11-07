@@ -5,6 +5,7 @@ import 'package:jmap_dart_client/jmap/core/sort/comparator.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_comparator.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_comparator_property.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
+import 'package:tmail_ui_user/main/utils/app_config.dart';
 
 enum EmailSortOrderType {
   mostRecent,
@@ -59,8 +60,12 @@ enum EmailSortOrderType {
               ..setIsAscending(true))
         );
       case EmailSortOrderType.relevance:
-        // Let the server rank text matches, including its date tie-breaker.
-        return const None();
+        // Ranking servers order matches when no sort is sent. Basic servers
+        // do not, so show the newest matches first.
+        if (AppConfig.isServerSearchRanked) {
+          return const None();
+        }
+        return EmailSortOrderType.mostRecent.getSortOrder();
       case EmailSortOrderType.senderAscending:
         return Some(
           <Comparator>{}
@@ -109,7 +114,8 @@ enum EmailSortOrderType {
   }
 
   bool isScrollByPosition() {
-    return this == EmailSortOrderType.relevance ||
+    return (this == EmailSortOrderType.relevance &&
+        AppConfig.isServerSearchRanked) ||
       this == EmailSortOrderType.subjectDescending ||
       this == EmailSortOrderType.subjectAscending ||
       this == EmailSortOrderType.senderDescending ||

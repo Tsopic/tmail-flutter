@@ -237,6 +237,7 @@ No we do not plan to support such extensions, that are currently not standardize
     - [Change logos](docs/configuration/tmail-web-logo.md)
     - [Restrict the available languages](docs/configuration/language_configuration.md)
     - [Configure the Content Security Policy](docs/configuration/csp_configuration.md)
+    - [Match search to the server's capabilities](docs/configuration/search_configuration.md)
 
 </details>
 

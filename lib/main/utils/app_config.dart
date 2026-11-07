@@ -81,6 +81,14 @@ class AppConfig {
   static bool get isForceEmailQueryEnabled =>
       dotenv.get('FORCE_EMAIL_QUERY', fallback: 'false') == 'true';
 
+  /// `SERVER_SEARCH=basic` is for JMAP servers that do not rank unsorted
+  /// search results, such as stock Stalwart. Any other value, or no value,
+  /// lets the server rank Relevance searches.
+  static bool get isServerSearchRanked =>
+      !dotenv.isInitialized ||
+      dotenv.get('SERVER_SEARCH', fallback: 'ranked').trim().toLowerCase() !=
+          'basic';
+
   static final RegExp _languageRegionSeparator = RegExp('[-_]');
 
   /// Language codes from `ALLOWED_LANGUAGES` (e.g. `mn,en`), lowercased and
