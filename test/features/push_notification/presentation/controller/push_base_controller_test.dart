@@ -88,6 +88,37 @@ void main() {
           await streamController.close();
         },
       );
+
+      test(
+        'should not leak an uncaught error '
+        'when a request awaited by a consumed stream fails after onClose',
+        () async {
+          final uncaughtErrors = <Object>[];
+          final pushBaseController = TestPushController();
+          Stream<Either<Failure, Success>> pendingRequest(
+            Future<Success> request,
+          ) async* {
+            yield Right<Failure, Success>(_FakeSuccess());
+            yield Right<Failure, Success>(await request);
+          }
+
+          await runZonedGuarded(() async {
+            // Created in the guarded zone: futures cannot cross error zones.
+            final request = Completer<Success>();
+            pushBaseController.consumeState(pendingRequest(request.future));
+            await Future.delayed(Duration.zero);
+            expect(pushBaseController.successCount, 1);
+
+            pushBaseController.onClose();
+            request.completeError(StateError('mailbox can not be found'));
+            await Future.delayed(Duration.zero);
+            await Future.delayed(Duration.zero);
+          }, (error, _) => uncaughtErrors.add(error));
+
+          expect(uncaughtErrors, isEmpty);
+          expect(pushBaseController.successCount, 1);
+        },
+      );
     });
     group('mappingTypeStateToAction:', () {
       final emailChangeListener = MockEmailChangeListener();

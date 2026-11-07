@@ -142,7 +142,7 @@ abstract class BaseController extends GetxController
   @override
   void onClose() {
     for (final sub in _stateSubscriptions.values.toList()) {
-      sub.cancel();
+      unawaited(sub.cancel().catchError(_onErrorAfterClose));
     }
     _stateSubscriptions.clear();
     for (final worker in _workers.toList()) {
@@ -154,6 +154,16 @@ abstract class BaseController extends GetxController
       _onUnloadBrowserSubscription?.cancel();
     }
     super.onClose();
+  }
+
+  /// A stream cancelled while its `async*` source awaits a request keeps
+  /// running until that request settles. A failure then completes the
+  /// `cancel()` future, not [onError], and this controller is already closed,
+  /// so the failure is logged here instead of escaping as an uncaught error.
+  void _onErrorAfterClose(Object error, StackTrace stackTrace) {
+    logWarning(
+      '$runtimeType::onClose(): request failed after close: $error',
+    );
   }
 
   void consumeState(Stream<Either<Failure, Success>> newStateStream) {

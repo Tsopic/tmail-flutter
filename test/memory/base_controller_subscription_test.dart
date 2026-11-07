@@ -59,17 +59,34 @@ class _FakeFailure extends FeatureFailure {
   _FakeFailure() : super();
 }
 
+class _FakeLoading extends LoadingState {}
+
+// Shaped like an interactor: an `async*` that yields a loading state, then
+// awaits a request that only settles after the subscriber has cancelled.
+Stream<Either<Failure, Success>> _pendingRequestStream(
+  Future<Success> request,
+) async* {
+  yield Right<Failure, Success>(_FakeLoading());
+  yield Right<Failure, Success>(await request);
+}
+
 // A concrete BaseController subclass that counts onData() calls.
 // We intentionally skip super.onData() to isolate the subscription lifecycle
 // from platform-specific success/failure side effects.
 class _SubscriptionAwareController extends BaseController {
   int onDataCallCount = 0;
+  int onErrorCallCount = 0;
 
   Worker registerWorker(Worker worker) => trackWorker(worker);
 
   @override
   void onData(Either<Failure, Success> newState) {
     onDataCallCount++;
+  }
+
+  @override
+  void onError(dynamic error, StackTrace stackTrace) {
+    onErrorCallCount++;
   }
 
   @override
@@ -175,6 +192,40 @@ void main() {
         );
 
         await streamCtrl.close();
+      },
+    );
+
+    test(
+      'SHOULD not leak an uncaught error\n'
+      'WHEN a request awaited by a consumed stream fails after onClose\n'
+      'SO THAT a closed controller does not fail the zone that ran it',
+      () async {
+        final uncaughtErrors = <Object>[];
+        final controller = _SubscriptionAwareController();
+        await runZonedGuarded(() async {
+          // Created in the guarded zone: futures cannot cross error zones.
+          final request = Completer<Success>();
+          controller.consumeState(_pendingRequestStream(request.future));
+          await Future.delayed(Duration.zero);
+          expect(controller.onDataCallCount, 1);
+
+          controller.onClose();
+          request.completeError(StateError('mailbox can not be found'));
+          await Future.delayed(Duration.zero);
+          await Future.delayed(Duration.zero);
+        }, (error, _) => uncaughtErrors.add(error));
+
+        expect(
+          uncaughtErrors,
+          isEmpty,
+          reason: 'A request failing after close escaped as an uncaught error',
+        );
+        expect(controller.onDataCallCount, 1);
+        expect(
+          controller.onErrorCallCount,
+          0,
+          reason: 'A closed controller must not handle late request errors',
+        );
       },
     );
 

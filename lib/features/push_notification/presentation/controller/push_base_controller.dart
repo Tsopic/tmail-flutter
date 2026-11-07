@@ -54,9 +54,16 @@ abstract class PushBaseController {
 
   void onClose() {
     for (final subscription in _stateSubscriptions.values.toList()) {
-      subscription.cancel();
+      // A request still in flight fails into the cancel() future, not onError.
+      unawaited(subscription.cancel().catchError(_onErrorAfterClose));
     }
     _stateSubscriptions.clear();
+  }
+
+  void _onErrorAfterClose(Object error, StackTrace stackTrace) {
+    logWarning(
+      'PushBaseController::onClose(): request failed after close: $error',
+    );
   }
 
   void mappingTypeStateToAction(
