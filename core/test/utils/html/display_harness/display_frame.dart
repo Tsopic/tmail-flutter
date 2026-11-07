@@ -251,7 +251,10 @@ class DisplayFrame {
   /// Lazy observers watch the top-level viewport, so this is what loads a
   /// lazy element. Waits up to [maxFrames] frames for it to load.
   Future<void> scrollIntoView(web.Element element, {int maxFrames = 60}) async {
-    final visible = (web.window.innerHeight - topInWindow).clamp(100, double.infinity);
+    // Keep the scroll probe within the initial preview viewport. The test
+    // host can be taller than its enclosing browser viewport, which clips
+    // IntersectionObserver targets near the bottom of an oversized frame.
+    final visible = (web.window.innerHeight - topInWindow).clamp(100, _initialHeight);
     _frame.height = '${visible.floor()}';
     await _nextFrame();
     element.scrollIntoView();
