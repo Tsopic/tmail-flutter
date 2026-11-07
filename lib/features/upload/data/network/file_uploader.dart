@@ -96,7 +96,7 @@ class FileUploader {
           );
         }
       );
-      log('FileUploader::uploadAttachment(): RESULT_JSON = $resultJson');
+      log('FileUploader::uploadAttachment(): upload completed for FILE[${uploadId.id}]');
       return _parsingResponse(
         resultJson: resultJson,
         fileName: fileInfo.fileName,
@@ -159,7 +159,7 @@ class FileUploader {
     if (resultJson != null) {
       final decodeJson = resultJson is Map ? resultJson : jsonDecode(resultJson);
       final uploadResponse = UploadResponse.fromJson(decodeJson);
-      log('FileUploader::_parsingResponse(): UploadResponse = $uploadResponse');
+      log('FileUploader::_parsingResponse(): upload response parsed');
       return uploadResponse.toAttachment(
         nameFile: fileName,
         charset: fileCharset);
