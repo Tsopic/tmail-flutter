@@ -20,6 +20,7 @@ import 'package:linagora_design_flutter/linagora_design_flutter.dart';
 import 'package:model/email/presentation_email.dart';
 import 'package:model/mailbox/expand_mode.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/extensions/expand_mode_extension.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/extensions/presentation_mailbox_extension.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_node.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/utils/mailbox_method_action_define.dart';
@@ -61,6 +62,7 @@ void main() {
     _testOpensPersonalMailboxOnTap();
     _testTogglesTeamMailboxRootOnTap();
     _testIgnoresTapOnTeamMailboxRootWithoutChildren();
+    _testRevealsTeamMailboxRootChildrenOnTapExpand();
     _testUsesReleaseDropTargetForDesktopWeb();
     _testKeepsTeamMailboxRootOutOfDropTargets();
     _testOpensSharedTopLevelFolderOnTap();
@@ -397,6 +399,59 @@ void _testIgnoresTapOnTeamMailboxRootWithoutChildren() {
 
     expect(openedMailbox, isNull);
     expect(expandedMailbox, isNull);
+  });
+}
+
+void _testRevealsTeamMailboxRootChildrenOnTapExpand() {
+  testWidgets(
+      'scrolls the menu to reveal a team mailbox root expanded by a tap, '
+      'and not when the tap collapses it', (tester) async {
+    final scrollController = ScrollController();
+    addTearDown(scrollController.dispose);
+    final mailboxNode = _mailboxNode(
+      id: 'team-root',
+      namespace: _teamMailboxNamespace,
+      children: [_mailboxNode(id: 'team-inbox')],
+    );
+
+    // The root is the last row the 200 px menu shows, so its children would
+    // expand below the fold.
+    await _pump(
+      tester,
+      SizedBox(
+        height: 200,
+        child: LinagoraSidebarScrollCoordinator(
+          controller: scrollController,
+          child: ListView(
+            controller: scrollController,
+            children: [
+              const SizedBox(height: 160),
+              SidebarMailboxItem(
+                mailboxNode: mailboxNode,
+                imagePaths: _imagePaths,
+                isWebDesktop: false,
+                onExpandFolderActionClick: (mailboxNode) =>
+                    mailboxNode.expandMode = mailboxNode.expandMode.toggle(),
+              ),
+              const SizedBox(height: 400),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(LinagoraSidebarItem));
+    await tester.pumpAndSettle();
+
+    expect(mailboxNode.expandMode, ExpandMode.EXPAND);
+    final revealedOffset = scrollController.offset;
+    expect(revealedOffset, greaterThan(0));
+
+    await tester.tap(find.byType(LinagoraSidebarItem));
+    await tester.pumpAndSettle();
+
+    expect(mailboxNode.expandMode, ExpandMode.COLLAPSE);
+    expect(scrollController.offset, revealedOffset);
   });
 }
 
