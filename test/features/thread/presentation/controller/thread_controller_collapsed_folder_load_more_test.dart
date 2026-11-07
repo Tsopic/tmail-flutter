@@ -568,8 +568,8 @@ void main() {
         return capturedRefreshArguments();
       }
 
-      test('reads the server with the listed count capped at the session get limit', () async {
-        expect(await refreshArgumentsAfterListing(600), [UnsignedInt(500), true]);
+      test('bounds the server refresh by the retained memory limit', () async {
+        expect(await refreshArgumentsAfterListing(600), [UnsignedInt(100), true]);
       });
 
       test('reads the server with the listed count while it is under the session get limit', () async {
@@ -579,13 +579,13 @@ void main() {
         );
       });
 
-      test('reads the server with the listed count when the session sets no get limit', () async {
+      test('keeps the memory limit when the session sets no get limit', () async {
         expect(
           await refreshArgumentsAfterListing(
             600,
             session: SessionFixtures.aliceSessionWithoutAICapability,
           ),
-          [UnsignedInt(600), true],
+          [UnsignedInt(100), true],
         );
       });
 
@@ -704,7 +704,7 @@ void main() {
     });
 
     group('websocket refresh of the starred folder', () {
-      test('reads the server with the listed count capped at the session get limit', () async {
+      test('bounds the server refresh by the retained memory limit', () async {
         final listed = makeEmails(600, mailboxId: otherMailboxId);
         final controller = createController(mailbox: PresentationMailbox.favoriteFolder);
         answerRefresh(listed);
@@ -713,7 +713,7 @@ void main() {
 
         await pushEmailStateChange();
 
-        verifyGetAll(limit: UnsignedInt(500)).called(1);
+        verifyGetAll(limit: UnsignedInt(100)).called(1);
       });
 
       test('forces the collapsed server query', () async {

@@ -670,7 +670,7 @@ void main() {
     });
 
     group('websocket refresh of a folder', () {
-      test('reads back every listed email, beyond the server get limit', () async {
+      test('bounds the cache refresh after listing many emails', () async {
         final listed = makeEmails(600);
         final controller = createController();
         answerRefresh(listed);
@@ -678,10 +678,10 @@ void main() {
 
         await pushEmailStateChange();
 
-        expect(capturedRefreshArguments(), [UnsignedInt(600), false]);
+        expect(capturedRefreshArguments(), [UnsignedInt(100), false]);
       });
 
-      test('reads back every listed email when the session has no get limit', () async {
+      test('keeps the cache refresh bounded when the session has no get limit', () async {
         final listed = makeEmails(120);
         final controller = createController(session: sessionWithoutMaxObjectsInGet());
         answerRefresh(listed);
@@ -689,7 +689,7 @@ void main() {
 
         await pushEmailStateChange();
 
-        expect(capturedRefreshArguments(), [UnsignedInt(120), false]);
+        expect(capturedRefreshArguments(), [UnsignedInt(100), false]);
       });
 
       test('allows load-more again when the refresh brought changes', () async {
@@ -765,7 +765,7 @@ void main() {
         expect(displayedEmails.map((email) => email.id), refreshed.map((email) => email.id));
       });
 
-      test('caps the server read at the session get limit', () async {
+      test('bounds the server read after listing many emails', () async {
         final listed = makeEmails(600, mailboxId: otherMailboxId);
         final controller = createController(mailbox: PresentationMailbox.favoriteFolder);
         answerRefresh(listed);
@@ -774,7 +774,7 @@ void main() {
 
         await pushEmailStateChange();
 
-        verifyGetAll(limit: UnsignedInt(500), useCache: false).called(1);
+        verifyGetAll(limit: UnsignedInt(100), useCache: false).called(1);
       });
 
       test('turns load-more off when the read fails', () async {
