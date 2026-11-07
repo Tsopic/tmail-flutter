@@ -24,6 +24,12 @@ class UiKeys {
       'tablet_email_selection_avatar';
   // Suggestion-overlay chips; compose with the filter name. Distinct from the result-bar keys.
   static const String quickSearchFilterButtonPrefix = 'quick_search_filter_button_';
+  // Recipient field buttons; compose as 'prefix_<field name>' + suffix.
+  static const String recipientCcButtonSuffix = '_recipient_cc_button';
+  static const String recipientExpandButtonSuffix = '_recipient_expand_button';
+
+  // Language & region
+  static const String languageDropDownButton = 'language_drop_down_button';
 
   // Email rules / rules filter creator
   static const String createRuleButton = 'createRuleButton';
@@ -33,6 +39,8 @@ class UiKeys {
   static const String addActionButton = 'addActionButton';
   static const String mobileMailboxMenuButton = 'mobileMailboxMenuButton';
   static const String userAvatar = 'userAvatar';
+  // Settings button that replaces the avatar inside Twake Workplace.
+  static const String workplaceSettingsButton = 'workplace_settings_button';
 
   // Advanced search
   static const String openAdvancedSearchButton = 'open_advanced_search_button';
@@ -44,5 +52,10 @@ class UiKeys {
   static const String mailboxSearchButton = 'mailbox_search_button';
   static const String addNewFolderButton = 'add_new_folder_button';
   static const String addNewLabelButton = 'labels_bar_widget_add_new_label_button';
+  static const String labelMoreActionButton = 'label_more_action_button';
   static const String cleanMessageBannerNotVisible = 'clean_message_banner_not_visible';
+
+  // Email detail labels
+  static const String emailDetailedMoreButton = 'email_detailed_more_button';
+  static const String addLabelToEmailModal = 'add_label_to_email_modal';
 }

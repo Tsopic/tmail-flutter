@@ -1,9 +1,8 @@
 ARG FLUTTER_VERSION=3.38.9
 ARG APP_VERSION
 
-# Stage 1 - Install dependencies and build the app
-# This matches the flutter version on our CI/CD pipeline on Github
-FROM --platform=amd64 ghcr.io/instrumentisto/flutter:${FLUTTER_VERSION} AS build-env
+# the digest wins over the tag: update FLUTTER_VERSION and the digest together
+FROM --platform=amd64 ghcr.io/instrumentisto/flutter:${FLUTTER_VERSION}@sha256:7d227ac458bbb5aca38ada779dc0bf983ad24deae8d2ef3ebf5b779915d1547d AS build-env
 
 # Pass version into build stage
 ARG APP_VERSION
@@ -37,7 +36,7 @@ RUN ./scripts/prebuild.sh && \
     fi && \
     SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN:-} ./scripts/run-sentry.sh
 
-FROM nginx:alpine
+FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
 RUN apk add gzip
 COPY --from=build-env /app/server/nginx.conf /etc/nginx
 COPY --from=build-env /app/build/web /usr/share/nginx/html

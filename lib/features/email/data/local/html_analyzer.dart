@@ -1,9 +1,6 @@
 
 import 'package:core/data/constants/constant.dart';
 import 'package:core/presentation/utils/html_transformer/html_transform.dart';
-import 'package:core/presentation/utils/html_transformer/text/persist_preformatted_text_transformer.dart';
-import 'package:core/presentation/utils/html_transformer/text/sanitize_autolink_html_transformers.dart';
-import 'package:core/presentation/utils/html_transformer/text/sanitize_plain_text_html_output_transformer.dart';
 import 'package:core/presentation/utils/html_transformer/transform_configuration.dart';
 import 'package:core/utils/app_logger.dart';
 import 'package:core/utils/string_convert.dart';
@@ -47,11 +44,7 @@ class HtmlAnalyzer {
       case EmailContentType.textPlain:
         final message = _htmlTransform.transformToTextPlain(
           content: emailContent.content,
-          transformConfiguration: TransformConfiguration.fromTextTransformers([
-            const SanitizeAutolinkHtmlTransformers(),
-            const SanitizePlainTextHtmlOutputTransformer(),
-            const PersistPreformattedTextTransformer(),
-          ]),
+          transformConfiguration: TransformConfiguration.forPlainTextEmail(),
         );
         return EmailContent(emailContent.type, message);
       default:
@@ -74,9 +67,9 @@ class HtmlAnalyzer {
     required Map<String, Attachment> inlineAttachments,
     required Uri? uploadUri,
   }) async {
-    final document = parse(emailContent);
-    final listImgTag = document.querySelectorAll('img[src^="data:image/"]');
-    final cidImgTags = document.querySelectorAll('img[src^="$cidPrefixKey"]');
+    final fragment = parseFragment(emailContent);
+    final listImgTag = fragment.querySelectorAll('img[src^="data:image/"]');
+    final cidImgTags = fragment.querySelectorAll('img[src^="$cidPrefixKey"]');
 
     log('HtmlAnalyzer::replaceImageBase64ToImageCID:listImgTagLength = ${listImgTag.length} | inlineAttachments = ${inlineAttachments.length}');
 
@@ -105,7 +98,7 @@ class HtmlAnalyzer {
       inlineAttachmentsSet: inlineAttachmentsSet,
     );
 
-    return Tuple2(document.body?.innerHtml ?? emailContent, inlineAttachmentsSet);
+    return Tuple2(fragment.outerHtml, inlineAttachmentsSet);
   }
 
   Future<EmailBodyPart?> _processBase64ImageTag({
@@ -160,8 +153,8 @@ class HtmlAnalyzer {
 
   Future<String> removeCollapsedExpandedSignatureEffect({required String emailContent}) async {
     try {
-      final document = parse(emailContent);
-      final signatureElements = document.querySelectorAll('.tmail-signature');
+      final fragment = parseFragment(emailContent);
+      final signatureElements = fragment.querySelectorAll('.tmail-signature');
       await Future.wait(signatureElements.map((signatureTag) async {
         final signatureChildren = signatureTag.children;
         for (var child in signatureChildren) {
@@ -172,7 +165,7 @@ class HtmlAnalyzer {
           }
         }
       }));
-      return document.body?.innerHtml ?? emailContent;
+      return fragment.outerHtml;
     } catch (e) {
       logWarning('HtmlAnalyzer::removeCollapsedExpandedSignatureEffect:Exception = $e');
       return emailContent;
@@ -188,9 +181,9 @@ class HtmlAnalyzer {
       final imageBytes = StringConvert.convertBase64ImageTagToBytes(base64ImageTag);
       final mediaType = StringConvert.getMediaTypeFromBase64ImageTag(base64ImageTag);
       log('HtmlAnalyzer::_retrieveAttachmentFromUpload: mimeType = ${mediaType?.mimeType} | imageBytesLength = ${imageBytes.length}');
-      final fileInfo = FileInfo.fromBytes(
+      final fileInfo = FileBytesInfo(
         bytes: imageBytes,
-        name: '$taskId.${mediaType?.subtype ?? 'png'}',
+        fileName: '$taskId.${mediaType?.subtype ?? 'png'}',
         type: mediaType?.mimeType,
       );
 
@@ -209,8 +202,8 @@ class HtmlAnalyzer {
 
   Future<String> removeStyleLazyLoadDisplayInlineImages({required String emailContent}) async {
     try {
-      final document = parse(emailContent);
-      final imgElements = document.querySelectorAll('img[style], img[loading]');
+      final fragment = parseFragment(emailContent);
+      final imgElements = fragment.querySelectorAll('img[style], img[loading]');
       await Future.wait(imgElements.map((img) async {
         String? style = img.attributes['style'];
         if (style != null) {
@@ -226,7 +219,7 @@ class HtmlAnalyzer {
           img.attributes.remove('loading');
         }
       }));
-      return document.body?.innerHtml ?? emailContent;
+      return fragment.outerHtml;
     } catch (e) {
       logWarning('HtmlAnalyzer::removeStyleLazyLoadDisplayInlineImages:Exception = $e');
       return emailContent;

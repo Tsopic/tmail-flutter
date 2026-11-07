@@ -1,6 +1,7 @@
 import 'package:core/data/constants/constant.dart';
 import 'package:core/utils/app_logger.dart';
 import 'package:core/utils/application_manager.dart';
+import 'package:core/utils/html/active_html_content_stripper.dart';
 import 'package:core/utils/html/html_utils.dart';
 import 'package:dartz/dartz.dart';
 import 'package:dio/dio.dart';
@@ -10,6 +11,7 @@ import 'package:model/email/attachment.dart';
 import 'package:model/extensions/set_email_body_part_extension.dart';
 import 'package:model/upload/file_info.dart';
 import 'package:tmail_ui_user/features/composer/data/datasource/composer_datasource.dart';
+import 'package:tmail_ui_user/features/composer/domain/model/image_download_options.dart';
 import 'package:tmail_ui_user/features/composer/domain/repository/composer_repository.dart';
 import 'package:tmail_ui_user/features/composer/presentation/extensions/create_email_request_extension.dart';
 import 'package:tmail_ui_user/features/composer/presentation/model/create_email_request.dart';
@@ -39,8 +41,8 @@ class ComposerRepositoryImpl extends ComposerRepository {
   }
 
   @override
-  Future<String?> downloadImageAsBase64(String url, String cid, FileInfo fileInfo, {double? maxWidth, bool? compress}) {
-    return _composerDataSource.downloadImageAsBase64(url, cid, fileInfo, maxWidth: maxWidth, compress: compress);
+  Future<String?> downloadImageAsBase64(String url, String cid, FileInfo fileInfo, {ImageDownloadOptions? options}) {
+    return _composerDataSource.downloadImageAsBase64(url, cid, fileInfo, options: options);
   }
 
   @override
@@ -69,6 +71,11 @@ class ComposerRepositoryImpl extends ComposerRepository {
     }
 
     emailContent = await removeCollapsedExpandedSignatureEffect(emailContent: emailContent);
+
+    // Content composed through the HTML code view, pasted or inserted by
+    // other means is sent as is otherwise: never originate a mail carrying
+    // scripts, event handlers or script URLs.
+    emailContent = ActiveHtmlContentStripper.strip(emailContent);
 
     emailContent = HtmlUtils.wrapPlainTextLinks(emailContent);
 

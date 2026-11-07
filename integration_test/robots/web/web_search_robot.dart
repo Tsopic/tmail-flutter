@@ -3,8 +3,11 @@ import 'package:core/presentation/views/text/rich_text_builder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patrol/patrol.dart';
+import 'package:tmail_ui_user/features/base/model/filter_filter.dart';
 import 'package:tmail_ui_user/features/base/model/ui_keys.dart';
+import 'package:tmail_ui_user/features/base/widget/default_field/default_button_arrow_down_field_with_tab_key_widget.dart';
 import 'package:tmail_ui_user/features/base/widget/popup_menu/popup_menu_item_action_widget.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/advanced_search/advanced_search_field_widget.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/quick_search/email_quick_search_item_tile_widget.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/widgets/search_input_form_widget.dart';
 import 'package:tmail_ui_user/features/search/email/presentation/search_email_view.dart';
@@ -39,6 +42,16 @@ class WebSearchRobot extends SearchRobot implements AbstractSearchRobot {
         responsiveAction: _responsiveSearchRobot.tapOnSearchField,
         desktopAction: _tapOnDesktopSearchField,
       );
+
+  // The responsive layout opens SearchEmailView, whose input has its own focus
+  // node and no Escape shortcut, so only the desktop search bar is supported.
+  @override
+  Future<void> tapOnSearchInput() async {
+    if (_isResponsiveSearchLayout) {
+      throw StateError('tapOnSearchInput supports the desktop search bar only');
+    }
+    await $(SearchInputFormWidget).$(TextField).tap();
+  }
 
   Future<void> _tapOnDesktopSearchField() async {
     await $(SearchInputFormWidget).$(TextField).tap();
@@ -195,6 +208,23 @@ class WebSearchRobot extends SearchRobot implements AbstractSearchRobot {
     await $(find.text(labelName)).tap();
     await $(const ValueKey(UiKeys.advancedSearchSearchButton)).tap();
   }
+
+  @override
+  Future<void> openAdvancedSearchFolderPicker() async {
+    await _advancedSearchFolderField
+        .$(DefaultButtonArrowDownFieldWithTabKeyWidget)
+        .tap();
+  }
+
+  @override
+  Future<void> expectAdvancedSearchFolder(String folderName) async {
+    await _advancedSearchFolderField.$(find.text(folderName)).waitUntilExists();
+  }
+
+  PatrolFinder get _advancedSearchFolderField =>
+      $(AdvancedSearchFieldWidget).which<AdvancedSearchFieldWidget>(
+        (field) => field.filterField == FilterField.mailBox,
+      );
 
   @override
   Future<void> expectEmailWithSubjectVisible(String subject) async {

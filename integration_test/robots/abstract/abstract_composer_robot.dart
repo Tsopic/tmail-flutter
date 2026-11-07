@@ -5,12 +5,25 @@ import 'package:model/email/prefix_email_address.dart';
 import 'package:tmail_ui_user/features/composer/presentation/composer_controller.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
+import 'abstract_composer_code_view_robot.dart';
+import 'abstract_composer_editor_keyboard_robot.dart';
+import 'abstract_composer_recipient_robot.dart';
 import 'abstract_composer_reload_robot.dart';
 
 abstract class AbstractComposerRobot {
+  AbstractComposerRecipientRobot get recipient;
+
   AbstractComposerReloadRobot? get reload;
 
+  /// Web only: real key presses in the Summernote editor.
+  AbstractComposerEditorKeyboardRobot? get editorKeyboard;
+
+  /// Web only: the "Embed code" HTML source view.
+  AbstractComposerCodeViewRobot? get codeView;
+
   Future<void> expectComposerViewVisible();
+  /// Discards the draft if closing asks to keep it.
+  Future<void> expectComposerClosedDiscardingChanges();
   Future<void> grantContactPermission();
   Future<void> addRecipient(PrefixEmailAddress prefix, String email);
   Future<void> addSubject(String subject);
@@ -24,6 +37,13 @@ abstract class AbstractComposerRobot {
   // Use bytes instead of File so these methods work on web (no dart:io / path_provider).
   Future<void> addAttachmentFromBytes(Uint8List bytes, String fileName);
   Future<void> addInlineFromBytes(Uint8List bytes, String fileName);
+  // Web only: uploads through a real `blob:` URL (FileBlobInfo).
+  Future<void> addAttachmentFromBlob(Uint8List bytes, String fileName, String mimeType);
+  Future<void> waitForAttachmentsUploaded();
+  // Size is server-computed, so it proves the bytes actually reached the server.
+  Future<void> expectSingleUploadedAttachment({required String fileName, required int size});
+  // Web only: the XHR body must be the Blob itself, never Dart-read bytes.
+  Future<void> expectUploadSentAsBlob(int size);
   Future<void> tapSaveAsDraftButton();
   Future<void> tapSaveAsTemplateButton();
   Future<void> tapDiscardChanges();

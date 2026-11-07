@@ -40,6 +40,7 @@ import 'package:tmail_ui_user/features/base/mixin/message_dialog_action_manager.
 import 'package:tmail_ui_user/features/base/state/base_ui_state.dart';
 import 'package:tmail_ui_user/features/base/state/button_state.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/compose_email_exception.dart';
+import 'package:tmail_ui_user/features/composer/domain/exceptions/forbidden_to_send_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/invalid_recipients_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/set_method_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/extensions/set_method_exception_description_extension.dart';
@@ -65,6 +66,7 @@ import 'package:tmail_ui_user/features/composer/presentation/extensions/handle_m
 import 'package:tmail_ui_user/features/composer/presentation/extensions/refresh_composer_attachments_extension.dart';
 import 'package:tmail_ui_user/features/composer/presentation/extensions/attachment_detection_extension.dart';
 import 'package:tmail_ui_user/features/composer/presentation/extensions/auto_create_tag_for_recipients_extension.dart';
+import 'package:tmail_ui_user/features/composer/presentation/extensions/forbidden_to_send_extension.dart';
 import 'package:tmail_ui_user/features/composer/presentation/extensions/get_draft_mailbox_id_for_composer_extension.dart';
 import 'package:tmail_ui_user/features/composer/presentation/extensions/get_outbox_mailbox_id_for_composer_extension.dart';
 import 'package:tmail_ui_user/features/composer/presentation/extensions/get_sent_mailbox_id_for_composer_extension.dart';
@@ -98,6 +100,7 @@ import 'package:tmail_ui_user/features/composer/presentation/widgets/mobile/from
 import 'package:tmail_ui_user/features/composer/presentation/widgets/saving_message_dialog_view.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/saving_template_dialog_view.dart';
 import 'package:tmail_ui_user/features/composer/presentation/widgets/sending_message_dialog_view.dart';
+import 'package:tmail_ui_user/features/email/domain/exceptions/email_exceptions.dart';
 import 'package:tmail_ui_user/features/email/domain/state/get_email_content_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/save_template_email_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/transform_html_email_content_state.dart';
@@ -142,8 +145,10 @@ import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 import 'package:tmail_ui_user/main/universal_import/html_stub.dart' as html;
 import 'package:workplace/domain/entity/drive_document.dart';
 import 'package:tmail_ui_user/features/composer/presentation/manager/drive_attachment_handler.dart';
+import 'package:tmail_ui_user/features/composer/presentation/manager/drive_oversize_attachment_recovery.dart';
 import 'package:tmail_ui_user/features/composer/presentation/manager/concurrency_gate.dart';
 import 'package:tmail_ui_user/features/composer/presentation/manager/drive_attachment_transfer_runner.dart';
+import 'package:tmail_ui_user/features/composer/presentation/utils/composer_web_body_cache.dart';
 import 'package:tmail_ui_user/main/utils/app_config.dart';
 import 'package:tmail_ui_user/main/utils/toast_manager.dart';
 import 'package:workplace/presentation/model/drive_pick_state.dart';
@@ -210,6 +215,10 @@ class ComposerController extends BaseController
           uploadController: uploadController,
           maxSizeAttachmentsPerEmail: () => mailboxDashBoardController.maxSizeAttachmentsPerEmail?.value,
         ),
+        recoveryBuilder: (context) => DriveOversizeAttachmentRecovery(
+          context: context,
+          insertHtml: insertHtmlIntoEditor,
+        ),
       );
 
   GetAllAutoCompleteInteractor? _getAllAutoCompleteInteractor;
@@ -268,7 +277,7 @@ class ComposerController extends BaseController
   final ScrollController scrollControllerIdentities = ScrollController();
 
   List<Attachment> initialAttachments = <Attachment>[];
-  String? _textEditorWeb;
+  final ComposerWebBodyCache _webBodyCache = ComposerWebBodyCache();
   double? maxWithEditor;
   EmailId? emailIdEditing;
   bool isAttachmentCollapsed = false;
@@ -317,6 +326,9 @@ class ComposerController extends BaseController
 
   void registerReloadCacheAction(ComposerReloadCacheAction action) =>
       _reloadCacheAction = action;
+
+  @visibleForTesting
+  set isEmailBodyLoaded(bool value) => _isEmailBodyLoaded = value;
 
   ComposerController(
     this._localFilePickerInteractor,
@@ -377,7 +389,7 @@ class ComposerController extends BaseController
   @override
   void onClose() {
     _reloadCacheAction = null;
-    _textEditorWeb = null;
+    _webBodyCache.setTrusted(null);
     savedActionType = null;
     _savedEmailDraftHash = null;
     currentEmailActionType = null;
@@ -826,6 +838,32 @@ class ComposerController extends BaseController
 
     final appLocalizations = AppLocalizations.of(context);
 
+    if (isEditedEmailContentLoadFailed) {
+      MessageDialogActionManager().showConfirmDialogAction(
+        context,
+        appLocalizations.messageDialogSendEmailContentLoadFailed,
+        appLocalizations.got_it,
+        title: appLocalizations.sending_failed,
+        showAsBottomSheet: true,
+        hasCancelButton: false,
+        dialogMargin: MediaQuery.paddingOf(context).add(const EdgeInsets.only(bottom: 12)),
+      ).whenComplete(() => _sendButtonState = ButtonState.enabled);
+      return;
+    }
+
+    if (isEmailBodyNotReady) {
+      MessageDialogActionManager().showConfirmDialogAction(
+        context,
+        appLocalizations.messageDialogSendEmailContentLoading,
+        appLocalizations.got_it,
+        title: appLocalizations.sending_failed,
+        showAsBottomSheet: true,
+        hasCancelButton: false,
+        dialogMargin: MediaQuery.paddingOf(context).add(const EdgeInsets.only(bottom: 12)),
+      ).whenComplete(() => _sendButtonState = ButtonState.enabled);
+      return;
+    }
+
     if (!isEnableEmailSendButton.value) {
       MessageDialogActionManager().showConfirmDialogAction(context,
         appLocalizations.message_dialog_send_email_without_recipient,
@@ -895,10 +933,38 @@ class ComposerController extends BaseController
     _prepareToSendMessages(context);
   }
 
+  bool get isEmailBodyNotReady {
+    final isContentLoading = emailContentsViewState.value?.fold(
+      (_) => false,
+      (success) => success is GetEmailContentLoading,
+    ) ?? false;
+    final isEditorNotLoaded = PlatformInfo.isWeb
+      ? !_isEmailBodyLoaded && !screenDisplayMode.value.isNotContentVisible()
+      : !_isEmailBodyLoaded;
+    return isContentLoading || isEditorNotLoaded;
+  }
+
+  bool get isEditedEmailContentLoadFailed {
+    final isEditingExistingEmail = const {
+      EmailActionType.editDraft,
+      EmailActionType.editAsNewEmail,
+      EmailActionType.reopenComposerBrowser,
+      EmailActionType.restoreComposerFromPersistentCache,
+    }.contains(currentEmailActionType);
+    final isContentLoadFailed = emailContentsViewState.value?.fold(
+      (failure) => !_isEmptyEmailContentFailure(failure),
+      (_) => false,
+    ) ?? false;
+    return isEditingExistingEmail && isContentLoadFailed;
+  }
+
+  bool _isEmptyEmailContentFailure(Failure failure) =>
+    failure is GetEmailContentFailure && failure.exception is EmptyEmailContentException;
+
   Future<String> getContentInEditor() async {
     try {
       final htmlTextEditor = PlatformInfo.isWeb
-        ? _textEditorWeb
+        ? textEditorWeb
         : await htmlEditorApi?.getText();
       return htmlTextEditor?.isNotEmpty == true
         ? htmlTextEditor!.removeEditorStartTag()
@@ -1028,6 +1094,9 @@ class ComposerController extends BaseController
       } else if (exception is InvalidRecipientsException) {
         _sendButtonState = ButtonState.enabled;
         handleInvalidRecipientsFailure(exception);
+      } else if (exception is ForbiddenToSendException) {
+        _sendButtonState = ButtonState.enabled;
+        await handleForbiddenToSendFailure(exception);
       } else if (context.mounted) {
         await _showConfirmDialogWhenSendMessageFailure(
           context: context,
@@ -1041,24 +1110,31 @@ class ComposerController extends BaseController
     }
   }
 
+  Future<bool> insertHtmlIntoEditor(String html) async {
+    if (PlatformInfo.isWeb) {
+      final editorController = richTextWebController?.editorController;
+      if (editorController == null) return false;
+      editorController.insertHtml(html);
+      // insertHtml posts to the iframe and returns immediately; getText() shares
+      // an uncorrelated message channel with other callers (e.g.
+      // displayScreenTypeComposerAction), so it can't safely confirm the insert
+      // landed. endOfFrame mirrors the mobile branch below instead.
+      await SchedulerBinding.instance.endOfFrame;
+      return true;
+    }
+    final editorApi = htmlEditorApi;
+    if (editorApi == null) return false;
+    await richTextMobileTabletController?.restoreMobileEditorFocus();
+    await editorApi.insertHtml(html);
+    await SchedulerBinding.instance.endOfFrame;
+    return true;
+  }
+
   Future<void> handleDrivePickResult(List<DriveDocument> result) async {
     try {
       await Get.find<DriveAttachmentHandler>().handleDrivePickResult(
         result,
-        insertHtml: (html) async {
-          if (PlatformInfo.isWeb) {
-            final editorController = richTextWebController?.editorController;
-            if (editorController == null) return false;
-            editorController.insertHtml(html);
-            return true;
-          }
-          final editorApi = htmlEditorApi;
-          if (editorApi == null) return false;
-          await richTextMobileTabletController?.restoreMobileEditorFocus();
-          await editorApi.insertHtml(html);
-          await SchedulerBinding.instance.endOfFrame;
-          return true;
-        },
+        insertHtml: insertHtmlIntoEditor,
         transferDriveDocuments: (docs) => _transferDriveDocuments(docs),
         appLocalizations: currentContext != null ? AppLocalizations.of(currentContext!) : null,
       );
@@ -1647,9 +1723,11 @@ class ComposerController extends BaseController
     if (screenDisplayMode.value.isNotContentVisible()) {
       _isEmailBodyLoaded = false;
     }
-    if (richTextWebController != null && !screenDisplayMode.value.isNotContentVisible()) {
+    if (richTextWebController?.isCodeViewBusy == false && !screenDisplayMode.value.isNotContentVisible()) {
       final textCurrent = await richTextWebController!.editorController.getText();
-      richTextWebController!.editorController.setText(textCurrent);
+      if (richTextWebController?.isCodeViewBusy != true) {
+        richTextWebController!.editorController.setText(textCurrent);
+      }
     }
     screenDisplayMode.value = displayMode;
     updateDisplayModeForComposerQueue(displayMode);
@@ -1832,6 +1910,10 @@ class ComposerController extends BaseController
 
   Future<void> applySignature(String signature) async {
     final normalizedSignature = await _normalizeSignature(signature);
+    if (normalizedSignature == null) {
+      restoringSignatureButton = false;
+      return;
+    }
     if (PlatformInfo.isWeb) {
       richTextWebController?.editorController.insertSignature(
         normalizedSignature,
@@ -1845,33 +1927,46 @@ class ComposerController extends BaseController
     }
   }
 
-  /// Identity signatures are stored raw on the server, so a degenerate
-  /// `line-height` (e.g. `0.1`) would overlap text once inserted into the
-  /// editor. Normalize it like the preview pipeline does. Fail-open: any
-  /// failure, unexpected state, empty result, or exception falls back to the
-  /// original signature so insertion never breaks.
-  Future<String> _normalizeSignature(String signature) async {
+  /// Identity signatures are stored raw on the server (other clients,
+  /// provisioning) and the editor inserts them with `innerHTML`, so only the
+  /// sanitized signature may reach it; a degenerate `line-height` (e.g.
+  /// `0.1`) is normalized as well. Fail-closed: any failure, unexpected
+  /// state, exception or blank result (a signature made only of active
+  /// content) returns null and no signature is inserted.
+  Future<String?> _normalizeSignature(String signature) async {
     try {
       final resultState = await _transformHtmlEmailContentInteractor
           .execute(signature, TransformConfiguration.forComposerSignature())
           .last;
       return resultState.fold(
-        (failure) => signature,
+        (failure) => _noSignatureInserted('sanitizing failed: $failure'),
         (success) {
-          if (success is! TransformHtmlEmailContentSuccess) return signature;
-
+          if (success is! TransformHtmlEmailContentSuccess) {
+            return _noSignatureInserted('unexpected state ${success.runtimeType}');
+          }
           // The transform returns a complete document while the editor
           // expects a fragment.
           final normalizedSignature = success.htmlContent.toHtmlFragment();
           return normalizedSignature.trim().isNotEmpty
               ? normalizedSignature
-              : signature;
+              : _noSignatureInserted('signature is empty after sanitizing');
         },
       );
     } catch (e) {
-      logWarning('ComposerController::_normalizeSignature: Exception = $e');
-      return signature;
+      return _noSignatureInserted('exception while sanitizing', exception: e);
     }
+  }
+
+  /// Logs why the composer inserted no signature (fail-closed) and returns
+  /// null. Forced to the web console so it is visible in profile/release web
+  /// builds, where a stripped signature would otherwise be silent.
+  String? _noSignatureInserted(String reason, {Object? exception}) {
+    logError(
+      'ComposerController::_normalizeSignature: $reason, no signature inserted',
+      exception: exception,
+      webConsoleEnabled: true,
+    );
+    return null;
   }
 
   Future<void> _removeSignature() async {
@@ -1921,7 +2016,7 @@ class ComposerController extends BaseController
         imageUrl,
         uploadState.attachment.cid!,
         uploadState.fileInfo,
-        maxWidth: maxWithEditor,
+        options: (maxWidth: maxWithEditor, compress: null),
       ));
     } else {
       log('ComposerController::_handleUploadInlineFailure(): baseDownloadUrl: $baseDownloadUrl, accountId: $accountId');
@@ -2142,14 +2237,14 @@ class ComposerController extends BaseController
 
   bool get isNetworkConnectionAvailable => networkConnectionController.isNetworkConnectionAvailable();
 
-  String? get textEditorWeb => _textEditorWeb;
+  String? get textEditorWeb => _webBodyCache.read();
 
-  void setTextEditorWeb(String value) => _textEditorWeb = value;
+  void setTextEditorWeb(String value) => _webBodyCache.setTrusted(value);
 
   HtmlEditorApi? get htmlEditorApi => richTextMobileTabletController?.htmlEditorApi;
 
   void onChangeTextEditorWeb(String? text) {
-    _textEditorWeb = text;
+    _webBodyCache.onEditorChange(text, inCodeView: richTextWebController?.codeViewEnabled ?? false);
 
     if (restoringSignatureButton ||
         (_isNewComposition && !synchronizeInitDraftHash)) {
@@ -2299,16 +2394,27 @@ class ComposerController extends BaseController
 
     _setUpMaxWidthInlineImage(context: context, maxWidth: maxWidth);
 
-    final listFileInfo = await onDragDone(context: context, details: details);
+    final droppedFiles = await onDragDone(context: context, details: details);
 
     if (!context.mounted) return;
 
+    final listFileInfo = droppedFiles.files;
+    final folderCount = droppedFiles.folderCount;
     if (listFileInfo.isEmpty) {
+      final onlyFolders = folderCount > 0 && folderCount == details.files.length;
       appToast.showToastErrorMessage(
         context,
-        AppLocalizations.of(context).can_not_upload_this_file_as_attachments
+        onlyFolders
+          ? AppLocalizations.of(context).cannotUploadFoldersAsAttachments(folderCount)
+          : AppLocalizations.of(context).can_not_upload_this_file_as_attachments
       );
       return;
+    }
+
+    if (folderCount > 0) {
+      appToast.showToastErrorMessage(
+        context,
+        AppLocalizations.of(context).cannotUploadFoldersAsAttachments(folderCount));
     }
 
     await attachmentUploadValidationService.validateFiles(

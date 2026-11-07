@@ -354,6 +354,26 @@ class AppLocalizations {
     );
   }
 
+  String cannotUploadFoldersAsAttachments(int count) {
+    return Intl.plural(
+      count,
+      one: 'Cannot upload this folder as attachment',
+      other: 'Cannot upload these folders as attachments',
+      name: 'cannotUploadFoldersAsAttachments',
+      args: [count],
+    );
+  }
+
+  String sharedFilesCannotBeRead(int count) {
+    return Intl.plural(
+      count,
+      one: 'A shared file could not be read and was not added',
+      other: '$count shared files could not be read and were not added',
+      name: 'sharedFilesCannotBeRead',
+      args: [count],
+    );
+  }
+
   String get attachments_uploaded_successfully {
     return Intl.message(
       'Attachments uploaded successfully',
@@ -543,6 +563,13 @@ class AppLocalizations {
     return Intl.message(
       'Folder name cannot contain special characters',
       name: 'folderNameCannotContainSpecialCharacters',
+    );
+  }
+
+  String get folderNameContainsForbiddenCharacters {
+    return Intl.message(
+      'Folder name cannot start with "#" nor contain ".", "%", "*" or line breaks',
+      name: 'folderNameContainsForbiddenCharacters',
     );
   }
 
@@ -1262,6 +1289,27 @@ class AppLocalizations {
 
   String get cannotPreviewPdf {
     return Intl.message('Cannot preview PDF', name: 'cannotPreviewPdf');
+  }
+
+  String get pdfPasswordRequired {
+    return Intl.message(
+      'Password-protected PDF',
+      name: 'pdfPasswordRequired',
+    );
+  }
+
+  String get incorrectPdfPassword {
+    return Intl.message(
+      'Incorrect password, please try again',
+      name: 'incorrectPdfPassword',
+    );
+  }
+
+  String get pdfPasswordNotProvided {
+    return Intl.message(
+      'This PDF is password-protected. You can still download it.',
+      name: 'pdfPasswordNotProvided',
+    );
   }
 
   String get wrongUrlMessage {
@@ -2977,10 +3025,11 @@ class AppLocalizations {
     return Intl.message('Unsubscribe mail', name: 'unsubscribeMail');
   }
 
-  String get unsubscribeMailDialogMessage {
+  String unsubscribeMailDialogMessage(String senderName) {
     return Intl.message(
-      'Are you sure you\'d like to stop receiving similar messages from',
+      'Are you sure you\'d like to stop receiving similar messages from $senderName?',
       name: 'unsubscribeMailDialogMessage',
+      args: [senderName],
     );
   }
 
@@ -4596,6 +4645,63 @@ class AppLocalizations {
     );
   }
 
+  String get attachingFileTitle {
+    return Intl.message(
+      'Attaching file',
+      name: 'attachingFileTitle',
+    );
+  }
+
+  String driveOversizeDialogMessage(String maxSize) {
+    return Intl.message(
+        'Your file is larger than $maxSize. It will be uploaded to Twake Drive and attached as ',
+        name: 'driveOversizeDialogMessage',
+        args: [maxSize]
+    );
+  }
+
+  String get driveOversizeDialogMessageEmphasis {
+    return Intl.message(
+      'a link',
+      name: 'driveOversizeDialogMessageEmphasis',
+    );
+  }
+
+  String get driveUploadRowDone {
+    return Intl.message(
+      'Done',
+      name: 'driveUploadRowDone',
+    );
+  }
+
+  String get driveUploadRowFailed {
+    return Intl.message(
+      'Failed',
+      name: 'driveUploadRowFailed',
+    );
+  }
+
+  String get driveUploadRowCancelled {
+    return Intl.message(
+      'Canceled',
+      name: 'driveUploadRowCancelled',
+    );
+  }
+
+  String get driveOversizeUploadFailed {
+    return Intl.message(
+      'Some files could not be uploaded to Drive.',
+      name: 'driveOversizeUploadFailed',
+    );
+  }
+
+  String get driveOversizeUploadBusy {
+    return Intl.message(
+      'A Drive upload is already in progress. Try again when it finishes.',
+      name: 'driveOversizeUploadBusy',
+    );
+  }
+
   String get driveNoValidAttachment {
     return Intl.message('No valid attachment', name: 'driveNoValidAttachment');
   }
@@ -4918,6 +5024,41 @@ class AppLocalizations {
     return Intl.message(
       'This sign-in link isn\'t from Twake. Please sign in from the app.',
       name: 'deepLinkCannotBeOpened',
+    );
+  }
+
+  String get linkTypeNotAllowed {
+    return Intl.message(
+      'This type of link is not allowed!',
+      name: 'linkTypeNotAllowed',
+    );
+  }
+
+  String get messageDialogSendEmailContentLoading {
+    return Intl.message(
+      'Your message could not be sent because its content is still loading. Please wait and try again.',
+      name: 'messageDialogSendEmailContentLoading',
+    );
+  }
+
+  String get messageDialogSendEmailContentLoadFailed {
+    return Intl.message(
+      'Your message could not be sent because its content failed to load. Please close the composer and open the email again.',
+      name: 'messageDialogSendEmailContentLoadFailed',
+    );
+  }
+
+  String get domainActivationPendingTitle {
+    return Intl.message(
+      'Your email domain is pending activation',
+      name: 'domainActivationPendingTitle',
+    );
+  }
+
+  String get domainActivationPendingMessage {
+    return Intl.message(
+      'You cannot send emails at this time. Contact your administrator if the problem persists.',
+      name: 'domainActivationPendingMessage',
     );
   }
 }

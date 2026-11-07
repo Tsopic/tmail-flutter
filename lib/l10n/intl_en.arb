@@ -641,6 +641,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "folderNameContainsForbiddenCharacters": "Folder name cannot start with \"#\" nor contain \".\", \"%\", \"*\" or line breaks",
+  "@folderNameContainsForbiddenCharacters": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "this_folder_name_is_already_taken": "This folder name is already taken",
   "@this_folder_name_is_already_taken": {
     "type": "text",
@@ -3327,6 +3333,24 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "pdfPasswordRequired": "Password-protected PDF",
+  "@pdfPasswordRequired": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "incorrectPdfPassword": "Incorrect password, please try again",
+  "@incorrectPdfPassword": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "pdfPasswordNotProvided": "This PDF is password-protected. You can still download it.",
+  "@pdfPasswordNotProvided": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "autoSyncEnabled": "Auto-sync enabled",
   "@autoSyncEnabled": {
     "type": "text",
@@ -3384,7 +3408,9 @@
   "technicalDetails": "Technical details: {details}",
   "@technicalDetails": {
     "type": "text",
-    "placeholders_order": ["details"],
+    "placeholders_order": [
+      "details"
+    ],
     "placeholders": {
       "details": {}
     }

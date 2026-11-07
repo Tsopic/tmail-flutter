@@ -335,18 +335,39 @@ class EmailActionReactor with LabelSubMenuMixin {
       },
       showAsBottomSheet: true,
       title: AppLocalizations.of(currentContext!).unsubscribeMail,
-      listTextSpan: [
-        TextSpan(text: AppLocalizations.of(currentContext!).unsubscribeMailDialogMessage),
-        TextSpan(
-          text: ' ${presentationEmail.getSenderName()}',
-          style: ThemeUtils.textStyleBodyBody2(
-            color: AppColor.steelGray400,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const TextSpan(text: ' ?'),
-      ]
+      listTextSpan: _buildUnsubscribeMailDialogMessage(
+        AppLocalizations.of(currentContext!),
+        presentationEmail.getSenderName(),
+      ),
     );
+  }
+
+  /// Lets each language place the sender name and its punctuation,
+  /// while still rendering the sender name in bold.
+  List<TextSpan> _buildUnsubscribeMailDialogMessage(
+    AppLocalizations appLocalizations,
+    String senderName,
+  ) {
+    const senderNameMarker = '\u0000';
+    final senderNameSpan = TextSpan(
+      text: senderName,
+      style: ThemeUtils.textStyleBodyBody2(
+        color: AppColor.steelGray400,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+
+    final parts = appLocalizations
+        .unsubscribeMailDialogMessage(senderNameMarker)
+        .split(senderNameMarker);
+
+    return [
+      TextSpan(text: parts.first),
+      for (final part in parts.skip(1)) ...[
+        senderNameSpan,
+        TextSpan(text: part),
+      ],
+    ];
   }
 
   void archiveMessage(
@@ -593,11 +614,8 @@ class EmailActionReactor with LabelSubMenuMixin {
       final popupMenuWidget = PopupMenuActionGroupWidget(
         actions: popupMenuItemEmailActions,
         submenuController: submenuController,
-        onActionSelected: (action) {
-          if (shouldHandleAction(action.action)) {
-            handleEmailAction(presentationEmail, action.action);
-          }
-        },
+        onActionSelected: (action) =>
+            handleEmailAction(presentationEmail, action.action),
       );
 
       openPopupMenu(
@@ -796,6 +814,8 @@ class EmailActionReactor with LabelSubMenuMixin {
     }
   }
 
+  /// Print callers must pass a non-null [emailLoaded] so this fallback is
+  /// unused. Do not revive it with a non-sanitizing [transformConfiguration].
   Future<EmailLoaded?> _getEmailLoaded(
     Session? session,
     AccountId? accountId,

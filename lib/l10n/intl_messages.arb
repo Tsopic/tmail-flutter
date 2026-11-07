@@ -426,6 +426,26 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "cannotUploadFoldersAsAttachments": "{count,plural, =1{Cannot upload this folder as attachment}other{Cannot upload these folders as attachments}}",
+  "@cannotUploadFoldersAsAttachments": {
+    "type": "text",
+    "placeholders_order": [
+      "count"
+    ],
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "sharedFilesCannotBeRead": "{count,plural, =1{A shared file could not be read and was not added}other{{count} shared files could not be read and were not added}}",
+  "@sharedFilesCannotBeRead": {
+    "type": "text",
+    "placeholders_order": [
+      "count"
+    ],
+    "placeholders": {
+      "count": {}
+    }
+  },
   "attachments_uploaded_successfully": "Attachments uploaded successfully",
   "@attachments_uploaded_successfully": {
     "type": "text",
@@ -664,6 +684,12 @@
   },
   "folderNameCannotContainSpecialCharacters": "Folder name cannot contain special characters",
   "@folderNameCannotContainSpecialCharacters": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "folderNameContainsForbiddenCharacters": "Folder name cannot start with \"#\" nor contain \".\", \"%\", \"*\" or line breaks",
+  "@folderNameContainsForbiddenCharacters": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}
@@ -3638,11 +3664,15 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "unsubscribeMailDialogMessage": "Are you sure you'd like to stop receiving similar messages from",
+  "unsubscribeMailDialogMessage": "Are you sure you'd like to stop receiving similar messages from {senderName}?",
   "@unsubscribeMailDialogMessage": {
     "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
+    "placeholders_order": [
+      "senderName"
+    ],
+    "placeholders": {
+      "senderName": {}
+    }
   },
   "unsubscribedFromThisMailingList": "Unsubscribed from this mailing list",
   "@unsubscribedFromThisMailingList": {
@@ -5426,6 +5456,58 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "attachingFileTitle": "Attaching file",
+  "@attachingFileTitle": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveOversizeDialogMessage": "Your file is larger than {maxSize}. It will be uploaded to Twake Drive and attached as ",
+  "@driveOversizeDialogMessage": {
+    "type": "text",
+    "placeholders_order": [
+      "maxSize"
+    ],
+    "placeholders": {
+      "maxSize": {}
+    }
+  },
+  "driveOversizeDialogMessageEmphasis": "a link",
+  "@driveOversizeDialogMessageEmphasis": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveUploadRowDone": "Done",
+  "@driveUploadRowDone": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveUploadRowFailed": "Failed",
+  "@driveUploadRowFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveUploadRowCancelled": "Canceled",
+  "@driveUploadRowCancelled": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveOversizeUploadFailed": "Some files could not be uploaded to Drive.",
+  "@driveOversizeUploadFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveOversizeUploadBusy": "A Drive upload is already in progress. Try again when it finishes.",
+  "@driveOversizeUploadBusy": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "driveNoValidAttachment": "No valid attachment",
   "@driveNoValidAttachment": {
     "type": "text",
@@ -5800,6 +5882,54 @@
   },
   "deepLinkCannotBeOpened": "This sign-in link isn't from Twake. Please sign in from the app.",
   "@deepLinkCannotBeOpened": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "pdfPasswordRequired": "Password-protected PDF",
+  "@pdfPasswordRequired": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "incorrectPdfPassword": "Incorrect password, please try again",
+  "@incorrectPdfPassword": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "pdfPasswordNotProvided": "This PDF is password-protected. You can still download it.",
+  "@pdfPasswordNotProvided": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkTypeNotAllowed": "This type of link is not allowed!",
+  "@linkTypeNotAllowed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "messageDialogSendEmailContentLoading": "Your message could not be sent because its content is still loading. Please wait and try again.",
+  "@messageDialogSendEmailContentLoading": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "messageDialogSendEmailContentLoadFailed": "Your message could not be sent because its content failed to load. Please close the composer and open the email again.",
+  "@messageDialogSendEmailContentLoadFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "domainActivationPendingTitle": "Your email domain is pending activation",
+  "@domainActivationPendingTitle": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "domainActivationPendingMessage": "You cannot send emails at this time. Contact your administrator if the problem persists.",
+  "@domainActivationPendingMessage": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}

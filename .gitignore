@@ -115,6 +115,7 @@ app.*.symbols
 
 #generated file
 *.g.dart
+!core/test/fixtures/html_emails/html_email_corpus.g.dart
 messages_*.dart
 *.mocks.dart
 integration_test/test_bundle.dart
@@ -126,6 +127,11 @@ tree/
 test_bundle.dart
 playwright-report
 test-results
+ci-logs/
+ftl-results/
 
 # Browser libs downloaded by scripts/fetch-web-vendor.sh
 /web/js/vendor/
+
+# Local security review output (scripts/security-review.sh)
+/.security-review/

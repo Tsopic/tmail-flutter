@@ -41,6 +41,7 @@ import 'package:tmail_ui_user/features/base/mixin/contact_support_mixin.dart';
 import 'package:tmail_ui_user/features/base/mixin/message_dialog_action_manager.dart';
 import 'package:tmail_ui_user/features/base/mixin/own_email_address_mixin.dart';
 import 'package:tmail_ui_user/features/base/reloadable/reloadable_controller.dart';
+import 'package:tmail_ui_user/features/composer/domain/exceptions/forbidden_to_send_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/invalid_recipients_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/set_method_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/extensions/email_request_extension.dart';
@@ -53,9 +54,10 @@ import 'package:tmail_ui_user/features/composer/domain/usecases/get_autocomplete
 import 'package:tmail_ui_user/features/composer/domain/usecases/send_email_interactor.dart';
 import 'package:tmail_ui_user/features/composer/presentation/extensions/email_action_type_extension.dart';
 import 'package:tmail_ui_user/features/composer/presentation/extensions/list_identities_extension.dart';
-import 'package:tmail_ui_user/features/composer/presentation/extensions/shared_media_file_extension.dart';
+import 'package:tmail_ui_user/features/composer/presentation/extensions/list_shared_media_file_extension.dart';
 import 'package:tmail_ui_user/features/composer/presentation/manager/composer_manager.dart';
 import 'package:tmail_ui_user/features/composer/presentation/model/compose_action_mode.dart';
+import 'package:tmail_ui_user/features/composer/presentation/widgets/domain_activation_pending_dialog.dart';
 import 'package:tmail_ui_user/features/contact/presentation/model/contact_arguments.dart';
 import 'package:tmail_ui_user/features/destination_picker/presentation/model/destination_picker_arguments.dart';
 import 'package:tmail_ui_user/features/download/presentation/controllers/download_controller.dart';
@@ -147,6 +149,7 @@ import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_preferences_setting_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_preview_attachment_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_reactive_obx_variable_extension.dart';
+import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_receiving_file_sharing_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_save_email_as_draft_extension.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/presentation/extensions/handle_store_email_sort_order_extension.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/mixin/handle_team_mailbox_mixin.dart';
@@ -737,11 +740,9 @@ class MailboxDashBoardController extends ReloadableController
   }
 
   @visibleForTesting
-  void handleReceivingFileSharing(List<SharedMediaFile> listSharedMediaFile) {
-    log(
-      'MailboxDashBoardController::handleReceivingFileSharing: LIST_LENGTH = ${listSharedMediaFile.length}',
-    );
-    if (listSharedMediaFile.isEmpty) return;
+  void handleReceivingFileSharing(List<SharedMediaFile> sharedMediaFiles) {
+    log('MailboxDashBoardController::handleReceivingFileSharing: LIST_LENGTH = ${sharedMediaFiles.length}');
+    if (sharedMediaFiles.isEmpty) return;
 
     // Consume the share as soon as it is taken for processing:
     // pendingSharedFileInfo is a BehaviorSubject that replays its latest
@@ -750,77 +751,32 @@ class MailboxDashBoardController extends ReloadableController
     // the guard above ignores, so this cannot recurse.
     _emailReceiveManager.clearPendingFileInfo();
 
-    for (var file in listSharedMediaFile) {
-      log(
-        'MailboxDashBoardController::handleReceivingFileSharing:SharedMediaFile = ${file.toMap()}',
-      );
+    for (var file in sharedMediaFiles) {
+      log('MailboxDashBoardController::handleReceivingFileSharing:SharedMediaFile = ${file.toMap()}');
     }
+
+    final unreadableCount = sharedMediaFiles.unreadableCount;
+    if (unreadableCount > 0) _showUnreadableSharedFilesToast(unreadableCount);
+
+    final listSharedMediaFile = sharedMediaFiles.readableFiles;
+    if (listSharedMediaFile.isEmpty) return;
 
     if (listSharedMediaFile.length == 1) {
       final sharedMediaFile = listSharedMediaFile.first;
       if (sharedMediaFile.path.trim().isEmpty) return;
 
-      switch (sharedMediaFile.type) {
-        case SharedMediaType.image:
-        case SharedMediaType.video:
-        case SharedMediaType.file:
-          openComposer(ComposerArguments.fromFileShared([sharedMediaFile]));
-          break;
-        case SharedMediaType.text:
-          // Android delivers both a shared sentence (EXTRA_TEXT) and a shared
-          // text-format file such as .vcf/.ics/.csv (EXTRA_STREAM) with a
-          // text/* mime type and SharedMediaType.text, so the mime type alone
-          // cannot tell them apart. Only a file share leaves a real file on
-          // disk behind `path` — literal text arrives as the characters
-          // themselves — so route files to attachments and literal text to
-          // the email body.
-          if (sharedMediaFile.isFileShare) {
-            openComposer(ComposerArguments.fromFileShared([sharedMediaFile]));
-          } else {
-            openComposer(
-              ComposerArguments.fromContentShared(sharedMediaFile.path.trim()),
-            );
-          }
-          break;
-        case SharedMediaType.url:
-          if (sharedMediaFile.path.startsWith(RouteUtils.mailtoPrefix)) {
-            final navigationRouter =
-                RouteUtils.generateNavigationRouterFromMailtoLink(
-                  sharedMediaFile.path,
-                );
-            openComposer(
-              ComposerArguments.fromMailtoUri(
-                listEmailAddress: navigationRouter.listEmailAddress,
-                subject: navigationRouter.subject,
-                body: navigationRouter.body,
-              ),
-            );
-          } else if (PlatformInfo.isIOS) {
-            // On iOS a url-type event can only originate from the share
-            // extension (the plugin ignores every other URL), so a non-mailto
-            // link share goes into the email body. On Android, shared links
-            // arrive as text/plain and never reach here — its url-type events
-            // are deep-link VIEW intents (e.g. twakemail.mobile://openApp)
-            // owned by DeepLinksManager and must stay ignored.
-            openComposer(
-              ComposerArguments.fromContentShared(sharedMediaFile.path.trim()),
-            );
-          }
-          break;
-        case SharedMediaType.mailto:
-          if (EmailUtils.isEmailAddressValid(sharedMediaFile.path)) {
-            openComposer(
-              ComposerArguments.fromEmailAddress(
-                EmailAddress(null, sharedMediaFile.path),
-              ),
-            );
-          }
-          break;
-      }
+      openComposerFromSingleShare(sharedMediaFile);
       return;
     }
 
     openComposer(ComposerArguments.fromFileShared(listSharedMediaFile));
+  }
+
+  void _showUnreadableSharedFilesToast(int count) {
+    if (currentOverlayContext == null || currentContext == null) return;
+    appToast.showToastErrorMessage(
+      currentOverlayContext!,
+      AppLocalizations.of(currentContext!).sharedFilesCannotBeRead(count));
   }
 
   void _registerDeepLinks() {
@@ -2946,17 +2902,19 @@ class MailboxDashBoardController extends ReloadableController
       storeSendingEmailInCaseOfSendingFailureInMobile(failure);
     }
     final exception = failure.exception;
-    if (exception is InvalidRecipientsException) {
-      deleteEmailPermanentlyInBackground(exception.createdEmailId);
-    }
+    deleteEmailPermanentlyInBackground(switch (exception) {
+      InvalidRecipientsException() => exception.createdEmailId,
+      ForbiddenToSendException() => exception.createdEmailId,
+      _ => null,
+    });
     if (currentContext == null) {
       clearState();
       return;
     }
-    logWarning(
-      'MailboxDashBoardController::_handleSendEmailFailure():exception: $exception',
-    );
-    if (exception is InvalidRecipientsException) {
+    logWarning('MailboxDashBoardController::_handleSendEmailFailure():exception: $exception');
+    if (exception is ForbiddenToSendException) {
+      showDomainActivationPendingDialog();
+    } else if (exception is InvalidRecipientsException) {
       _showToastSendMessageFailure(
         AppLocalizations.of(
           currentContext!,

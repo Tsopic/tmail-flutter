@@ -222,6 +222,7 @@ class MailboxDashBoardView extends BaseMailboxDashBoardView {
                                                 '';
                                           }
                                           return ProfileSettingIcon(
+                                            key: const ValueKey(UiKeys.workplaceSettingsButton),
                                             ownEmailAddress: accountDisplayName,
                                             settingActionTypes:
                                                 ProfileSettingActionType.values,

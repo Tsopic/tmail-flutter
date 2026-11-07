@@ -29,7 +29,7 @@ workspace:
 # In iOS, build-name is used as CFBundleShortVersionString while build-number used as CFBundleVersion.
 # Read more about iOS versioning at
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-version: 0.39.3
+version: 0.41.0
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -98,7 +98,7 @@ dependencies:
   receive_sharing_intent:
     git:
       url: https://github.com/linagora/receive_sharing_intent.git
-      ref: main
+      ref: 871522932827b5716d7906551cf5000a61106584
 
   flutter_appauth_web:
     git:
@@ -129,6 +129,8 @@ dependencies:
 
   dio: 5.9.0
 
+  web: 1.1.1
+
   equatable: 2.0.8
 
   shared_preferences: 2.5.4
@@ -153,11 +155,11 @@ dependencies:
 
   path_provider: 2.1.5
 
-  device_info_plus: 12.3.0
+  device_info_plus: 13.2.0
 
   permission_handler: 12.0.1
 
-  share_plus: 12.0.1
+  share_plus: 13.3.0
 
   hive_ce: 2.19.0
 
@@ -237,13 +239,17 @@ dependencies:
 
   flutter_secure_storage: 10.0.0
 
-  mime: 1.0.4
+  mime: 2.0.0
 
   desktop_drop: 0.7.0
 
+  cross_file: ^0.3.5
+
   future_loading_dialog: 0.3.0
 
-  file_picker: 10.3.8
+  file_picker: 13.1.0
+
+  file_picker_web: ^4.0.0
 
   app_settings: 7.0.0
 
@@ -265,6 +271,8 @@ dependencies:
     git:
       url: https://github.com/linagora/twake-previewer-flutter.git
       ref: main
+
+  pdfrx: 2.1.5
 
   lottie_native: 0.1.4
 
@@ -309,8 +317,6 @@ dev_dependencies:
   patrol_log: 0.8.0
 
   marionette_flutter: 0.6.0
-
-  web: ^1.1.0
 
   patrol_finders: 3.2.0
 

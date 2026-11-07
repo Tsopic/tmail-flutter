@@ -250,7 +250,6 @@ class LabelController extends BaseController with LabelContextMenuMixin {
   @override
   void handleFailureViewState(Failure failure) {
     if (failure is GetAllLabelFailure) {
-      labels.value = [];
       setLabelLoaded();
     } else if (failure is GetLabelSettingStateFailure) {
       _clearLabelData();

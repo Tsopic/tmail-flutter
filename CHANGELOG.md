@@ -1,3 +1,85 @@
+## [0.41.0] - 2026-11-02
+### Added
+- #4849 Hide sign out in the profile menu inside Twake Workplace
+
+### Fixed
+- #4980 Fix Android composer keyboard input
+- #4982 Keep the cc and bcc of a mailto link on Android
+- #4983 Keep label bindings alive after a share-started composer closes
+- #4984 Skip shared files the app cannot read
+- #4858 Always keep space for a new recipient after the chips
+- List each thread once when a folder loads more with thread view on
+- Sanitize composer reply, forward, mailto and pasted content
+- Fix XSS through composer embed code
+
+### Changed
+- Translate vi, ru, fr, mn
+
+## [0.40.4] - 2026-11-02
+### Fixed
+- Soft-fail missing linagora-ecosystem without a connection toast
+
+## [0.40.3] - 2026-10-29
+### Changed
+- #5071 Restrict web languages with the ALLOWED_LANGUAGES option
+
+## [0.40.2] - 2026-10-19
+### Added
+- #4623 Pin the "no attending" row when nobody can be answered or mailed
+- #4892 Allow picking team mailbox folders as the advanced search scope
+- #4882 Tab and Shift+Tab nest and un-nest list items in the web composer
+- #4942 Preselect the user's own address when creating a new identity
+
+### Fixed
+- #4874 Drop scheme-added hrefs that SanitizeUrl fails to decode
+- #4882 Skip Tab list handling on the first list item and inside table cells
+- #4896 Refuse to send while the email body is loading or failed to load
+- #4898 Go back to Inbox when the open label is deleted; keep labels on fetch failure
+- #4942 Sort identities with null sortOrder after any defined sortOrder
+- #4953 Block sending and show a dialog while the email domain is pending activation
+
+### Changed
+- Translate vi, ru, fr, mn
+
+## [0.40.1] - 2026-10-14
+### Fixed
+- Fix Android release build failing in R8 after the file_picker 13 upgrade
+
+## [0.40.0] - 2026-10-13
+### Added
+- #4827 Upload oversize attachments to Drive and attach them as a link
+- #4877 Prompt for a password when previewing an encrypted PDF
+- #4897 Open mailto links from the PDF viewer in the composer
+- #4871 Hide Outbox, Drafts and Templates from rule move targets
+
+### Fixed
+- #4862 No draft-save prompt when closing an unmodified composer
+- #4864 Localize the reply quote header date and time
+- #4867 Reject "." in folder names with a clear message
+- #4873 Scope email CSS in the EML preview to the email body
+- #4878 Keep the full file extension in middle-ellipsis attachment chips
+- #4883 Show the color picker value as #RRGGBB
+- #4886 Rule edit button reads "Save"; fix French rule update toast
+- #4888 Localize team mailbox system folder names
+- #4889 Neutralize the team mailbox root folder
+- #4894 Open the label picker on "Label as" click in the reading pane
+
+### Changed
+- Translate vi, ru, fr, mn
+- Place sender name naturally in the unsubscribe dialog translations
+
+## [0.39.4] - 2026-10-08
+### Fixed
+- Mobile can select another label in email view
+
+## [0.39.3] - 2026-10-07
+### Fixed
+- Send the Sentry log when user opts in to error reporting
+
+## [0.39.2] - 2026-10-07
+### Added 
+- Log when user toggle Sentry
+
 ## [0.39.1] - 2026-10-06
 ### Added
 - #4809 Add Sentry error reporting preference and consent handling
