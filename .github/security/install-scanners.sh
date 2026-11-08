@@ -5,7 +5,10 @@ set -euo pipefail
 sec=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$BIN" "$VENVS"
 cd "$RUNNER_TEMP"
-get() { curl -sSfLO "$1"; }
+get() {
+  curl --retry 4 --retry-delay 2 --retry-max-time 300 \
+    --connect-timeout 20 --max-time 120 -sSfLO "$1"
+}
 
 get https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
 echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks_8.30.1_linux_x64.tar.gz" | sha256sum -c -

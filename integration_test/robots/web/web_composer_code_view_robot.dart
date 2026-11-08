@@ -43,6 +43,18 @@ class WebComposerCodeViewRobot extends CoreRobot
 
   @override
   Future<void> openEmbedCode() async {
+    // ComposerView can be visible before the editor iframe has loaded. Its
+    // onInit callback marks the body ready; an earlier code-view request can
+    // be lost when the iframe navigates to its editor document.
+    await waitForCondition(
+      () {
+        final composer = findWebComposerController($);
+        return composer != null &&
+            !composer.isEmailBodyNotReady &&
+            _editorDocument() != null;
+      },
+      reason: 'Composer editor did not initialize before opening Embed code',
+    );
     _diagnostics.startObserving();
     try {
       await _toggleEmbedCode(expectCodeViewEnabled: true);
