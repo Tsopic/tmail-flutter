@@ -37,8 +37,8 @@ RUN --mount=type=secret,id=sentry_auth_token \
     --dart-define=SENTRY_DIST=$GITHUB_SHA && \
     SENTRY_AUTH_TOKEN="$sentry_auth_token" ./scripts/run-sentry.sh
 
-FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
-RUN apk add gzip
+FROM nginx:alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
+RUN apk upgrade --no-cache && apk add --no-cache gzip
 COPY --from=build-env /app/server/nginx.conf /etc/nginx
 COPY --from=build-env /app/server/csp-headers.conf.template /etc/nginx/csp-headers.conf.template
 COPY --from=build-env --chmod=755 /app/server/docker-entrypoint.d/ /docker-entrypoint.d/
