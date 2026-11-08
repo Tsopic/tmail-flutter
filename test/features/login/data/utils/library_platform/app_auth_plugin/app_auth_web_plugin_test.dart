@@ -1,4 +1,4 @@
-@TestOn('browser')
+@TestOn('chrome')
 library;
 
 import 'package:web/web.dart' as web;
