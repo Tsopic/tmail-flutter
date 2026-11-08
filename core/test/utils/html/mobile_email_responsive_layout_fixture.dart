@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:js_interop';
 
-import 'package:core/utils/html/html_utils.dart';
-import 'package:core/utils/html/mobile_email_responsive_layout_script.dart';
+import 'package:core/presentation/views/html_viewer/html_content_viewer_configuration.dart';
+import 'package:core/presentation/views/html_viewer/html_viewer_document_builder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:web/web.dart' as web;
 
-const contentSizeChangedEventJSChannelName = 'MobileEmailContentSizeChanged';
 const defaultViewportWidth = 360;
 
 typedef EmailViewportVerification = Future<void> Function(EmailViewport viewport);
@@ -23,30 +22,34 @@ class EmailFixture {
   /// `enableQuoteToggle` is on, along with the stylesheet and script driving
   /// it, so the collapsed state matches what the app ships.
   final bool quoteToggle;
+  final bool includeMobileScript;
 
   const EmailFixture(
     this.html, {
     this.direction,
     this.viewportWidth = defaultViewportWidth,
     this.quoteToggle = false,
+    this.includeMobileScript = true,
   });
 
-  String get _content => quoteToggle ? HtmlUtils.addQuoteToggle(html) : html;
-
-  String? get _styleCSS => quoteToggle ? HtmlUtils.quoteToggleStyle : null;
-
-  String get _javaScripts =>
-      (quoteToggle ? HtmlUtils.quoteToggleScript : '') +
-      MobileEmailResponsiveLayoutScript.generate(
-        contentSizeChangedEventJSChannelName:
-            contentSizeChangedEventJSChannelName,
-      );
-
-  String buildDocument() => HtmlUtils.generateHtmlDocument(
-        content: _content,
-        direction: direction,
-        styleCSS: _styleCSS,
-        javaScripts: _javaScripts,
+  /// The production native viewer document for this email, with the viewer's
+  /// default typography and margin (the display harness uses the Email View
+  /// options instead) and a viewport of exactly [viewportWidth].
+  String buildDocument() => HtmlViewerDocumentBuilder.buildNativeDocument(
+        configuration: HtmlContentViewerConfiguration(
+          content: HtmlContentViewerContent(html: html, direction: direction),
+          layout: HtmlContentViewerLayout(
+            viewport: HtmlContentViewerViewport(
+              constraints: BoxConstraints.tightFor(width: viewportWidth.toDouble()),
+            ),
+          ),
+          behavior: HtmlContentViewerBehavior(features: {
+            if (quoteToggle) HtmlContentViewerFeature.quoteToggle,
+            if (includeMobileScript) HtmlContentViewerFeature.mobileResponsiveLayout,
+          }),
+        ),
+        platform: HtmlContentViewerPlatform.mobile,
+        isAndroid: false,
       );
 }
 
@@ -113,6 +116,13 @@ class EmailViewport {
 
   web.Element element(String selector) =>
       _frame.contentDocument!.querySelector(selector)!;
+
+  List<web.Element> get images {
+    final nodes = _frame.contentDocument!.querySelectorAll('img');
+    return [
+      for (var i = 0; i < nodes.length; i++) nodes.item(i)! as web.Element,
+    ];
+  }
 
   bool get overflowsHorizontally =>
       _content.scrollWidth > _content.clientWidth + 1;

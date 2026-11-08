@@ -520,6 +520,7 @@ class _TypeAheadFieldQuickSearchState<T, P, R>
         decoration: widget.suggestionsBoxDecoration,
         debounceDuration: widget.debounceDuration,
         controller: _effectiveController,
+        focusNode: _effectiveFocusNode,
         loadingBuilder: widget.loadingBuilder,
         scrollController: widget.scrollController,
         noItemsFoundBuilder: widget.noItemsFoundBuilder,

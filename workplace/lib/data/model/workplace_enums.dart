@@ -12,7 +12,25 @@ enum WorkplacePermission {
 
 enum WorkplaceDataRequestType {
   @JsonValue('io.cozy.intents')
-  intents;
+  intents,
+  @JsonValue('io.cozy.permissions')
+  permissions;
+}
+
+/// `Type=` on the upload route.
+enum WorkplaceUploadType {
+  file;
+
+  String get value => name;
+}
+
+/// Automatic folders the stack finds-or-creates on upload.
+enum WorkplaceMagicFolder {
+  mail('io.cozy.apps/mail');
+
+  const WorkplaceMagicFolder(this.value);
+
+  final String value;
 }
 
 enum WorkplaceDocType {

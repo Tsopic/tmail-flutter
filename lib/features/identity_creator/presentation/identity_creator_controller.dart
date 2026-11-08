@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
+import 'package:core/presentation/utils/html_transformer/editor_html_sanitizer.dart';
 import 'package:core/presentation/constants/constants_ui.dart';
 import 'package:core/presentation/extensions/list_nullable_extensions.dart';
 import 'package:core/presentation/state/failure.dart';
@@ -44,6 +45,7 @@ import 'package:tmail_ui_user/features/identity_creator/domain/model/identity_ca
 import 'package:tmail_ui_user/features/identity_creator/domain/usecase/save_identity_cache_on_web_interactor.dart';
 import 'package:tmail_ui_user/features/composer/presentation/mixin/drag_drog_file_mixin.dart';
 import 'package:tmail_ui_user/features/identity_creator/presentation/model/identity_creator_arguments.dart';
+import 'package:core/presentation/utils/html_transformer/stored_editor_html.dart';
 import 'package:tmail_ui_user/features/identity_creator/presentation/utils/identity_creator_constants.dart';
 import 'package:tmail_ui_user/features/mailbox_creator/domain/model/verification/email_address_validator.dart';
 import 'package:tmail_ui_user/features/mailbox_creator/domain/model/verification/empty_name_validator.dart';
@@ -63,10 +65,10 @@ import 'package:tmail_ui_user/features/public_asset/domain/model/public_assets_i
 import 'package:tmail_ui_user/features/public_asset/presentation/model/public_asset_arguments.dart';
 import 'package:tmail_ui_user/features/public_asset/presentation/public_asset_bindings.dart';
 import 'package:tmail_ui_user/features/public_asset/presentation/public_asset_controller.dart';
-import 'package:tmail_ui_user/features/upload/domain/extensions/file_info_extension.dart';
 import 'package:tmail_ui_user/features/upload/domain/extensions/list_file_info_extension.dart';
 import 'package:tmail_ui_user/features/upload/domain/extensions/list_file_upload_extension.dart';
-import 'package:tmail_ui_user/features/upload/domain/extensions/list_platform_file_extensions.dart';
+import 'package:tmail_ui_user/features/upload/domain/extensions/platform_file_extension.dart';
+import 'package:tmail_ui_user/features/upload/domain/usecases/web_pick_options.dart';
 import 'package:tmail_ui_user/main/bindings/network/binding_tag.dart';
 import 'package:tmail_ui_user/main/error/capability_validator.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
@@ -110,6 +112,9 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
 
   String? _nameIdentity;
   String? _contentHtmlEditor;
+
+  /// Set when editing an identity that has a signature. See [StoredEditorHtml].
+  StoredEditorHtml? _storedSignature;
   AccountId? accountId;
   Session? session;
   Identity? identity;
@@ -137,7 +142,13 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
     if (_contentHtmlEditor != null) {
       return _contentHtmlEditor ?? '';
     } else {
-      return arguments?.identity?.signatureAsString ?? '';
+      // The web editor reads this as its initialText on the first build, before
+      // onReady sanitizes the stored copy. The signature may come from another
+      // client or provisioning, so sanitize the fallback too: the editor iframe
+      // is same origin and evaluates inline handlers and scripts.
+      return EditorHtmlSanitizer.sanitize(
+        arguments?.identity?.signatureAsString ?? '',
+      );
     }
   }
 
@@ -319,9 +330,13 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
     errorNameIdentity.value = '';
 
     if (identity?.signatureAsString.isNotEmpty == true) {
-      updateContentHtmlEditor(arguments?.identity?.signatureAsString ?? '');
+      // The stored signature may come from another client or from
+      // provisioning: sanitize it before the editor renders it.
+      final storedSignature = StoredEditorHtml(arguments?.identity?.signatureAsString ?? '');
+      _storedSignature = storedSignature;
+      updateContentHtmlEditor(storedSignature.sanitized);
       if (PlatformInfo.isWeb) {
-        richTextWebController?.editorController.setText(arguments?.identity?.signatureAsString ?? '');
+        richTextWebController?.editorController.setText(storedSignature.sanitized);
       }
     }
     _initPublicAssetController();
@@ -423,7 +438,10 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
       emailOfIdentity.value = listEmailAddressDefault
         .firstWhereOrNull((emailAddress) => emailAddress.email ==  identity!.email);
     } else {
-      emailOfIdentity.value = listEmailAddressDefault.firstOrNull;
+      final ownEmailAddress = arguments?.ownerEmailAddress;
+      emailOfIdentity.value = listEmailAddressDefault
+          .firstWhereOrNull((emailAddress) => emailAddress.email == ownEmailAddress)
+        ?? listEmailAddressDefault.firstOrNull;
     }
   }
 
@@ -522,9 +540,14 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
     Identity identity,
     PublicAssetsInIdentityArguments publicAssetsInIdentityArguments
   })> _generateIdentityAndPublicAssetArguments({bool forCache = false}) async {
-    final signatureHtmlText = PlatformInfo.isWeb
-        ? contentHtmlEditor
-        : await _getSignatureHtmlText();
+    // The signature is inserted into every composed email: store it clean.
+    // An untouched stored signature (e.g. only the name was edited) is kept
+    // as is, so saving does not strip formatting the user never changed;
+    // the composer and the viewers sanitize it anyway.
+    final editorSignature =
+        PlatformInfo.isWeb ? contentHtmlEditor : await _getSignatureHtmlText();
+    final signatureHtmlText = _storedSignature?.resolveForSave(editorSignature)
+        ?? EditorHtmlSanitizer.sanitize(editorSignature);
     final bccAddress = bccOfIdentity.value != null && bccOfIdentity.value != noneEmailAddress
         ? {bccOfIdentity.value!}
         : <EmailAddress>{};
@@ -685,15 +708,22 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
   void pickImage(BuildContext context) async {
     clearFocusEditor(context);
 
-    final filePickerResult = await FilePicker.platform.pickFiles(
+    final pickedFile = await FilePicker.pickFile(
       type: FileType.image,
-      withData: PlatformInfo.isWeb
+      webOptions: lazyWebPickOptions(),
     );
+    // toFileInfo() can throw FileSizeUnavailableException; treat that the
+    // same as no file picked instead of crashing this unguarded call site.
+    FileInfo? fileInfo;
+    try {
+      fileInfo = await pickedFile?.toFileInfo();
+    } catch (exception) {
+      logWarning("IdentityCreatorController::pickImage: toFileInfo failed: $exception");
+    }
 
     if (context.mounted) {
-      if (filePickerResult?.files.isNotEmpty == true) {
-        final platformFile = filePickerResult!.files.first;
-        _insertInlineImage(context, platformFile, _getMaxWidthInlineImage(context).toInt());
+      if (fileInfo != null && fileInfo is! FilePlaceholderInfo) {
+        _insertInlineImage(context, fileInfo, _getMaxWidthInlineImage(context).toInt());
       } else {
         appToast.showToastErrorMessage(
           context,
@@ -711,19 +741,19 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
 
   Future<void> _insertInlineImage(
     BuildContext context,
-    PlatformFile platformFile,
+    FileInfo fileInfo,
     int maxWidth,
-    {PlatformFile? compressedFile}
+    {FileInfo? compressedFile}
   ) async {
-    final PlatformFile? file;
+    final FileInfo? file;
     if (compressedFile != null) {
       file = compressedFile;
     } else {
-      file = await _compressFileAction(context, originalFile: platformFile, maxWidth: maxWidth);
+      file = await _compressFileAction(context, originalFile: fileInfo, maxWidth: maxWidth);
     }
     if (file == null) return;
 
-    if (_isExceedMaxUploadSize(file.size)) {
+    if (_isExceedMaxUploadSize(file.fileSize)) {
       if (context.mounted) {
         appToast.showToastErrorMessage(
           context,
@@ -738,12 +768,12 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
       publicAssetController!.uploadFileToBlob(file);
     } else {
       if (PlatformInfo.isWeb) {
-        richTextWebController?.insertImageAsBase64(platformFile: file, maxWidth: maxWidth);
+        await richTextWebController?.insertImageAsBase64(fileInfo: file, maxWidth: maxWidth);
       } else if (PlatformInfo.isMobile) {
-        richTextMobileTabletController?.insertImageData(platformFile: file, maxWidth: maxWidth);
-        if (file.path != null) {
+        await richTextMobileTabletController?.insertImageData(fileInfo: file, maxWidth: maxWidth);
+        if (file is FilePathInfo) {
           getBinding<FileUtils>()?.deleteCompressedFileOnMobile(
-            file.path!,
+            file.filePath,
             pathContains: IdentityCreatorConstants.prefixCompressedInlineImageTemp);
         }
       } else {
@@ -752,10 +782,10 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
     }
   }
 
-  Future<PlatformFile?> _compressFileAction(
+  Future<FileInfo?> _compressFileAction(
     BuildContext context,
     {
-      required PlatformFile originalFile,
+      required FileInfo originalFile,
       required int maxWidth
     }
   ) async {
@@ -776,24 +806,14 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
     }
   }
 
-  Future<PlatformFile> _compressImage(PlatformFile originalFile, int maxWidthCompressedImage) async {
-    if (originalFile.size <= maxSizeUploadByBytes) {
+  Future<FileInfo> _compressImage(FileInfo originalFile, int maxWidthCompressedImage) async {
+    if (originalFile.fileSize <= maxSizeUploadByBytes) {
       return originalFile;
     }
-    
-    final Uint8List? fileBytes;
 
-    if (PlatformInfo.isWeb) {
-      fileBytes = originalFile.bytes;
-    } else if (originalFile.path == null) {
-      log('IdentityCreatorController::_compressImage: path is null');
-      return originalFile;
-    } else {
-      fileBytes = await File(originalFile.path!).readAsBytes();
-    }
-
-    if (fileBytes == null || fileBytes.isEmpty) {
-      log('IdentityCreatorController::_compressImage: fileBytes is null or empty');
+    final fileBytes = await originalFile.readBytes();
+    if (fileBytes.isEmpty) {
+      log('IdentityCreatorController::_compressImage: fileBytes is empty');
       return originalFile;
     }
 
@@ -805,24 +825,24 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
     );
     log('IdentityCreatorController::_compressImage: AFTER_COMPRESS: bytesData: ${compressedBytes.lengthInBytes}');
 
-    final PlatformFile compressedFile;
+    final FileInfo compressedFile;
 
     if (PlatformInfo.isWeb) {
-      compressedFile = PlatformFile(
-        name: originalFile.name,
-        size: compressedBytes.lengthInBytes,
+      compressedFile = FileBytesInfo(
+        fileName: originalFile.fileName,
+        fileSize: compressedBytes.lengthInBytes,
         bytes: compressedBytes,
       );
     } else {
-      final compressedFilePath = await _saveCompressedFileOnMobile(compressedBytes, originalFile.name);
-      compressedFile = PlatformFile(
-        name: originalFile.name,
-        size: compressedBytes.lengthInBytes,
-        path: compressedFilePath,
+      final compressedFilePath = await _saveCompressedFileOnMobile(compressedBytes, originalFile.fileName);
+      compressedFile = FilePathInfo(
+        fileName: originalFile.fileName,
+        fileSize: compressedBytes.lengthInBytes,
+        filePath: compressedFilePath,
       );
     }
 
-    log('IdentityCreatorController::_compressImage: compressedSize: ${compressedFile.size}');
+    log('IdentityCreatorController::_compressImage: compressedSize: ${compressedFile.fileSize}');
     return compressedFile;
   }
 
@@ -901,7 +921,7 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
   }) async {
     clearFocusEditor(context);
 
-    final listFileInfo = await onDragDone(context: context, details: details);
+    final listFileInfo = (await onDragDone(context: context, details: details)).files;
     if (!context.mounted) return;
     await _uploadMultipleFilesToPublicAsset(
       context,
@@ -928,11 +948,11 @@ class IdentityCreatorController extends BaseController with DragDropFileMixin im
       final listCompressedImages = await Future.wait(
         listImages.map((fileInfo) => _compressFileAction(
           context,
-          originalFile: fileInfo.toPlatformFile(),
+          originalFile: fileInfo,
           maxWidth: maxWidth.toInt()))
-      ).then((listPlatformFiles) => listPlatformFiles.nonNulls.toList());
+      ).then((listFileInfo) => listFileInfo.nonNulls.toList());
 
-      if (_isExceedMaxUploadSize(listCompressedImages.totalFilesSize)) {
+      if (_isExceedMaxUploadSize(listCompressedImages.totalSize.toInt())) {
         if (context.mounted) {
           appToast.showToastErrorMessage(
             context,

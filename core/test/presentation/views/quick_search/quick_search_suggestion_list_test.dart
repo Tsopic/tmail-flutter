@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  _currentResultTests();
   group('QuickSearchSuggestionList dispose lifecycle', () {
     // Regression tests for Sentry-373586:
     // AnimationController.stop crash when widget is disposed while an async
@@ -161,5 +162,213 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  });
+}
+
+Future<void> _mountSearch(
+  WidgetTester tester,
+  TextEditingController controller,
+  Future<List<String>> Function(String) search, {
+  Future<List<String>> Function(String)? recent,
+  FocusNode? focusNode,
+  int minChars = 0,
+}) async {
+  late QuickSearchSuggestionsBox box;
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Builder(
+        builder: (context) {
+          box = QuickSearchSuggestionsBox(
+            context,
+            AxisDirection.down,
+            false,
+            false,
+          );
+          return const SizedBox();
+        },
+      ),
+    ),
+  );
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(
+        body: Focus(
+          focusNode: focusNode,
+          autofocus: focusNode != null,
+          child: QuickSearchSuggestionList<String, String, String>(
+            controller: controller,
+            focusNode: focusNode,
+            suggestionsBox: box,
+            suggestionsCallback: search,
+            fetchRecentActionCallback: recent,
+            itemBuilder: (_, value) => Text(value),
+            itemRecentBuilder: (_, value) => Text(value),
+            getImmediateSuggestions: true,
+            minCharsForSuggestions: minChars,
+            debounceDuration: const Duration(milliseconds: 30),
+            animationDuration: Duration.zero,
+            animationStart: 1,
+            decoration: const QuickSearchSuggestionsBoxDecoration(),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pump();
+}
+
+void _currentResultTests() {
+  testWidgets(
+    'new query runs while old request is pending; late old result is ignored',
+    (tester) async {
+      final controller = TextEditingController(text: 'old');
+      final old = Completer<List<String>>();
+      final latest = Completer<List<String>>();
+      final calls = <String>[];
+      await _mountSearch(tester, controller, (query) {
+        calls.add(query);
+        return query == 'old' ? old.future : latest.future;
+      });
+      controller.text = 'latest';
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(calls, ['old', 'latest']);
+      latest.complete(['latest result']);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('latest result'), findsOneWidget);
+      old.complete(['old result']);
+      await tester.pump();
+      expect(find.text('old result'), findsNothing);
+      expect(find.text('latest result'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
+    'edit invalidates old response before debounce and starts latest query',
+    (tester) async {
+      final controller = TextEditingController(text: 'old');
+      final old = Completer<List<String>>();
+      final calls = <String>[];
+      await _mountSearch(tester, controller, (query) {
+        calls.add(query);
+        return query == 'old' ? old.future : Future.value(['new result']);
+      });
+      controller.text = 'new';
+      old.complete(['stale result']);
+      await tester.pump();
+      expect(find.text('stale result'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.pump();
+      expect(calls, ['old', 'new']);
+      expect(find.text('new result'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
+    'returning to the same text does not revive an earlier generation',
+    (tester) async {
+      final controller = TextEditingController(text: 'a');
+      final old = Completer<List<String>>();
+      final latest = Completer<List<String>>();
+      var count = 0;
+      await _mountSearch(
+        tester,
+        controller,
+        (_) => ++count == 1 ? old.future : latest.future,
+      );
+      controller.text = 'b';
+      controller.text = 'a';
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(count, 2);
+      latest.complete(['current a']);
+      await tester.pump();
+      old.complete(['old a']);
+      await tester.pump();
+      expect(find.text('current a'), findsOneWidget);
+      expect(find.text('old a'), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      controller.dispose();
+    },
+  );
+
+  testWidgets('late recent fallback cannot replace current email suggestions', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'old');
+    final recent = Completer<List<String>>();
+    await _mountSearch(
+      tester,
+      controller,
+      (query) async => query == 'old' ? [] : ['new result'],
+      recent: (_) => recent.future,
+    );
+    controller.text = 'new';
+    await tester.pump(const Duration(milliseconds: 40));
+    await tester.pump();
+    recent.complete(['old recent']);
+    await tester.pump();
+    expect(find.text('new result'), findsOneWidget);
+    expect(find.text('old recent'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+  });
+
+  testWidgets('blur cancels in-flight callbacks before recent fallback', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'first');
+    final focus = FocusNode();
+    final pending = Completer<List<String>>();
+    var searches = 0;
+    var recentCalls = 0;
+    await _mountSearch(
+      tester,
+      controller,
+      (_) {
+        searches++;
+        return pending.future;
+      },
+      recent: (_) async {
+        recentCalls++;
+        return ['stale recent'];
+      },
+      focusNode: focus,
+    );
+    expect(searches, 1);
+    focus.unfocus();
+    await tester.pump();
+    pending.complete([]);
+    await tester.pump();
+    expect(recentCalls, 0);
+    expect(find.text('stale recent'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+    focus.dispose();
+  });
+
+  testWidgets('submit blur cancels pending debounce without another search', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'first');
+    final focus = FocusNode();
+    final calls = <String>[];
+    await _mountSearch(tester, controller, (query) async {
+      calls.add(query);
+      return ['result'];
+    }, focusNode: focus);
+    expect(focus.hasFocus, isTrue);
+    expect(calls, ['first']);
+    controller.text = 'submit';
+    focus.unfocus();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(calls, ['first']);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+    focus.dispose();
   });
 }

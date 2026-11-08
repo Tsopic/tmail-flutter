@@ -1,3 +1,11 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:model/account/authentication_type.dart';
+import 'package:tmail_ui_user/main/deep_links/deep_link_callback_action_define.dart';
+import 'package:tmail_ui_user/main/deep_links/deep_link_data.dart';
+import 'package:tmail_ui_user/main/deep_links/deep_links_manager.dart';
+import 'package:tmail_ui_user/main/deep_links/open_app_deep_link_data.dart';
 import 'dart:io';
 
 import 'package:core/data/network/config/dynamic_url_interceptors.dart';
@@ -7,6 +15,7 @@ import 'package:core/presentation/utils/responsive_utils.dart';
 import 'package:core/utils/sentry/sentry_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' hide State;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
@@ -18,10 +27,12 @@ import 'package:jmap_dart_client/jmap/core/user_name.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_address.dart';
 import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
+import 'package:labels/model/label.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
 import 'package:core/utils/platform_info.dart';
+import 'package:linagora_design_flutter/linagora_design_flutter.dart';
 import 'package:model/email/email_action_type.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'package:rxdart/subjects.dart';
@@ -31,12 +42,15 @@ import 'package:tmail_ui_user/features/email/presentation/model/composer_argumen
 import 'package:tmail_ui_user/features/base/extensions/handle_mailbox_action_type_extension.dart';
 import 'package:tmail_ui_user/features/base/model/filter_filter.dart';
 import 'package:tmail_ui_user/features/caching/caching_manager.dart';
+import 'package:tmail_ui_user/features/composer/domain/exceptions/forbidden_to_send_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/invalid_recipients_exception.dart';
+import 'package:tmail_ui_user/features/composer/domain/exceptions/set_method_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/send_email_interactor.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/save_email_as_drafts_state.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/send_email_state.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/update_email_drafts_state.dart';
 import 'package:tmail_ui_user/features/composer/presentation/manager/composer_manager.dart';
+import 'package:tmail_ui_user/features/composer/presentation/widgets/domain_activation_pending_dialog.dart';
 import 'package:tmail_ui_user/features/download/presentation/controllers/download_controller.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/delete_email_permanently_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/delete_multiple_emails_permanently_interactor.dart';
@@ -79,6 +93,7 @@ import 'package:tmail_ui_user/features/mailbox/presentation/mailbox_controller.d
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_node.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_tree.dart';
 import 'package:tmail_ui_user/features/mailbox/presentation/model/mailbox_tree_builder.dart';
+import 'package:tmail_ui_user/features/mailbox/presentation/model/presentation_label_mailbox.dart';
 import 'package:tmail_ui_user/features/mailbox_creator/domain/usecases/verify_name_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/domain/usecases/get_all_recent_search_latest_interactor.dart';
 import 'package:tmail_ui_user/features/mailbox_dashboard/data/model/composer_cache.dart';
@@ -388,6 +403,8 @@ void main() {
     Get.put<AppGridDashboardController>(appGridDashboardController);
     Get.put<SpamReportController>(spamReportController);
     Get.put<LabelController>(labelController);
+    // MailboxController listens to the label list once it is ready
+    when(labelController.labels).thenReturn(RxList());
     Get.put<NetworkConnectionController>(networkConnectionController);
     Get.put<CachingManager>(cachingManager);
     Get.put<LanguageCacheManager>(languageCacheManager);
@@ -563,75 +580,320 @@ void main() {
   });
 
   group('send email failure toast:', () {
-    testWidgets(
-      'names the rejected addresses on an InvalidRecipientsException',
-      (tester) async {
-        await pumpLocalizedApp(tester);
-        clearInteractions(appToast);
-        mailboxDashboardController.sessionCurrent = testSession;
-        mailboxDashboardController.accountId.value = testAccountId;
-        when(
-          deleteEmailPermanentlyInteractor.execute(any, any, any, any),
-        ).thenAnswer((_) => const Stream.empty());
+    testWidgets('names the rejected addresses on an InvalidRecipientsException',
+        (tester) async {
+      await pumpLocalizedApp(tester);
+      clearInteractions(appToast);
+      mailboxDashboardController.sessionCurrent = testSession;
+      mailboxDashboardController.accountId.value = testAccountId;
+      when(deleteEmailPermanentlyInteractor.execute(any, any, any, any))
+          .thenAnswer((_) => const Stream.empty());
 
-        mailboxDashboardController.handleFailureViewState(
-          SendEmailFailure(
-            exception: InvalidRecipientsException({}, {
-              'bad@linagora.com',
-            }, createdEmailId: EmailId(Id('email-1'))),
+      mailboxDashboardController.handleFailureViewState(
+        SendEmailFailure(
+          exception: InvalidRecipientsException(
+            {},
+            {'bad@linagora.com'},
+            createdEmailId: EmailId(Id('email-1')),
           ),
+        ),
+      );
+
+      verify(
+        appToast.showToastErrorMessage(
+          any,
+          argThat(contains('bad@linagora.com')),
+          leadingSVGIcon: anyNamed('leadingSVGIcon'),
+        ),
+      ).called(1);
+      verify(deleteEmailPermanentlyInteractor.execute(
+        testSession,
+        testAccountId,
+        EmailId(Id('email-1')),
+        null,
+      )).called(1);
+    });
+
+    testWidgets(
+        'shows the domain activation dialog, not a toast, and deletes the refused email '
+        'on a ForbiddenToSendException', (tester) async {
+      await pumpLocalizedApp(tester);
+      clearInteractions(appToast);
+      mailboxDashboardController.sessionCurrent = testSession;
+      mailboxDashboardController.accountId.value = testAccountId;
+      when(deleteEmailPermanentlyInteractor.execute(any, any, any, any))
+          .thenAnswer((_) => const Stream.empty());
+
+      mailboxDashboardController.handleFailureViewState(
+        SendEmailFailure(
+          exception: ForbiddenToSendException(
+            createdEmailId: EmailId(Id('email-1')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DomainActivationPendingDialog), findsOneWidget);
+      verifyNever(appToast.showToastErrorMessage(
+        any,
+        any,
+        leadingSVGIcon: anyNamed('leadingSVGIcon'),
+      ));
+      verify(deleteEmailPermanentlyInteractor.execute(
+        testSession,
+        testAccountId,
+        EmailId(Id('email-1')),
+        null,
+      )).called(1);
+
+      await tester.tap(find.byKey(LinagoraDialog.primaryActionKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(DomainActivationPendingDialog), findsNothing);
+    });
+
+    testWidgets(
+        'deletes nothing when the pre-send check refused before any email was created',
+        (tester) async {
+      await pumpLocalizedApp(tester);
+      mailboxDashboardController.sessionCurrent = testSession;
+      mailboxDashboardController.accountId.value = testAccountId;
+
+      mailboxDashboardController.handleFailureViewState(
+        SendEmailFailure(exception: ForbiddenToSendException()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DomainActivationPendingDialog), findsOneWidget);
+      verifyNever(deleteEmailPermanentlyInteractor.execute(any, any, any, any));
+
+      await tester.tap(find.byKey(LinagoraDialog.closeButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.byType(DomainActivationPendingDialog), findsNothing);
+    });
+
+    testWidgets(
+        'should not show the domain activation dialog on another send failure',
+        (tester) async {
+      await pumpLocalizedApp(tester);
+      clearInteractions(appToast);
+
+      mailboxDashboardController.handleFailureViewState(
+        SendEmailFailure(exception: SetMethodException({})),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DomainActivationPendingDialog), findsNothing);
+      verify(appToast.showToastErrorMessage(
+        any,
+        any,
+        leadingSVGIcon: anyNamed('leadingSVGIcon'),
+      )).called(1);
+      verifyNever(deleteEmailPermanentlyInteractor.execute(any, any, any, any));
+    });
+  });
+
+  testWidgets('applies explicit Sentry opt-in and opt-out from server settings', (tester) async {
+    await pumpLocalizedApp(tester);
+    await tester.pumpAndSettle();
+    final sentryManager = SentryManager.instance
+      ..setSentryReportingDefault(false)
+      ..setSentryReportingConsent(null);
+    addTearDown(() {
+      sentryManager
+        ..setSentryReportingConsent(null)
+        ..setSentryReportingDefault(true);
+    });
+
+    mailboxDashboardController.handleSuccessViewState(
+      GetServerSettingSuccess(
+        TMailServerSettingOptions(sentryUserOptIn: true),
+      ),
+    );
+    expect(sentryManager.isSentryReportingAllowed, isTrue);
+    await tester.pumpAndSettle();
+
+    mailboxDashboardController.handleSuccessViewState(
+      GetServerSettingSuccess(
+        TMailServerSettingOptions(sentryUserOptIn: false),
+      ),
+    );
+    expect(sentryManager.isSentryReportingAllowed, isFalse);
+    await tester.pumpAndSettle();
+  });
+
+  // Kept before the groups that Get.put controllers without pumping a frame:
+  // a testWidgets pump runs every onReady they queued.
+  group('handleReceivingFileSharing unreadable files toast:', () {
+    late Directory tempShareDir;
+
+    setUp(() {
+      PlatformInfo.isTestingForWeb = true;
+      tempShareDir = Directory.systemTemp.createTempSync('shared_media_test');
+      // onReady, queued by Get.put, reads dotenv on the first frame.
+      dotenv.loadFromString(isOptional: true, mergeWith: {'APP_GRID_AVAILABLE': 'unsupported'});
+      when(emailReceiveManager.pendingSharedFileInfo)
+          .thenAnswer((_) => BehaviorSubject.seeded([]));
+      when(downloadController.downloadUIAction)
+          .thenAnswer((_) => Rxn(DownloadUIAction.idle));
+      when(labelController.isLabelSettingEnabled).thenReturn(RxBool(false));
+      when(mockTwakeAppManager.hasComposer).thenReturn(false);
+
+      Get.put(mailboxDashboardController);
+
+      clearInteractions(composerManager);
+      clearInteractions(emailReceiveManager);
+    });
+
+    tearDown(() {
+      PlatformInfo.isTestingForWeb = false;
+      Get.deleteAll();
+      tempShareDir.deleteSync(recursive: true);
+    });
+
+    SharedMediaFile textShare(String path) => SharedMediaFile(
+          path: path,
+          type: SharedMediaType.text,
+          mimeType: 'text/plain',
         );
 
-        verify(
-          appToast.showToastErrorMessage(
-            any,
-            argThat(contains('bad@linagora.com')),
-            leadingSVGIcon: anyNamed('leadingSVGIcon'),
-          ),
-        ).called(1);
-        verify(
-          deleteEmailPermanentlyInteractor.execute(
-            testSession,
-            testAccountId,
-            EmailId(Id('email-1')),
-            null,
-          ),
-        ).called(1);
+    SharedMediaFile fileShare(String fileName) {
+      final file = File('${tempShareDir.path}/$fileName')
+        ..writeAsStringSync('file content');
+      return SharedMediaFile(
+        path: file.path,
+        type: SharedMediaType.text,
+        mimeType: 'text/calendar',
+      );
+    }
+
+    ComposerArguments capturedComposerArguments() =>
+        verify(composerManager.addComposer(captureAny)).captured.single
+            as ComposerArguments;
+
+    Future<void> pumpShareToastApp(WidgetTester tester) async {
+      await pumpLocalizedApp(tester);
+      clearInteractions(appToast);
+    }
+
+    SharedMediaFile unreadableShare() => SharedMediaFile(
+          path: 'content://media/external/file/1',
+          type: SharedMediaType.unreadable,
+        );
+
+    testWidgets(
+      'an unreadable-only share shows one toast and opens no composer, but is '
+      'still consumed from the manager',
+      (tester) async {
+        await pumpShareToastApp(tester);
+        clearInteractions(emailReceiveManager);
+
+        mailboxDashboardController
+            .handleReceivingFileSharing([unreadableShare()]);
+
+        final message = verify(
+          appToast.showToastErrorMessage(any, captureAny),
+        ).captured.single;
+        expect(message, 'A shared file could not be read and was not added');
+        verifyNever(composerManager.addComposer(any));
+        verify(emailReceiveManager.clearPendingFileInfo()).called(1);
+      },
+    );
+
+    testWidgets(
+      'an unreadable file next to a readable one shows a toast and still '
+      'opens the composer with the readable file',
+      (tester) async {
+        await pumpShareToastApp(tester);
+        final readable = fileShare('event.ics');
+
+        mailboxDashboardController
+            .handleReceivingFileSharing([unreadableShare(), readable]);
+
+        verify(appToast.showToastErrorMessage(any, any)).called(1);
+        final arguments = capturedComposerArguments();
+        expect(arguments.emailActionType, EmailActionType.composeFromFileShared);
+        expect(arguments.listSharedMediaFile?.single.path, readable.path);
+      },
+    );
+
+    testWidgets(
+      'an unreadable file next to shared text shows a toast and still opens '
+      'the composer from the text',
+      (tester) async {
+        await pumpShareToastApp(tester);
+
+        mailboxDashboardController.handleReceivingFileSharing([
+          unreadableShare(),
+          textShare('hi'),
+        ]);
+
+        verify(appToast.showToastErrorMessage(any, any)).called(1);
+        final arguments = capturedComposerArguments();
+        expect(
+          arguments.emailActionType,
+          EmailActionType.composeFromContentShared,
+        );
+        expect(arguments.emailContents, 'hi');
+      },
+    );
+
+    testWidgets(
+      'several unreadable files show a single toast with the pluralized count',
+      (tester) async {
+        await pumpShareToastApp(tester);
+        final readable = fileShare('event.ics');
+
+        mailboxDashboardController.handleReceivingFileSharing([
+          unreadableShare(),
+          unreadableShare(),
+          readable,
+        ]);
+
+        final message = verify(
+          appToast.showToastErrorMessage(any, captureAny),
+        ).captured.single;
+        expect(message, '2 shared files could not be read and were not added');
+        expect(capturedComposerArguments().listSharedMediaFile?.length, 1);
+      },
+    );
+
+    testWidgets(
+      'an unreadable file between several readable files opens the composer '
+      'with only the readable files, in order',
+      (tester) async {
+        await pumpShareToastApp(tester);
+        final calendar = fileShare('event.ics');
+        final contact = fileShare('contact.vcf');
+
+        mailboxDashboardController.handleReceivingFileSharing([
+          calendar,
+          unreadableShare(),
+          contact,
+        ]);
+
+        verify(appToast.showToastErrorMessage(any, any)).called(1);
+        final arguments = capturedComposerArguments();
+        expect(arguments.emailActionType, EmailActionType.composeFromFileShared);
+        expect(
+          arguments.listSharedMediaFile?.map((file) => file.path).toList(),
+          [calendar.path, contact.path],
+        );
+      },
+    );
+
+    testWidgets(
+      'a share with only readable files shows no unreadable toast',
+      (tester) async {
+        await pumpShareToastApp(tester);
+
+        mailboxDashboardController.handleReceivingFileSharing([
+          fileShare('contact.vcf'),
+        ]);
+
+        verifyNever(appToast.showToastErrorMessage(any, any));
       },
     );
   });
-
-  testWidgets(
-    'applies explicit Sentry opt-in and opt-out from server settings',
-    (tester) async {
-      await pumpLocalizedApp(tester);
-      await tester.pumpAndSettle();
-      final sentryManager = SentryManager.instance
-        ..setSentryReportingDefault(false)
-        ..setSentryReportingConsent(null);
-      addTearDown(() {
-        sentryManager
-          ..setSentryReportingConsent(null)
-          ..setSentryReportingDefault(true);
-      });
-
-      mailboxDashboardController.handleSuccessViewState(
-        GetServerSettingSuccess(
-          TMailServerSettingOptions(sentryUserOptIn: true),
-        ),
-      );
-      expect(sentryManager.isSentryReportingAllowed, isTrue);
-      await tester.pumpAndSettle();
-
-      mailboxDashboardController.handleSuccessViewState(
-        GetServerSettingSuccess(
-          TMailServerSettingOptions(sentryUserOptIn: false),
-        ),
-      );
-      expect(sentryManager.isSentryReportingAllowed, isFalse);
-      await tester.pumpAndSettle();
-    },
-  );
 
   group('search/sort/filter feature:', () {
     setUp(() {
@@ -1348,6 +1610,88 @@ void main() {
     });
   });
 
+  group('selected label removed from the label list:', () {
+    final work = Label(id: Id('work'), displayName: 'Work');
+    final home = Label(id: Id('home'), displayName: 'Home');
+    final workMailbox = PresentationLabelMailbox.initial(work);
+    final inbox = PresentationMailbox(
+      testMailboxId,
+      role: PresentationMailbox.roleInbox,
+    );
+    late RxList<Label> labels;
+
+    setUp(() {
+      when(emailReceiveManager.pendingSharedFileInfo).thenAnswer((_) => BehaviorSubject.seeded([]));
+      when(downloadController.downloadUIAction).thenAnswer((_) => Rxn(DownloadUIAction.idle));
+      when(labelController.isLabelSettingEnabled).thenReturn(RxBool(true));
+      // The list MailboxController listens to once it is ready
+      labels = RxList([home, work]);
+      when(labelController.labels).thenReturn(labels);
+
+      // Get.put would keep a dashboard left registered by an earlier test,
+      // and MailboxController would then read that one
+      Get.replace(mailboxDashboardController);
+      mailboxDashboardController.onReady();
+      mailboxController = MailboxController(
+        createNewMailboxInteractor,
+        deleteMultipleMailboxInteractor,
+        renameMailboxInteractor,
+        moveMailboxInteractor,
+        subscribeMailboxInteractor,
+        subscribeMultipleMailboxInteractor,
+        subaddressingInteractor,
+        createDefaultMailboxInteractor,
+        moveFolderContentInteractor,
+        treeBuilder,
+        verifyNameInteractor,
+        getAllMailboxInteractor,
+        refreshAllMailboxInteractor);
+      // onInit registers the label list listener under test
+      mailboxController
+        ..onInit()
+        ..onReady();
+      mailboxController.defaultMailboxTree.value = MailboxTree(
+        MailboxNode(
+          MailboxNode.rootItem(),
+          childrenItems: [MailboxNode(inbox)],
+        ),
+      );
+    });
+
+    test('should select the Inbox when the selected label is removed', () {
+      mailboxDashboardController.selectedMailbox.value = workMailbox;
+
+      labels.value = [home];
+
+      expect(mailboxDashboardController.selectedMailbox.value, inbox);
+    });
+
+    test('should keep the selected label when it is still in the list', () {
+      mailboxDashboardController.selectedMailbox.value = workMailbox;
+
+      labels.value = [home, Label(id: Id('work'), displayName: 'Job')];
+
+      expect(mailboxDashboardController.selectedMailbox.value, workMailbox);
+    });
+
+    test('should keep the selected label when another label is removed', () {
+      mailboxDashboardController.selectedMailbox.value = workMailbox;
+
+      labels.value = [work];
+
+      expect(mailboxDashboardController.selectedMailbox.value, workMailbox);
+    });
+
+    test('should keep a folder selected when all labels are removed', () {
+      final folder = PresentationMailbox(MailboxId(Id('folder')));
+      mailboxDashboardController.selectedMailbox.value = folder;
+
+      labels.value = [];
+
+      expect(mailboxDashboardController.selectedMailbox.value, folder);
+    });
+  });
+
   group('handleReceivingFileSharing share routing:', () {
     late Directory tempShareDir;
 
@@ -1523,6 +1867,21 @@ void main() {
     });
 
     test(
+      'a mailto url share keeps the cc and bcc recipients of the mailto link',
+      () {
+        mailboxDashboardController.handleReceivingFileSharing([
+          urlShare(
+            'mailto:user@example.com?cc=cc@example.com&bcc=bcc@example.com',
+          ),
+        ]);
+
+        final arguments = capturedComposerArguments();
+        expect(arguments.cc?.single.email, 'cc@example.com');
+        expect(arguments.bcc?.single.email, 'bcc@example.com');
+      },
+    );
+
+    test(
       'a non-mailto url share opens nothing on non-iOS platforms — Android '
       'url-type events are deep-link VIEW intents owned by DeepLinksManager',
       () {
@@ -1531,6 +1890,38 @@ void main() {
         ]);
 
         verifyNever(composerManager.addComposer(any));
+      },
+    );
+
+    test(
+      'a file share opens the composer from the shared file '
+      '(composeFromFileShared)',
+      () {
+        final share = SharedMediaFile(
+          path: '${tempShareDir.path}/report.pdf',
+          type: SharedMediaType.file,
+          mimeType: 'application/pdf',
+        );
+
+        mailboxDashboardController.handleReceivingFileSharing([share]);
+
+        final arguments = capturedComposerArguments();
+        expect(arguments.emailActionType, EmailActionType.composeFromFileShared);
+        expect(arguments.listSharedMediaFile?.single.path, share.path);
+      },
+    );
+
+    test(
+      'a mailto-type share with a valid address opens the composer to that '
+      'recipient (composeFromEmailAddress)',
+      () {
+        mailboxDashboardController.handleReceivingFileSharing([
+          SharedMediaFile(path: 'user@example.com', type: SharedMediaType.mailto),
+        ]);
+
+        final arguments = capturedComposerArguments();
+        expect(arguments.emailActionType, EmailActionType.composeFromEmailAddress);
+        expect(arguments.listEmailAddress?.single.email, 'user@example.com');
       },
     );
   });
@@ -1568,4 +1959,97 @@ void main() {
       },
     );
   });
+
+  group('switch account from a sign-in link:', () {
+    late _DashboardSwitchDeepLinksManager deepLinksManager;
+
+    setUp(() {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      deepLinksManager = _DashboardSwitchDeepLinksManager();
+      Get.put<DeepLinksManager>(deepLinksManager);
+      when(emailReceiveManager.pendingSharedFileInfo)
+          .thenAnswer((_) => BehaviorSubject.seeded([]));
+      when(downloadController.downloadUIAction)
+          .thenAnswer((_) => Rxn(DownloadUIAction.idle));
+      when(labelController.isLabelSettingEnabled).thenReturn(RxBool(false));
+      when(authorizationInterceptors.authenticationType)
+          .thenReturn(AuthenticationType.basic);
+
+      // A controller left registered by an earlier group would make put a
+      // no-op and skip onInit, which registers the deep link listener.
+      Get.delete<MailboxDashBoardController>(force: true);
+      Get.put(mailboxDashboardController);
+      mailboxDashboardController.sessionCurrent = testSession;
+      mailboxDashboardController.accountId.value = testAccountId;
+    });
+
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      Get.delete<DeepLinksManager>();
+    });
+
+    test('SHOULD complete the confirmed switch only after the link sign-in completed', () async {
+      deepLinksManager.pendingDeepLinkData.add(deepLinksManager.link);
+      await pumpEventQueue();
+      final confirmSwitch = deepLinksManager.onConfirmLogoutCallback;
+      expect(confirmSwitch, isNotNull);
+
+      var isDone = false;
+      final switchFuture = confirmSwitch!(deepLinksManager.link).then((_) => isDone = true);
+      await pumpEventQueue();
+
+      expect(deepLinksManager.autoSignInCalls, 1);
+      expect(isDone, isFalse);
+
+      deepLinksManager.signIn.complete();
+      await switchFuture;
+      expect(isDone, isTrue);
+    });
+  });
+}
+
+/// Delivers a running-app sign-in link, keeps the dashboard switch callback,
+/// and holds the link sign-in until the test completes [signIn].
+class _DashboardSwitchDeepLinksManager extends DeepLinksManager {
+  final link = OpenAppDeepLinkData(
+    registrationUrl: 'https://sign-up.twake.app',
+    jmapUrl: 'https://jmap.twake.app',
+    username: 'bob@twake.app',
+    accessToken: 'token-1',
+  );
+  final signIn = Completer<void>();
+  OnDeepLinkConfirmLogoutCallback<OpenAppDeepLinkData>? onConfirmLogoutCallback;
+  int autoSignInCalls = 0;
+
+  @override
+  Future<void> handleDeepLinksWhenAppRunning({
+    required DeepLinkData? deepLinkData,
+    required OnDeepLinkSuccessCallback onSuccessCallback,
+    OnDeepLinkFailureCallback? onFailureCallback,
+  }) async {
+    if (deepLinkData != null) onSuccessCallback(deepLinkData);
+  }
+
+  @override
+  Future<void> handleOpenAppDeepLinks({
+    required OpenAppDeepLinkData openAppDeepLinkData,
+    OnDeepLinkFailureCallback? onFailureCallback,
+    OnAutoSignInViaDeepLinkSuccessCallback? onAutoSignInSuccessCallback,
+    OnDeepLinkConfirmLogoutCallback<OpenAppDeepLinkData>? onConfirmLogoutCallback,
+    UserName? username,
+    bool isSignedIn = true,
+    bool Function()? isCallerActive,
+  }) async {
+    this.onConfirmLogoutCallback = onConfirmLogoutCallback;
+  }
+
+  @override
+  Future<void> autoSignInViaDeepLink({
+    required OpenAppDeepLinkData openAppDeepLinkData,
+    required OnAutoSignInViaDeepLinkSuccessCallback onAutoSignInSuccessCallback,
+    required OnDeepLinkFailureCallback onFailureCallback,
+  }) {
+    autoSignInCalls++;
+    return signIn.future;
+  }
 }

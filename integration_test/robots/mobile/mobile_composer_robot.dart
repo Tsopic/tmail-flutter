@@ -12,19 +12,50 @@ import 'package:tmail_ui_user/features/composer/presentation/composer_view.dart'
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 
 import '../../mocks/fake_file_picker.dart';
+import '../abstract/abstract_composer_code_view_robot.dart';
+import '../abstract/abstract_composer_editor_keyboard_robot.dart';
+import '../abstract/abstract_composer_recipient_robot.dart';
 import '../abstract/abstract_composer_reload_robot.dart';
 import '../abstract/abstract_composer_robot.dart';
+import '../composer_recipient_robot.dart';
 import '../composer_robot.dart';
+import '../../utils/wait_for_condition.dart';
 
 class MobileComposerRobot extends ComposerRobot implements AbstractComposerRobot {
   @override
+  final AbstractComposerRecipientRobot recipient;
+
+  @override
   final AbstractComposerReloadRobot? reload;
 
-  MobileComposerRobot(PatrolIntegrationTester $, {this.reload}) : super($);
+  @override
+  final AbstractComposerEditorKeyboardRobot? editorKeyboard;
+
+  @override
+  final AbstractComposerCodeViewRobot? codeView;
+
+  MobileComposerRobot(
+    PatrolIntegrationTester $, {
+    AbstractComposerRecipientRobot? recipientRobot,
+    this.reload,
+    this.editorKeyboard,
+    this.codeView,
+  })  : recipient = recipientRobot ?? ComposerRecipientRobot($),
+        super($);
 
   @override
   Future<void> expectComposerViewVisible() async {
     await $.waitUntilVisible($(ComposerView));
+  }
+
+  @override
+  Future<void> expectComposerClosedDiscardingChanges() async {
+    final discardButton = $(AppLocalizations().discardChanges);
+    await waitForCondition(
+      () => discardButton.exists || !$(ComposerView).exists,
+    );
+    if (discardButton.exists) await tapDiscardChanges();
+    await waitForCondition(() => !$(ComposerView).exists);
   }
 
   @override
@@ -66,23 +97,16 @@ class MobileComposerRobot extends ComposerRobot implements AbstractComposerRobot
   Future<void> addInlineAtCursorPosition(File file) async {
     final controller = Get.find<ComposerController>();
     final context = $.tester.element(find.byType(ComposerView));
-    final fakeResult = FilePickerResult([
-      PlatformFile(
-        name: file.path.split('/').last,
-        size: await file.length(),
-        path: file.path,
-      ),
-    ]);
-    final original = FilePicker.platform;
+    final original = FilePickerPlatform.instance;
     try {
-      FilePicker.platform = FakeFilePicker(fakeResult);
+      FilePickerPlatform.instance = FakeFilePicker([FakePlatformFile(file)]);
       await controller.insertImage(context, 400.0);
       await controller.viewState.stream.firstWhere((state) => state.fold(
         (failure) => failure is DownloadImageAsBase64Failure,
         (success) => success is DownloadImageAsBase64Success,
       ));
     } finally {
-      FilePicker.platform = original;
+      FilePickerPlatform.instance = original;
     }
     await _waitForInlineImage(controller);
   }

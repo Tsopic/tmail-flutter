@@ -58,34 +58,43 @@ LogicFilterOperator _actAndAssertAndWithEventsExclusion(
 
 void main() {
   group('Stalwart search compatibility', () {
-    test('SHOULD expands simple text to participant domain filters', () {
-      // Arrange
-      final filter = SearchEmailFilter(text: SearchQuery('example'));
+    for (final query in [
+      'example',
+      'port',
+      'example.ee',
+      '@example.ee',
+      'a+b@example.ee',
+    ]) {
+      test(
+        'free text $query delegates to the server without domain guesses',
+        () {
+          expect(
+            SearchEmailFilter(
+              text: SearchQuery(query),
+            ).mappingToEmailFilterCondition(),
+            EmailFilterCondition(text: query),
+          );
+        },
+      );
+    }
 
-      // Act
-      final result = filter.mappingToEmailFilterCondition();
-
-      // Assert
-      expect(result, isA<LogicFilterOperator>());
-      final logicFilter = result as LogicFilterOperator;
-      expect(logicFilter.operator, Operator.OR);
-      expect(
-        logicFilter.conditions,
-        contains(EmailFilterCondition(text: 'example')),
-      );
-      expect(
-        logicFilter.conditions,
-        contains(EmailFilterCondition(from: 'example')),
-      );
-      expect(
-        logicFilter.conditions,
-        contains(EmailFilterCondition(from: 'example.com')),
-      );
-      expect(
-        logicFilter.conditions,
-        contains(EmailFilterCondition(from: '@example.com')),
-      );
-    });
+    test(
+      'explicit sender domain remains an AND constraint on partial text',
+      () {
+        final filter = SearchEmailFilter(
+          from: {'@example.ee'},
+          text: SearchQuery('invoi part'),
+        );
+        final result =
+            filter.mappingToEmailFilterCondition() as LogicFilterOperator;
+        expect(result.operator, Operator.AND);
+        expect(_emailConditions(result).toSet(), {
+          EmailFilterCondition(from: '@example.ee'),
+          EmailFilterCondition(text: 'invoi'),
+          EmailFilterCondition(text: 'part'),
+        });
+      },
+    );
 
     test(
       'SHOULD creates a filter with multiple "to" values using AND logic operator',
@@ -122,8 +131,6 @@ void main() {
         expect(logicFilter.conditions.length, equals(2));
 
         final textValues = logicFilter.conditions
-            .whereType<LogicFilterOperator>()
-            .expand((filter) => filter.conditions)
             .whereType<EmailFilterCondition>()
             .map((c) => c.text)
             .whereType<String>()
@@ -191,35 +198,6 @@ void main() {
         expect(emailCondition.text, '"research trial"');
       },
     );
-
-    test('SHOULD include email domain variants for bare single word text', () {
-      // Arrange
-      final filter = SearchEmailFilter(text: SearchQuery('portal'));
-
-      // Act
-      final result = filter.mappingToEmailFilterCondition();
-
-      // Assert
-      expect(result, isA<LogicFilterOperator>());
-      final logicFilter = result as LogicFilterOperator;
-      expect(logicFilter.operator, Operator.OR);
-      expect(
-        logicFilter.conditions,
-        contains(EmailFilterCondition(text: 'portal')),
-      );
-      expect(
-        logicFilter.conditions,
-        contains(EmailFilterCondition(from: 'portal')),
-      );
-      expect(
-        logicFilter.conditions,
-        contains(EmailFilterCondition(from: 'portal.com')),
-      );
-      expect(
-        logicFilter.conditions,
-        contains(EmailFilterCondition(from: '@portal.com')),
-      );
-    });
   });
   group('SearchEmailFilter::test', () {
     group('generateFilterFromToField::test', () {
@@ -307,7 +285,7 @@ void main() {
       );
 
       test(
-        'SHOULD return text and participant alternatives WHEN only text is provided and notIncludeEvents is false',
+        'SHOULD return server text filter WHEN only text is provided and notIncludeEvents is false',
         () {
           // Arrange
           final filter = SearchEmailFilter(text: SearchQuery('example'));
@@ -317,9 +295,8 @@ void main() {
 
           // Assert
           // notIncludeEvents defaults to false → no events-exclusion added.
-          // Text and participant alternatives are returned as one OR filter.
-          expect(result, isA<LogicFilterOperator>());
-          expect((result as LogicFilterOperator).operator, Operator.OR);
+          // Free text delegates to the server text matcher.
+          expect(result, EmailFilterCondition(text: 'example'));
           final emailConditions = _emailConditions(result);
           final emailCondition = emailConditions.firstWhere(
             (c) => c.text != null,
@@ -527,9 +504,8 @@ void main() {
 
           // Assert
           // notIncludeEvents = false → events-exclusion is NOT added.
-          // Text and participant alternatives are returned together.
-          expect(result, isA<LogicFilterOperator>());
-          expect((result as LogicFilterOperator).operator, Operator.OR);
+          // Only the text condition remains.
+          expect(result, EmailFilterCondition(text: 'example'));
           final emailConditions = _emailConditions(result);
           final emailCondition = emailConditions.firstWhere(
             (c) => c.text != null,
@@ -1053,8 +1029,7 @@ void main() {
 
           // Assert: only text condition is sent to interactor (no events-exclusion)
           final condition = updated.mappingToEmailFilterCondition();
-          expect(condition, isA<LogicFilterOperator>());
-          expect((condition as LogicFilterOperator).operator, Operator.OR);
+          expect(condition, EmailFilterCondition(text: 'meeting'));
           final emailConditions = _emailConditions(condition);
           final emailCondition = emailConditions.firstWhere(
             (c) => c.text != null,

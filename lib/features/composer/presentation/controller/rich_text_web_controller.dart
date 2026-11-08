@@ -2,14 +2,15 @@
 import 'dart:convert';
 
 import 'package:core/presentation/extensions/color_extension.dart';
+import 'package:core/presentation/utils/app_toast.dart';
 import 'package:core/utils/app_logger.dart';
 import 'package:core/utils/html/html_utils.dart';
 import 'package:core/utils/platform_info.dart';
 import 'package:custom_pop_up_menu/custom_pop_up_menu.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:html_editor_enhanced/html_editor.dart';
+import 'package:model/upload/file_info.dart';
 import 'package:tmail_ui_user/features/base/widget/dialog_picker/color_dialog_picker.dart';
 import 'package:tmail_ui_user/features/composer/presentation/model/code_view_state.dart';
 import 'package:tmail_ui_user/features/composer/presentation/model/dropdown_menu_font_status.dart';
@@ -20,14 +21,27 @@ import 'package:tmail_ui_user/features/composer/presentation/model/inline_image.
 import 'package:tmail_ui_user/features/composer/presentation/model/order_list_type.dart';
 import 'package:tmail_ui_user/features/composer/presentation/model/paragraph_type.dart';
 import 'package:tmail_ui_user/features/composer/presentation/model/rich_text_style_type.dart';
+import 'package:tmail_ui_user/features/composer/presentation/utils/composer_code_view_sanitizer.dart';
+import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/routes/route_navigation.dart';
 
 class RichTextWebController extends GetxController {
 
   static const List<int> fontSizeList = [10, 12, 14, 15, 16, 18, 24, 36, 48, 64];
   static const int fontSizeDefault = 16;
+  static const String _emptyEditorHtml = '<p><br></p>';
 
-  final editorController = HtmlEditorController();
+  final HtmlEditorController editorController;
+  final ComposerCodeViewSanitizer _codeViewSanitizer;
+  final Duration _editorReplyTimeout;
+
+  RichTextWebController({
+    HtmlEditorController? editorController,
+    ComposerCodeViewSanitizer codeViewSanitizer = const ComposerCodeViewSanitizer(),
+    Duration editorReplyTimeout = const Duration(seconds: 5),
+  }) : editorController = editorController ?? HtmlEditorController(),
+       _codeViewSanitizer = codeViewSanitizer,
+       _editorReplyTimeout = editorReplyTimeout;
 
   final listTextStyleApply = RxList<RichTextStyleType>();
   final selectedTextColor = Colors.black.obs;
@@ -252,7 +266,16 @@ class RichTextWebController extends GetxController {
 
   Future<bool> get isActivatedCodeView => editorController.isActivatedCodeView();
 
+  bool _codeViewToggleInFlight = false;
+
+  bool get isCodeViewToggleInFlight => _codeViewToggleInFlight;
+
+  /// In code view, or leaving it: the editor HTML may still be raw.
+  bool get isCodeViewBusy => codeViewEnabled || _codeViewToggleInFlight;
+
   void setEnableCodeView() async {
+    // Nothing to restore, and the editor's by-type reply could answer a later user toggle.
+    if (!codeViewEnabled) return;
     final isActivated = await isActivatedCodeView;
     if (codeViewEnabled && !isActivated) {
       toggleCodeView();
@@ -260,18 +283,48 @@ class RichTextWebController extends GetxController {
   }
 
   void toggleCodeView() async {
-    final isActivated = await isActivatedCodeView;
-    final newCodeViewState = isActivated ? CodeViewState.disabled : CodeViewState.enabled;
-    codeViewState.value = newCodeViewState;
-    editorController.toggleCodeView();
-
-    if (codeViewEnabled) {
-      formattingOptionsState.value = FormattingOptionsState.disabled;
-    } else {
-      editorController.evaluateJavascriptWeb(
-        HtmlUtils.recalculateEditorHeight().name,
-      );
+    if (_codeViewToggleInFlight) return;
+    _codeViewToggleInFlight = true;
+    try {
+      // The editor replies through window messages, which may never come back.
+      final isActivated = await isActivatedCodeView.timeout(_editorReplyTimeout);
+      if (isActivated) {
+        await _sanitizeAndLeaveCodeView();
+      } else {
+        codeViewState.value = CodeViewState.enabled;
+        editorController.toggleCodeView();
+        formattingOptionsState.value = FormattingOptionsState.disabled;
+      }
+    } catch (e, st) {
+      logError('RichTextWebController::toggleCodeView', exception: e, stackTrace: st);
+      _showCodeViewToggleError();
+    } finally {
+      _codeViewToggleInFlight = false;
     }
+  }
+
+  // Throws before leaving code view when the HTML cannot be read (fail closed).
+  Future<void> _sanitizeAndLeaveCodeView() async {
+    final rawHtml = await editorController.getText().timeout(_editorReplyTimeout);
+    final sanitizedHtml = _codeViewSanitizer.sanitize(rawHtml);
+    // In code view, Summernote ignores an empty value and would keep the raw HTML.
+    editorController.setText(sanitizedHtml.trim().isEmpty ? _emptyEditorHtml : sanitizedHtml);
+
+    codeViewState.value = CodeViewState.disabled;
+    editorController.toggleCodeView();
+    editorController.evaluateJavascriptWeb(
+      HtmlUtils.recalculateEditorHeight().name,
+    );
+  }
+
+  void _showCodeViewToggleError() {
+    if (isClosed || !Get.isRegistered<AppToast>()) return;
+    final context = currentOverlayContext;
+    if (context == null) return;
+    Get.find<AppToast>().showToastErrorMessage(
+      context,
+      AppLocalizations.of(context).unknownError,
+    );
   }
 
   void applyHeaderStyle(HeaderStyleType? newStyle) {
@@ -313,16 +366,39 @@ class RichTextWebController extends GetxController {
     menuOrderListController.hideMenu();
   }
 
-  void insertImageAsBase64({required PlatformFile platformFile, int? maxWidth}) {
-    if (platformFile.bytes != null) {
-      final base64Data = base64Encode(platformFile.bytes!);
-      final mimeType = HtmlUtils.validateHtmlImageResourceMimeType('image/${platformFile.extension}');
-      editorController.insertHtml(
-        '<img src="${HtmlUtils.convertBase64ToImageResourceData(base64Data: base64Data, mimeType: mimeType)}" data-filename="${platformFile.name}" alt="Image in my signature" style="max-width:${maxWidth != null ? '${maxWidth}px' : '100%'};" data-mimetype="$mimeType"/>'
-      );
-    } else {
-      logWarning("RichTextWebController::insertImageAsBase64: bytes is null");
+  Future<void> insertImageAsBase64({required FileInfo fileInfo, int? maxWidth}) async {
+    try {
+      final bytes = await fileInfo.readBytes();
+      if (bytes.isEmpty) {
+        logWarning("RichTextWebController::insertImageAsBase64: bytes is empty");
+        return;
+      }
+      final base64Data = base64Encode(bytes);
+      final mimeType = HtmlUtils.validateHtmlImageResourceMimeType('image/${fileInfo.fileExtension}');
+      editorController.insertHtml(buildInlineImageHtml(
+        base64Data: base64Data,
+        mimeType: mimeType,
+        fileName: fileInfo.fileName,
+        maxWidth: maxWidth,
+      ));
+    } catch (e) {
+      logWarning('RichTextWebController::insertImageAsBase64:Exception: $e');
     }
+  }
+
+  /// Builds the inline `<img>` tag inserted into the signature editor.
+  /// The file name and the MIME type derived from its extension come from the
+  /// user's local file picker and are attribute-escaped before being written
+  /// into the tag.
+  static String buildInlineImageHtml({
+    required String base64Data,
+    required String mimeType,
+    required String fileName,
+    int? maxWidth,
+  }) {
+    const attributeEscape = HtmlEscape(HtmlEscapeMode.attribute);
+    final escapedMimeType = attributeEscape.convert(mimeType);
+    return '<img src="${HtmlUtils.convertBase64ToImageResourceData(base64Data: base64Data, mimeType: escapedMimeType)}" data-filename="${attributeEscape.convert(fileName)}" alt="Image in my signature" style="max-width:${maxWidth != null ? '${maxWidth}px' : '100%'};" data-mimetype="$escapedMimeType"/>';
   }
 
   void toggleFormattingOptions() {

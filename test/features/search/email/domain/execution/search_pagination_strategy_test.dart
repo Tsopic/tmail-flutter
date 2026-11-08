@@ -94,12 +94,12 @@ void main() {
   group('cursor resolution per (intent, sortOrder, collapseThreads)', () {
     final cursorCases = <_CursorCase>[
       // LoadMore — position-based / collapsed → position == currentCount.
-      _CursorCase('LoadMore relevance → newest-first date cursor',
+      _CursorCase('LoadMore relevance → offset without date cursors',
           contextOf(
             intent: LoadMoreIntent(currentCount: 20, lastEmailDate: lastDate, lastEmailId: null),
             sortOrder: EmailSortOrderType.relevance,
           ),
-          position: isNull, before: lastDate, after: isNull),
+          position: 20, before: isNull, after: isNull),
       _CursorCase('LoadMore oldest + collapseThreads → position (CollapsedThread wins)',
           contextOf(
             intent: LoadMoreIntent(
@@ -129,12 +129,12 @@ void main() {
           ),
           position: isNull, before: isNull, after: isNull),
       // Fresh (new / refresh) → cursors cleared, position per pagination mode.
-      _CursorCase('NewSearch relevance → date cursors cleared',
+      _CursorCase('NewSearch relevance → offset 0, date cursors cleared',
           contextOf(
             intent: const NewSearchIntent(),
             sortOrder: EmailSortOrderType.relevance,
           ),
-          position: isNull, before: isNull, after: isNull),
+          position: 0, before: isNull, after: isNull),
       _CursorCase('NewSearch mostRecent → position cleared, cursors cleared',
           contextOf(
             intent: const NewSearchIntent(),
@@ -148,12 +148,12 @@ void main() {
             collapseThreads: true,
           ),
           position: 0, before: isNull, after: isNull),
-      _CursorCase('RefreshChanges relevance → fresh date search',
+      _CursorCase('RefreshChanges relevance → offset 0, date cursors cleared',
           contextOf(
             intent: const RefreshChangesIntent(currentCount: 30),
             sortOrder: EmailSortOrderType.relevance,
           ),
-          position: isNull, before: isNull, after: isNull),
+          position: 0, before: isNull, after: isNull),
       _CursorCase('RefreshChanges mostRecent → fresh search, position cleared',
           contextOf(
             intent: const RefreshChangesIntent(currentCount: 30),
@@ -233,12 +233,12 @@ void main() {
         after: isNull,
       ),
       (
-        name: 'relevance load-more replaces stale cursors with newest date cursor',
+        name: 'relevance load-more replaces stale date cursors with offset',
         intent: LoadMoreIntent(currentCount: 15, lastEmailDate: lastDate, lastEmailId: null),
         sort: EmailSortOrderType.relevance,
         collapse: false,
-        position: isNull,
-        before: lastDate,
+        position: 15,
+        before: isNull,
         after: isNull,
       ),
       (

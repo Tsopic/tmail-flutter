@@ -1,0 +1,8 @@
+text:
+dom:
+  - RemoveScriptTransformer
+  - RemoveLazyLoadingForBackgroundImageTransformer
+  - RemoveLazyLoadingImageTransformer
+  - RemoveCollapsedSignatureButtonTransformer
+  - RemoveStyleTagOutsideTransformer
+  - RemoveMaxWidthInImageStyleTransformer

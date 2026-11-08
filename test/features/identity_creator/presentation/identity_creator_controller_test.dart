@@ -1,3 +1,6 @@
+import 'dart:io' as io;
+import 'dart:typed_data';
+
 import 'package:core/data/network/config/dynamic_url_interceptors.dart';
 import 'package:core/data/network/dio_client.dart';
 import 'package:core/data/network/download/download_client.dart';
@@ -7,9 +10,13 @@ import 'package:core/presentation/utils/responsive_utils.dart';
 import 'package:core/utils/file_utils.dart';
 import 'package:core/utils/platform_info.dart';
 import 'package:dartz/dartz.dart' hide State;
-import 'package:flutter/widgets.dart' hide State;
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart' hide State;
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:html_editor_enhanced/html_editor.dart' show HtmlEditorController;
 import 'package:jmap_dart_client/http/http_client.dart';
 import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:jmap_dart_client/jmap/core/account/account.dart';
@@ -26,6 +33,7 @@ import 'package:mockito/mockito.dart';
 import 'package:tmail_ui_user/features/base/before_reconnect_manager.dart';
 import 'package:tmail_ui_user/features/caching/caching_manager.dart';
 import 'package:tmail_ui_user/features/composer/domain/usecases/upload_attachment_interactor.dart';
+import 'package:tmail_ui_user/features/composer/presentation/controller/rich_text_web_controller.dart';
 import 'package:tmail_ui_user/features/email/data/datasource_impl/html_datasource_impl.dart';
 import 'package:tmail_ui_user/features/email/data/local/html_analyzer.dart';
 import 'package:tmail_ui_user/features/identity_creator/domain/model/identity_cache.dart';
@@ -50,12 +58,61 @@ import 'package:tmail_ui_user/features/public_asset/presentation/public_asset_co
 import 'package:tmail_ui_user/features/upload/data/network/file_uploader.dart';
 import 'package:tmail_ui_user/main/bindings/network/binding_tag.dart';
 import 'package:tmail_ui_user/main/exceptions/thrower/remote_exception_thrower.dart';
+import 'package:tmail_ui_user/main/localizations/app_localizations_delegate.dart';
+import 'package:tmail_ui_user/main/localizations/localization_service.dart';
 import 'package:tmail_ui_user/main/universal_import/html_stub.dart';
 import 'package:tmail_ui_user/main/utils/toast_manager.dart';
 import 'package:tmail_ui_user/main/utils/twake_app_manager.dart';
 import 'package:uuid/uuid.dart';
 
 import 'identity_creator_controller_test.mocks.dart';
+
+/// A picked file that cannot report its size.
+base class _NoSizePlatformFile extends PlatformFile {
+  @override
+  String get name => 'a.png';
+
+  @override
+  Uri get uri => Uri.parse(name);
+
+  @override
+  int? lengthSync() => null;
+
+  @override
+  Future<int?> length() async => null;
+
+  @override
+  Future<Uint8List> readAsBytes() =>
+      throw UnsupportedError('not used by this test');
+
+  @override
+  Stream<Uint8List> readAsByteStream() =>
+      throw UnsupportedError('not used by this test');
+
+  @override
+  get xFile => throw UnsupportedError('not used by this test');
+}
+
+class _SingleFilePickerPlatform extends FilePickerPlatform {
+  _SingleFilePickerPlatform(this._result);
+
+  final PlatformFile? _result;
+
+  @override
+  Future<PlatformFile?> pickFile({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    int compressionQuality = 0,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    DarwinOptions darwinOptions = const DarwinOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
+  }) async => _result;
+}
 
 @GenerateNiceMocks([
   // Base controller mockspecs
@@ -488,5 +545,459 @@ void main() {
         equals(replyToEmail),
       );
     });
+
+    test(
+      'should pre-select the owner email address '
+      'when creating a new identity and the owner address is not the first one',
+    () async {
+      // arrange
+      identityCreatorController.listEmailAddressDefault.clear();
+      identityCreatorController.listEmailAddressOfReplyTo.clear();
+      identityCreatorController.emailOfIdentity.value = null;
+
+      identityCreatorController.arguments = IdentityCreatorArguments(
+        accountId,
+        session,
+        ownEmailAddress,
+      );
+
+      when(mockGetAllIdentitiesInteractor.execute(
+        any,
+        any,
+        properties: anyNamed('properties'),
+      )).thenAnswer((_) => Stream.value(Right(GetAllIdentitiesSuccess(
+        [
+          Identity(id: IdentityId(Id('alias')), email: 'alias@example.com'),
+          Identity(id: IdentityId(Id('owner')), email: ownEmailAddress),
+        ],
+        null,
+      ))));
+
+      // act
+      identityCreatorController.onReady();
+      await pumpEventQueue();
+
+      // assert
+      expect(
+        identityCreatorController.emailOfIdentity.value?.email,
+        equals(ownEmailAddress),
+      );
+    });
+
+    test(
+      'should pre-select the first email address '
+      'when creating a new identity and the owner address is empty',
+    () async {
+      // arrange
+      identityCreatorController.listEmailAddressDefault.clear();
+      identityCreatorController.listEmailAddressOfReplyTo.clear();
+      identityCreatorController.emailOfIdentity.value = null;
+
+      identityCreatorController.arguments = IdentityCreatorArguments(
+        accountId,
+        session,
+        '',
+      );
+
+      when(mockGetAllIdentitiesInteractor.execute(
+        any,
+        any,
+        properties: anyNamed('properties'),
+      )).thenAnswer((_) => Stream.value(Right(GetAllIdentitiesSuccess(
+        [
+          Identity(id: IdentityId(Id('alias')), email: 'alias@example.com'),
+          Identity(id: IdentityId(Id('other')), email: 'other@example.com'),
+        ],
+        null,
+      ))));
+
+      // act
+      identityCreatorController.onReady();
+      await pumpEventQueue();
+
+      // assert
+      expect(
+        identityCreatorController.emailOfIdentity.value?.email,
+        equals('alias@example.com'),
+      );
+    });
+
+    test(
+      'should pre-select the owner email address '
+      'when creating a new identity and the owner address is not in the identities list',
+    () async {
+      // arrange
+      identityCreatorController.listEmailAddressDefault.clear();
+      identityCreatorController.listEmailAddressOfReplyTo.clear();
+      identityCreatorController.emailOfIdentity.value = null;
+
+      identityCreatorController.arguments = IdentityCreatorArguments(
+        accountId,
+        session,
+        ownEmailAddress,
+      );
+
+      when(mockGetAllIdentitiesInteractor.execute(
+        any,
+        any,
+        properties: anyNamed('properties'),
+      )).thenAnswer((_) => Stream.value(Right(GetAllIdentitiesSuccess(
+        [
+          Identity(id: IdentityId(Id('alias')), email: 'alias@example.com'),
+          Identity(id: IdentityId(Id('other')), email: 'other@example.com'),
+        ],
+        null,
+      ))));
+
+      // act
+      identityCreatorController.onReady();
+      await pumpEventQueue();
+
+      // assert
+      expect(
+        identityCreatorController.emailOfIdentity.value?.email,
+        equals(ownEmailAddress),
+      );
+    });
+
+    test(
+      'should keep the identity email address '
+      'when editing an identity whose address is not the owner one',
+    () async {
+      // arrange
+      const aliasEmail = 'alias@example.com';
+      final aliasIdentityId = IdentityId(Id('alias'));
+
+      identityCreatorController.listEmailAddressDefault.clear();
+      identityCreatorController.listEmailAddressOfReplyTo.clear();
+      identityCreatorController.emailOfIdentity.value = null;
+
+      identityCreatorController.arguments = IdentityCreatorArguments(
+        accountId,
+        session,
+        ownEmailAddress,
+        identity: Identity(id: aliasIdentityId, email: aliasEmail),
+        actionType: IdentityActionType.edit,
+      );
+
+      when(mockGetAllIdentitiesInteractor.execute(
+        any,
+        any,
+        properties: anyNamed('properties'),
+      )).thenAnswer((_) => Stream.value(Right(GetAllIdentitiesSuccess(
+        [
+          Identity(id: IdentityId(Id('owner')), email: ownEmailAddress),
+          Identity(id: aliasIdentityId, email: aliasEmail),
+        ],
+        null,
+      ))));
+
+      // act
+      identityCreatorController.onReady();
+      await pumpEventQueue();
+
+      // assert
+      expect(
+        identityCreatorController.emailOfIdentity.value?.email,
+        equals(aliasEmail),
+      );
+    });
+
+    testWidgets(
+      'should show cannotSelectThisImage toast '
+      'when pickImage() gets a file whose size is unavailable',
+    (tester) async {
+      FilePickerPlatform.instance = _SingleFilePickerPlatform(_NoSizePlatformFile());
+      clearInteractions(mockAppToast);
+      late BuildContext capturedContext;
+      await tester.pumpWidget(GetMaterialApp(
+        localizationsDelegates: const [
+          AppLocalizationsDelegate(),
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: LocalizationService.supportedLocales,
+        home: Scaffold(body: Builder(builder: (context) {
+          capturedContext = context;
+          return const SizedBox.shrink();
+        })),
+      ));
+      await tester.pumpAndSettle();
+
+      identityCreatorController.pickImage(capturedContext);
+      await tester.pumpAndSettle();
+
+      verify(mockAppToast.showToastErrorMessage(any, any)).called(1);
+    });
+
+    testWidgets(
+      'should show canNotUploadFileToSignature toast '
+      'when a non-image file is dropped on the signature',
+    (tester) async {
+      String? message;
+      when(mockAppToast.showToastErrorMessage(any, any)).thenAnswer(
+        (invocation) => message = invocation.positionalArguments[1] as String,
+      );
+      final dropDir = io.Directory.systemTemp.createTempSync('identity-drop');
+      addTearDown(() => dropDir.deleteSync(recursive: true));
+      final note = io.File('${dropDir.path}/note.txt')..writeAsStringSync('hello drop');
+
+      await tester.runAsync(() async {
+        late BuildContext capturedContext;
+        await tester.pumpWidget(GetMaterialApp(
+          localizationsDelegates: const [
+            AppLocalizationsDelegate(),
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: LocalizationService.supportedLocales,
+          home: Scaffold(body: Builder(builder: (context) {
+            capturedContext = context;
+            return const SizedBox.shrink();
+          })),
+        ));
+        await tester.pump();
+
+        identityCreatorController.onLocalFileDropZoneListener(
+          context: capturedContext,
+          details: DropDoneDetails(
+            files: [DropItemFile(note.path, mimeType: 'text/plain')],
+            localPosition: Offset.zero,
+            globalPosition: Offset.zero,
+          ),
+          maxWidth: 600,
+        );
+
+        for (var i = 0; i < 100 && message == null; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          await tester.pump();
+        }
+      });
+
+      expect(message, 'Can not upload this file to signature');
+    });
+
+    test(
+      'should sanitize a stored signature '
+      'before the editor renders it',
+    () async {
+      identityCreatorController.arguments = IdentityCreatorArguments(
+        accountId,
+        session,
+        ownEmailAddress,
+        identity: Identity(
+          id: IdentityId(Id('identity-1')),
+          name: 'Test Identity',
+          email: ownEmailAddress,
+          htmlSignature: Signature('<p>Sig</p><img src="https://x/a.png" onerror="alert(1)">'),
+          mayDelete: true,
+        ),
+        actionType: IdentityActionType.edit,
+      );
+      when(mockGetAllIdentitiesInteractor.execute(
+        any,
+        any,
+        properties: anyNamed('properties'),
+      )).thenAnswer((_) => const Stream.empty());
+
+      identityCreatorController.onReady();
+      await pumpEventQueue();
+
+      expect(identityCreatorController.contentHtmlEditor, contains('Sig'));
+      expect(identityCreatorController.contentHtmlEditor, isNot(contains('onerror')));
+    });
+
+    test(
+      'should expose a sanitized stored signature as the editor initial text '
+      'before onReady runs',
+    () async {
+      // The web editor reads contentHtmlEditor as its initialText during the
+      // first build, which happens before onReady sanitizes the stored copy.
+      final controller = IdentityCreatorController(
+        mockVerifyNameInteractor,
+        mockGetAllIdentitiesInteractor,
+        mockSaveIdentityCacheOnWebInteractor,
+        mockIdentityUtils);
+      controller.arguments = IdentityCreatorArguments(
+        accountId,
+        session,
+        ownEmailAddress,
+        identity: Identity(
+          id: IdentityId(Id('identity-1')),
+          name: 'Test Identity',
+          email: ownEmailAddress,
+          htmlSignature: Signature('<p>Sig</p><img src="https://x/a.png" onerror="alert(1)">'),
+          mayDelete: true,
+        ),
+        actionType: IdentityActionType.edit,
+      );
+
+      expect(controller.contentHtmlEditor, contains('Sig'));
+      expect(controller.contentHtmlEditor, isNot(contains('onerror')));
+    });
+
+    test(
+      'should set the sanitized stored signature '
+      'in the web editor',
+    () async {
+      PlatformInfo.isTestingForWeb = true;
+      final webEditorController = _RecordingHtmlEditorController();
+      identityCreatorController.richTextWebController =
+          _FakeRichTextWebController(webEditorController);
+      addTearDown(() {
+        PlatformInfo.isTestingForWeb = false;
+        identityCreatorController.richTextWebController = null;
+      });
+      identityCreatorController.arguments = IdentityCreatorArguments(
+        accountId,
+        session,
+        ownEmailAddress,
+        identity: Identity(
+          id: IdentityId(Id('identity-1')),
+          name: 'Test Identity',
+          email: ownEmailAddress,
+          htmlSignature: Signature('<p>Sig</p><img src="https://x/a.png" onerror="alert(1)">'),
+          mayDelete: true,
+        ),
+        actionType: IdentityActionType.edit,
+      );
+      when(mockGetAllIdentitiesInteractor.execute(
+        any,
+        any,
+        properties: anyNamed('properties'),
+      )).thenAnswer((_) => const Stream.empty());
+
+      identityCreatorController.onReady();
+      await pumpEventQueue();
+
+      expect(webEditorController.text, '<p>Sig</p><img src="https://x/a.png">');
+    });
+
+    test(
+      'should sanitize the signature '
+      'before saving it',
+    () async {
+      PlatformInfo.isTestingForWeb = true;
+      addTearDown(() => PlatformInfo.isTestingForWeb = false);
+      final controller = IdentityCreatorController(
+        mockVerifyNameInteractor,
+        mockGetAllIdentitiesInteractor,
+        mockSaveIdentityCacheOnWebInteractor,
+        mockIdentityUtils);
+      addTearDown(controller.onClose);
+      controller.arguments = IdentityCreatorArguments(
+        accountId,
+        session,
+        ownEmailAddress,
+      );
+      when(mockVerifyNameInteractor.execute(any, any)).thenAnswer((_) => Right(VerifyNameViewState()));
+
+      controller.onReady();
+      controller.updateNameIdentity(MockBuildContext(), 'test');
+      controller.updateContentHtmlEditor(
+        '<p>Sig</p><img src="https://x/a.png" onerror="alert(1)">',
+      );
+      controller.onUnloadBrowserListener(Event(''));
+      await untilCalled(mockSaveIdentityCacheOnWebInteractor.execute(
+        any,
+        any,
+        identityCache: anyNamed('identityCache'),
+      ));
+
+      final cache = verify(mockSaveIdentityCacheOnWebInteractor.execute(
+        any,
+        any,
+        identityCache: captureAnyNamed('identityCache'),
+      )).captured.single as IdentityCache;
+      final saved = cache.identity?.htmlSignature?.value ?? '';
+      expect(saved, contains('Sig'));
+      expect(saved, isNot(contains('onerror')));
+    });
+
+    group('when editing an identity with a stored signature', () {
+      const storedSignature =
+          '<p style="float: left">Sig</p><a href="https://x.example" target="_blank">site</a>';
+
+      Future<String> saveAfter(void Function() edit) async {
+        PlatformInfo.isTestingForWeb = true;
+        addTearDown(() => PlatformInfo.isTestingForWeb = false);
+        identityCreatorController.arguments = IdentityCreatorArguments(
+          accountId,
+          session,
+          ownEmailAddress,
+          identity: Identity(
+            id: IdentityId(Id('identity-1')),
+            name: 'Test Identity',
+            email: ownEmailAddress,
+            htmlSignature: Signature(storedSignature),
+            mayDelete: true,
+          ),
+          actionType: IdentityActionType.edit,
+        );
+        when(mockGetAllIdentitiesInteractor.execute(
+          any,
+          any,
+          properties: anyNamed('properties'),
+        )).thenAnswer((_) => const Stream.empty());
+        when(mockVerifyNameInteractor.execute(any, any))
+            .thenAnswer((_) => Right(VerifyNameViewState()));
+
+        identityCreatorController.onReady();
+        await pumpEventQueue();
+        edit();
+        identityCreatorController.onUnloadBrowserListener(Event(''));
+        await untilCalled(mockSaveIdentityCacheOnWebInteractor.execute(
+          any,
+          any,
+          identityCache: anyNamed('identityCache'),
+        ));
+
+        final cache = verify(mockSaveIdentityCacheOnWebInteractor.execute(
+          any,
+          any,
+          identityCache: captureAnyNamed('identityCache'),
+        )).captured.single as IdentityCache;
+        return cache.identity?.htmlSignature?.value ?? '';
+      }
+
+      test(
+        'should keep the stored signature as is '
+        'when only the name changed',
+      () async {
+        final saved = await saveAfter(() => identityCreatorController
+            .updateNameIdentity(MockBuildContext(), 'Renamed'));
+
+        expect(saved, storedSignature);
+      });
+
+      test(
+        'should sanitize the signature '
+        'when the user changed it',
+      () async {
+        final saved = await saveAfter(() => identityCreatorController
+            .updateContentHtmlEditor('<p>New</p><img src="https://x/a.png" onerror="alert(1)">'));
+
+        expect(saved, contains('New'));
+        expect(saved, isNot(contains('onerror')));
+      });
+    });
   });
+}
+
+class _RecordingHtmlEditorController extends Fake implements HtmlEditorController {
+  String? text;
+
+  @override
+  void setText(String text) => this.text = text;
+}
+
+class _FakeRichTextWebController extends RichTextWebController {
+  _FakeRichTextWebController(this._editorController);
+
+  final HtmlEditorController _editorController;
+
+  @override
+  HtmlEditorController get editorController => _editorController;
 }

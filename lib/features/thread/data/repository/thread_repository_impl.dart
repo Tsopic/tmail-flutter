@@ -550,6 +550,7 @@ class ThreadRepositoryImpl extends ThreadRepository {
     Filter? filter,
     bool? collapseThreads,
     Properties? properties,
+    bool fetchSearchSnippets = true,
   }) async {
     final searchEmailsResponse = await mapDataSource[DataSourceType.network]!
         .searchEmails(
@@ -561,6 +562,7 @@ class ThreadRepositoryImpl extends ThreadRepository {
           filter: filter,
           collapseThreads: collapseThreads,
           properties: properties,
+          fetchSearchSnippets: fetchSearchSnippets,
         );
 
     return searchEmailsResponse.toSearchEmails ?? [];

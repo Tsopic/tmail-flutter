@@ -74,7 +74,8 @@ class ThreadAPI with HandleSetErrorMixin, SessionMixin, MailAPIMixin {
       Set<Comparator>? sort,
       Filter? filter,
       bool? collapseThreads,
-      Properties? properties
+      Properties? properties,
+      bool fetchSearchSnippets = true,
     }
   ) async {
     final processingInvocation = ProcessingInvocation();
@@ -91,15 +92,18 @@ class ThreadAPI with HandleSetErrorMixin, SessionMixin, MailAPIMixin {
 
     final queryEmailInvocation = jmapRequestBuilder.invocation(queryEmailMethod);
 
-    // SearchSnippet/get
-    final getSearchSnippetMethod = SearchSnippetGetMethod(accountId);
-    if (filter != null) getSearchSnippetMethod.addFilters(filter);
-    getSearchSnippetMethod.addReferenceEmailIds(
-      processingInvocation.createResultReference(
-        queryEmailInvocation.methodCallId,
-        ReferencePath.idsPath));
-    final getSearchSnippetInvocation = jmapRequestBuilder.invocation(
-      getSearchSnippetMethod);
+    // Autocomplete uses the regular preview and avoids a second text search.
+    MethodCallId? searchSnippetMethodCallId;
+    if (fetchSearchSnippets) {
+      final getSearchSnippetMethod = SearchSnippetGetMethod(accountId);
+      if (filter != null) getSearchSnippetMethod.addFilters(filter);
+      getSearchSnippetMethod.addReferenceEmailIds(
+        processingInvocation.createResultReference(
+          queryEmailInvocation.methodCallId,
+          ReferencePath.idsPath));
+      searchSnippetMethodCallId = jmapRequestBuilder
+          .invocation(getSearchSnippetMethod).methodCallId;
+    }
 
     // Email/get
     final getEmailMethod = GetEmailMethod(accountId);
@@ -131,10 +135,12 @@ class ThreadAPI with HandleSetErrorMixin, SessionMixin, MailAPIMixin {
       queryEmailResponse: responseOfQueryEmailMethod,
     );
 
-    final searchSnippets = _getSearchSnippetsFromResponse(
-      result,
-      getSearchSnippetMethodCallId: getSearchSnippetInvocation.methodCallId,
-    );
+    final searchSnippets = searchSnippetMethodCallId == null
+        ? null
+        : _getSearchSnippetsFromResponse(
+            result,
+            getSearchSnippetMethodCallId: searchSnippetMethodCallId,
+          );
     return SearchEmailsResponse(
         emailList: sortedEmailList,
         state: responseOfGetEmailMethod?.state,

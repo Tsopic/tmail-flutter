@@ -40,6 +40,7 @@ void main() {
           filter: anyNamed('filter'),
           collapseThreads: anyNamed('collapseThreads'),
           properties: anyNamed('properties'),
+          fetchSearchSnippets: false,
         ),
       ).thenAnswer((_) async => [searchEmail]);
       
@@ -75,6 +76,7 @@ void main() {
           filter: anyNamed('filter'),
           collapseThreads: anyNamed('collapseThreads'),
           properties: anyNamed('properties'),
+          fetchSearchSnippets: false,
         ),
       ).thenThrow(exception);
       

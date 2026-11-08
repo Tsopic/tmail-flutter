@@ -1,3 +1,5 @@
+import 'package:core/utils/html/editor_script/code_view_escape_guard_script.dart';
+import 'package:core/utils/html/editor_script/list_keyboard_handler_script.dart';
 import 'package:core/utils/html/editor_script/quoted_reply_enter_handler_script.dart';
 import 'package:core/utils/html/html_utils.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +45,18 @@ void main() {
     expect(handlerScripts.single.script, quotedReplyEnterHandler.script);
   });
 
+  test('registers the list keyboard command once', () {
+    const listKeyboardHandler = ListKeyboardHandlerScript();
+    final scripts = buildPlan().initialScripts;
+
+    final handlerScripts = scripts
+        .where((script) => script.name == listKeyboardHandler.name)
+        .toList();
+
+    expect(handlerScripts, hasLength(1));
+    expect(handlerScripts.single.script, listKeyboardHandler.script);
+  });
+
   test('preserves the script initialization order', () {
     final selectionChangeScript = WebScript(
       name: _selectionScriptName,
@@ -55,6 +69,7 @@ void main() {
       scripts.map((script) => script.name),
       orderedEquals([
         HtmlUtils.removeLineHeight1px.name,
+        HtmlUtils.sanitizeInsertHtml.name,
         HtmlUtils.registerDropListener.name,
         HtmlUtils.unregisterDropListener.name,
         selectionChangeScript.name,
@@ -67,6 +82,8 @@ void main() {
         HtmlUtils.recalculateEditorHeight(maxHeight: _maxHeight).name,
         HtmlUtils.registerFileLinkRowEnterKeyHandler(isWebPlatform: true).name,
         const QuotedReplyEnterHandlerScript().name,
+        const ListKeyboardHandlerScript().name,
+        const CodeViewEscapeGuardScript().name,
         HtmlUtils.registerFileLinkCardClickHandler(isWebPlatform: true).name,
         WorkplaceScripts.registerDriveCardDeleteOverlay(
           _driveCardRemoveLabel,
@@ -82,10 +99,13 @@ void main() {
     final plan = buildPlan();
 
     expect(plan.initializationScriptNames, orderedEquals([
+      HtmlUtils.sanitizeInsertHtml.name,
       HtmlUtils.registerDropListener.name,
       _selectionScriptName,
       HtmlUtils.registerFileLinkRowEnterKeyHandler(isWebPlatform: true).name,
       const QuotedReplyEnterHandlerScript().name,
+      const ListKeyboardHandlerScript().name,
+      const CodeViewEscapeGuardScript().name,
       HtmlUtils.registerFileLinkCardClickHandler(isWebPlatform: true).name,
       WorkplaceScripts.registerDriveCardDeleteOverlay(
         _driveCardRemoveLabel,

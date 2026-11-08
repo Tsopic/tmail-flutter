@@ -24,17 +24,6 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
   static const EmailSortOrderType defaultSortOrder =
       EmailSortOrderType.relevance;
 
-  static const Set<String> _commonEmailDomainSuffixes = {
-    '.com',
-    '.ee',
-    '.net',
-    '.org',
-    '.io',
-    '.ai',
-    '.co',
-    '.eu',
-  };
-
   final Set<String> from;
   final Set<String> to;
   final SearchQuery? text;
@@ -227,54 +216,10 @@ class SearchEmailFilter with EquatableMixin, OptionParamMixin {
     );
   }
 
-  Filter _generateFilterFromTextToken(String token) {
-    final participantValues = _generateParticipantSearchValues(token);
-
-    if (participantValues.isEmpty) {
-      return EmailFilterCondition(text: token);
-    }
-
-    return LogicFilterOperator(Operator.OR, {
-      EmailFilterCondition(text: token),
-      for (final value in participantValues) ...{
-        EmailFilterCondition(from: value),
-        EmailFilterCondition(to: value),
-        EmailFilterCondition(cc: value),
-        EmailFilterCondition(bcc: value),
-      },
-    });
-  }
-
-  Set<String> _generateParticipantSearchValues(String token) {
-    final value = token.trim();
-
-    if (value.isEmpty || _isQuotedPhrase(value)) {
-      return {};
-    }
-
-    final values = {value};
-
-    if (_isBareDomainToken(value)) {
-      for (final suffix in _commonEmailDomainSuffixes) {
-        values
-          ..add('$value$suffix')
-          ..add('@$value$suffix');
-      }
-    }
-
-    return values;
-  }
-
-  bool _isQuotedPhrase(String value) =>
-      value.length >= 2 && value.startsWith('"') && value.endsWith('"');
-
-  bool _isBareDomainToken(String value) =>
-      value.length >= 3 &&
-      !value.contains('@') &&
-      !value.contains('.') &&
-      !value.contains(':') &&
-      !value.contains(RegExp(r'\s')) &&
-      RegExp(r'^[A-Za-z0-9-]+$').hasMatch(value);
+  // Keep free text on the server's text matcher, including partial words and
+  // domains. Address fields below remain explicit user-selected constraints.
+  Filter _generateFilterFromTextToken(String token) =>
+      EmailFilterCondition(text: token);
 
   List<Filter> _generateFilterFromToField() {
     if (to.length == 1) {

@@ -338,6 +338,26 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "cannotUploadFoldersAsAttachments": "{count,plural, =1{Impossible de téléverser ce dossier en pièce jointe}other{Impossible de téléverser ces dossiers en pièces jointes}}",
+  "@cannotUploadFoldersAsAttachments": {
+    "type": "text",
+    "placeholders_order": [
+      "count"
+    ],
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "sharedFilesCannotBeRead": "{count,plural, =1{Un fichier partagé n'a pas pu être lu et n'a pas été ajouté}other{{count} fichiers partagés n'ont pas pu être lus et n'ont pas été ajoutés}}",
+  "@sharedFilesCannotBeRead": {
+    "type": "text",
+    "placeholders_order": [
+      "count"
+    ],
+    "placeholders": {
+      "count": {}
+    }
+  },
   "attachments_uploaded_successfully": "Pièces jointes téléversées avec succès",
   "@attachments_uploaded_successfully": {
     "type": "text",
@@ -1726,7 +1746,7 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "yourFilterHasBeenUpdated": "Votre filtre a été créé",
+  "yourFilterHasBeenUpdated": "Votre filtre a été mis à jour",
   "@yourFilterHasBeenUpdated": {
     "type": "text",
     "placeholders_order": [],
@@ -3178,6 +3198,12 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "folderNameContainsForbiddenCharacters": "Le nom du dossier ne peut ni commencer par \"#\" ni contenir \".\", \"%\", \"*\" ou de retours à la ligne",
+  "@folderNameContainsForbiddenCharacters": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "newSubfolder": "Nouveau sous-dossier",
   "@newSubfolder": {
     "type": "text",
@@ -3762,11 +3788,15 @@
     "placeholders_order": [],
     "placeholders": {}
   },
-  "unsubscribeMailDialogMessage": "Confirmez-vous ne plus vouloir recevoir de message similaire en provenance de",
+  "unsubscribeMailDialogMessage": "Confirmez-vous ne plus vouloir recevoir de message similaire en provenance de {senderName} ?",
   "@unsubscribeMailDialogMessage": {
     "type": "text",
-    "placeholders_order": [],
-    "placeholders": {}
+    "placeholders_order": [
+      "senderName"
+    ],
+    "placeholders": {
+      "senderName": {}
+    }
   },
   "unsubscribedFromThisMailingList": "Désabonnement de cette liste de diffusion réussi",
   "@unsubscribedFromThisMailingList": {
@@ -6024,6 +6054,58 @@
     "placeholders_order": [],
     "placeholders": {}
   },
+  "attachingFileTitle": "Ajout du fichier en pièce jointe",
+  "@attachingFileTitle": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveOversizeDialogMessage": "Votre fichier dépasse {maxSize}. Il sera téléversé dans Twake Drive et joint sous forme de ",
+  "@driveOversizeDialogMessage": {
+    "type": "text",
+    "placeholders_order": [
+      "maxSize"
+    ],
+    "placeholders": {
+      "maxSize": {}
+    }
+  },
+  "driveOversizeDialogMessageEmphasis": "lien",
+  "@driveOversizeDialogMessageEmphasis": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveUploadRowDone": "Terminé",
+  "@driveUploadRowDone": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveUploadRowFailed": "Échec",
+  "@driveUploadRowFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveUploadRowCancelled": "Annulé",
+  "@driveUploadRowCancelled": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveOversizeUploadFailed": "Certains fichiers n'ont pas pu être téléversés dans Drive.",
+  "@driveOversizeUploadFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "driveOversizeUploadBusy": "Un téléversement Drive est déjà en cours. Réessayez une fois terminé.",
+  "@driveOversizeUploadBusy": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
   "driveNoValidAttachment": "Aucune pièce jointe valide",
   "@driveNoValidAttachment": {
     "type": "text",
@@ -6050,6 +6132,54 @@
   },
   "deepLinkCannotBeOpened": "Ce lien de connexion ne provient pas de Twake. Veuillez vous connecter depuis l'application.",
   "@deepLinkCannotBeOpened": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "pdfPasswordRequired": "PDF protégé par mot de passe",
+  "@pdfPasswordRequired": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "incorrectPdfPassword": "Mot de passe incorrect, veuillez réessayer",
+  "@incorrectPdfPassword": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "pdfPasswordNotProvided": "Ce PDF est protégé par mot de passe. Vous pouvez toujours le télécharger.",
+  "@pdfPasswordNotProvided": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "linkTypeNotAllowed": "Ce type de lien n'est pas autorisé !",
+  "@linkTypeNotAllowed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "messageDialogSendEmailContentLoading": "Votre message n'a pas pu être envoyé car son contenu est encore en cours de chargement. Veuillez patienter et réessayer.",
+  "@messageDialogSendEmailContentLoading": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "messageDialogSendEmailContentLoadFailed": "Votre message n'a pas pu être envoyé car son contenu n'a pas pu être chargé. Veuillez fermer l'éditeur et rouvrir l'e-mail.",
+  "@messageDialogSendEmailContentLoadFailed": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "domainActivationPendingTitle": "Votre domaine de messagerie est en attente d'activation",
+  "@domainActivationPendingTitle": {
+    "type": "text",
+    "placeholders_order": [],
+    "placeholders": {}
+  },
+  "domainActivationPendingMessage": "Vous ne pouvez pas envoyer d'e-mails pour le moment. Contactez votre administrateur si le problème persiste.",
+  "@domainActivationPendingMessage": {
     "type": "text",
     "placeholders_order": [],
     "placeholders": {}

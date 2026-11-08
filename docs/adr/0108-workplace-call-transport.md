@@ -25,29 +25,35 @@ Accepted
 
 - The access mode stays a sealed pair: bridge (the container holds the session) or bearer token.
 - A runner resolves the mode once per action, then hands it to that action.
-- An action declares whether the bridge can serve it; a declared-unsupported action goes
-  straight over the bearer token, no bridge round trip.
-- A bridge failure is that action's failure: the bridge may have dispatched the request before
-  it failed, so the runner never replays the action over the bearer token.
-- Every request the action sends rides that one mode, so an action costs at most one exchange.
+- A call declares one bridge policy: `never` (straight over the bearer token, no bridge round
+  trip), `noBearerReplay`, or `bearerReplay`.
+- A bridge failure is that call's failure under `noBearerReplay`: the bridge may have
+  dispatched the request before it failed, so the runner does not replay it.
+- `bearerReplay` is only for a call whose re-send is harmless, such as `POST /intents`;
+  an upload never uses it.
+- Every request the call sends rides that one mode, so a call costs one exchange, plus one
+  retry after an OIDC refresh.
 - The bridge exists on web only, so every action on mobile resolves to the bearer token.
 - A request executor sends whatever the caller describes.
 - The Drive token is exchanged per action, kept in memory, never persisted or refreshed.
 - The runner owns the exchange and its one OIDC refresh retry on a 400/401 subject-token
-  error; that stays the only retry.
+  error; that stays the only retry of the exchange.
 - The main app keeps supplying the OIDC token getter and refresh trigger to the composer
   extension, which passes both to the runner.
 
 ```
-action:
-  supportsBridge: bool               # declared per action, not discovered by failing
+call:
+  bridgePolicy: never | noBearerReplay | bearerReplay   # declared per call
   call(accessMode)
 
-run(platformUrl, action):
-  if action.supportsBridge and bridge supported and available:
-    return action(BridgeAccessMode)
+run(platformUrl, call):
+  if call.bridgePolicy != never and bridge supported and available:
+    if call.bridgePolicy != bearerReplay:
+      return call(BridgeAccessMode)
+    try: return call(BridgeAccessMode)
+    catch: log, fall through to bearer
   token = exchange(oidcToken)        # per action, not stored
-  return action(BearerTokenAccessMode(token))
+  return call(BearerTokenAccessMode(token))
 
 send(platformUrl, accessMode, method, pathSegments, query, body, headers):
   bridge -> fetchJSON(method, path, body, headers)
@@ -66,13 +72,13 @@ send(platformUrl, accessMode, method, pathSegments, query, body, headers):
 - Adding a Workplace call is a request description, not another auth flow.
 - Exchanging a token per action costs one extra round trip whenever the bridge is absent,
   which on mobile is every action.
-- A container-side bridge failure surfaces to the user instead of being retried over the bearer
-  token; `supportsBridge` is the only lever that moves an action off the bridge.
+- A container-side bridge failure surfaces to the user unless the call's policy is
+  `bearerReplay`; `bridgePolicy` is the only lever that moves a call off the bridge.
 
 ## Open questions
 
 - Whether the container-side `fetchJSON` accepts a binary body; it ships JSON-only today.
-  The answer sets `supportsBridge` on the upload action; the transport is the same either way.
+  The answer sets `bridgePolicy` on the upload call; the transport is the same either way.
 
 ## Sources
 

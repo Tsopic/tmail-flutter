@@ -13,8 +13,10 @@ import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import '../abstract/abstract_thread_robot.dart';
 import '../thread_empty_trash_robot.dart';
 import '../thread_robot.dart';
+import '../../utils/test_timeouts.dart';
 import '../../utils/wait_for_condition.dart';
 import 'web_fire_on_tap.dart';
+import 'web_thread_viewport_robot.dart';
 
 /// Web-specific empty-trash robot: tapping the banner requires firing the
 /// [TapGestureRecognizer] of a [TextSpan] directly, because [RichText] spans
@@ -44,7 +46,11 @@ class WebThreadEmptyTrashRobot extends ThreadEmptyTrashRobot {
 
 class WebThreadRobot extends ThreadRobot implements AbstractThreadRobot {
   WebThreadRobot(PatrolIntegrationTester $)
-    : super($, emptyTrashRobot: WebThreadEmptyTrashRobot($));
+      : super(
+          $,
+          emptyTrashRobot: WebThreadEmptyTrashRobot($),
+          viewport: WebThreadViewportRobot($),
+        );
 
   static const Duration _emailOpenPumpDuration = Duration(seconds: 2);
   static const Duration _emailListRefreshInterval = Duration(seconds: 5);
@@ -103,21 +109,23 @@ class WebThreadRobot extends ThreadRobot implements AbstractThreadRobot {
     // Web XHR callbacks need an event-loop yield, which waitUntilVisible's
     // frame-only retry loop does not provide.
     //
-    // On a cold backend, SMTP delivery can finish after provisionEmail's refresh.
-    // Re-query periodically so opening the fixture does not depend on a push
-    // update arriving before the timeout.
+    // Provisioned emails go through asynchronous server-side delivery: the single
+    // refresh issued right after provisioning may run before the email lands in
+    // the mailbox, and nothing else is guaranteed to reload the list. Periodically
+    // re-query the email list until the tile shows up.
     final sinceLastRefresh = Stopwatch()..start();
-    await waitForCondition(() async {
-      await $.pump();
-      if (emailFinder.evaluate().isNotEmpty) return true;
-      if (sinceLastRefresh.elapsed >= _emailListRefreshInterval) {
-        sinceLastRefresh.reset();
-        await Get.find<ThreadController>().refreshAllEmail(
-          shouldClearCache: true,
-        );
-      }
-      return false;
-    });
+    await waitForCondition(
+      () async {
+        await $.pump();
+        if (emailFinder.evaluate().isNotEmpty) return true;
+        if (sinceLastRefresh.elapsed >= _emailListRefreshInterval) {
+          sinceLastRefresh.reset();
+          await Get.find<ThreadController>().refreshAllEmail(shouldClearCache: true);
+        }
+        return false;
+      },
+      timeout: TestTimeouts.long,
+    );
     await emailFinder.tap();
     await $.pump(_emailOpenPumpDuration);
   }

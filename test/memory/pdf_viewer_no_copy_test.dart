@@ -16,7 +16,7 @@ import 'package:mockito/mockito.dart';
 import 'package:tmail_ui_user/features/download/domain/state/download_attachment_for_web_state.dart';
 import 'package:tmail_ui_user/features/download/domain/usecase/download_attachment_for_web_interactor.dart';
 import 'package:tmail_ui_user/features/email/presentation/widgets/pdf_viewer/pdf_viewer.dart';
-import 'package:twake_previewer_flutter/twake_pdf_previewer/twake_pdf_previewer.dart';
+import 'package:tmail_ui_user/features/email/presentation/widgets/pdf_viewer/password_aware_pdf_previewer.dart';
 
 import '../fixtures/widget_fixtures.dart';
 
@@ -131,13 +131,13 @@ void main() {
     await tester.pump();
 
     final previewer =
-        tester.widget<TwakePdfPreviewer>(find.byType(TwakePdfPreviewer));
+        tester.widget<PasswordAwarePdfPreviewer>(find.byType(PasswordAwarePdfPreviewer));
     expect(identical(previewer.bytes, downloadedBytes), isTrue);
 
     // Rebuild again; bytes should still be the same instance (no cloning).
     await tester.pump();
     final previewer2 =
-        tester.widget<TwakePdfPreviewer>(find.byType(TwakePdfPreviewer));
+        tester.widget<PasswordAwarePdfPreviewer>(find.byType(PasswordAwarePdfPreviewer));
     expect(identical(previewer2.bytes, downloadedBytes), isTrue);
   });
 }

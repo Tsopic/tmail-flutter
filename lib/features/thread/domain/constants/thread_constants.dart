@@ -29,7 +29,7 @@ class ThreadConstants {
     IndividualHeaderIdentifier.xPriorityHeader.value,
     IndividualHeaderIdentifier.importanceHeader.value,
     IndividualHeaderIdentifier.priorityHeader.value,
-    IndividualHeaderIdentifier.listUnsubscribeHeader.value,
+    EmailProperty.headers,
   });
   static final propertiesUpdatedDefault = propertiesDefault;
 

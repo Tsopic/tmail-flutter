@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 
 import 'package:core/data/network/config/dynamic_url_interceptors.dart';
 import 'package:core/utils/logging/app_logger_registry.dart';
 import 'package:core/presentation/resources/image_paths.dart';
+import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
 import 'package:core/presentation/utils/app_toast.dart';
 import 'package:core/presentation/utils/html_transformer/dom/normalize_line_height_in_style_transformer.dart';
@@ -22,11 +25,13 @@ import 'package:jmap_dart_client/jmap/account_id.dart';
 import 'package:jmap_dart_client/jmap/core/error/set_error.dart';
 import 'package:jmap_dart_client/jmap/core/id.dart';
 import 'package:jmap_dart_client/jmap/core/session/session.dart';
+import 'package:jmap_dart_client/jmap/core/unsigned_int.dart';
 import 'package:jmap_dart_client/jmap/identities/identity.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email.dart';
 import 'package:jmap_dart_client/jmap/mail/email/email_address.dart';
 import 'package:jmap_dart_client/jmap/mail/mailbox/mailbox.dart';
 import 'package:labels/model/label.dart';
+import 'package:linagora_design_flutter/linagora_design_flutter.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:model/email/attachment.dart';
@@ -35,16 +40,19 @@ import 'package:model/extensions/account_id_extensions.dart';
 import 'package:model/extensions/session_extension.dart';
 import 'package:model/mailbox/expand_mode.dart';
 import 'package:model/mailbox/presentation_mailbox.dart';
+import 'package:model/upload/file_info.dart';
 import 'package:rich_text_composer/rich_text_composer.dart';
 import 'package:tmail_ui_user/features/base/before_reconnect_manager.dart';
 import 'package:tmail_ui_user/features/caching/caching_manager.dart';
 import 'package:tmail_ui_user/features/caching/utils/cache_utils.dart';
+import 'package:tmail_ui_user/features/composer/domain/exceptions/forbidden_to_send_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/invalid_recipients_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/exceptions/set_method_exception.dart';
 import 'package:tmail_ui_user/features/composer/domain/repository/composer_repository.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/save_email_as_drafts_state.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/send_email_state.dart';
 import 'package:tmail_ui_user/features/composer/domain/state/update_email_drafts_state.dart';
+import 'package:tmail_ui_user/features/email/domain/exceptions/email_exceptions.dart';
 import 'package:tmail_ui_user/features/email/domain/state/transform_html_email_content_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/get_email_content_state.dart';
 import 'package:tmail_ui_user/features/email/domain/state/update_template_email_state.dart' show UpdateTemplateEmailSuccess;
@@ -73,6 +81,7 @@ import 'package:tmail_ui_user/features/composer/presentation/model/formatting_op
 import 'package:tmail_ui_user/features/composer/presentation/model/saved_composing_email.dart';
 import 'package:tmail_ui_user/features/composer/presentation/model/screen_display_mode.dart';
 import 'package:tmail_ui_user/features/composer/presentation/providers/composer_auto_save_notifier.dart';
+import 'package:tmail_ui_user/features/composer/presentation/widgets/domain_activation_pending_dialog.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/get_email_content_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/print_email_interactor.dart';
 import 'package:tmail_ui_user/features/email/domain/usecases/save_template_email_interactor.dart';
@@ -99,18 +108,26 @@ import 'package:tmail_ui_user/features/server_settings/domain/usecases/get_serve
 import 'package:tmail_ui_user/features/upload/domain/usecases/local_file_picker_interactor.dart';
 import 'package:tmail_ui_user/features/upload/domain/usecases/local_image_picker_interactor.dart';
 import 'package:tmail_ui_user/features/upload/presentation/controller/upload_controller.dart';
+import 'package:tmail_ui_user/features/upload/presentation/model/drive_oversize_transfer_state.dart';
 import 'package:tmail_ui_user/features/upload/presentation/model/upload_file_state.dart';
+import 'package:tmail_ui_user/features/upload/presentation/providers/drive_oversize_transfer_notifier.dart';
 import 'package:tmail_ui_user/main/bindings/network/binding_tag.dart';
 import 'package:tmail_ui_user/main/exceptions/thrower/cache_exception_thrower.dart';
 import 'package:tmail_ui_user/main/localizations/app_localizations.dart';
 import 'package:tmail_ui_user/main/providers/app_provider_container.dart';
 import 'package:tmail_ui_user/main/universal_import/html_stub.dart' as html;
+import 'package:tmail_ui_user/main/providers/workplace/drive_attachment_uri_value_notifier_provider.dart';
+import 'package:tmail_ui_user/main/providers/workplace/drive_oversize_uploader_provider.dart';
 import 'package:tmail_ui_user/main/utils/app_config.dart';
 import 'package:tmail_ui_user/main/utils/toast_manager.dart';
 import 'package:tmail_ui_user/main/utils/twake_app_manager.dart';
 import 'package:uuid/uuid.dart';
 import 'package:universal_html/html.dart' as browser_html;
+import 'package:workplace/data/transport/workplace_access_mode_runner.dart';
 import 'package:workplace/domain/entity/drive_document.dart';
+import 'package:workplace/domain/repository/workplace_repository.dart';
+import 'package:workplace/domain/usecase/exchange_drive_token_interactor.dart';
+import 'package:workplace/domain/usecase/upload_drive_file_interactor.dart';
 import 'package:workplace/presentation/model/drive_pick_state.dart';
 
 import '../../../fixtures/account_fixtures.dart';
@@ -140,8 +157,15 @@ class MockRichTextWebController extends Mock implements RichTextWebController {
   @override
   HtmlEditorController get editorController => _editorController;
 
+  bool isCodeViewOnForTest = false;
+
   @override
-  bool get codeViewEnabled => false;
+  bool get codeViewEnabled => isCodeViewOnForTest;
+
+  bool isCodeViewBusyForTest = false;
+
+  @override
+  bool get isCodeViewBusy => isCodeViewBusyForTest;
 
   @override
   Future<void> setEnableCodeView() async {}
@@ -361,6 +385,85 @@ Future<void> _verifyOverQuotaPremiumAction(
         ? null
         : Uri.parse(testCase.paywallTemplate!),
   );
+}
+
+/// Readable, so it is not a folder, but its size lookup fails.
+class _SizeFailingXFile extends DropItemFile {
+  _SizeFailingXFile(super.path);
+
+  @override
+  Future<int> length() => Future.error(const FileSystemException('size lookup failed'));
+}
+
+/// Drops [files] on the composer and returns the error toast it shows,
+/// closing the loading dialog when the drop fails inside it.
+Future<String?> _dropAndCaptureErrorToast(
+  WidgetTester tester,
+  ComposerController controller,
+  MockAppToast appToast,
+  List<DropItem> files,
+) async {
+  String? message;
+  when(appToast.showToastErrorMessage(any, any)).thenAnswer(
+    (invocation) => message = invocation.positionalArguments[1] as String,
+  );
+
+  await tester.runAsync(() async {
+    late BuildContext context;
+    await tester.pumpWidget(WidgetFixtures.makeTestableWidget(
+      child: Builder(builder: (ctx) {
+        context = ctx;
+        return const SizedBox.shrink();
+      }),
+    ));
+    await tester.pump();
+
+    controller.onLocalFileDropZoneListener(
+      context: context,
+      details: DropDoneDetails(files: files, localPosition: Offset.zero, globalPosition: Offset.zero),
+      maxWidth: 600,
+    );
+
+    for (var i = 0; i < 100 && message == null; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      await tester.pump();
+      if (find.text('Close').evaluate().isNotEmpty) await tester.tap(find.text('Close'));
+    }
+  });
+  return message;
+}
+
+/// Never reached: the runner below fails before any Workplace request.
+class _UnusedWorkplaceRepository extends Fake implements WorkplaceRepository {}
+
+/// Drive enabled, with a runner that has no OIDC token: the recovery takes
+/// over, then fails its batch before sending anything.
+ProviderContainer _buildDriveRecoveryContainer() {
+  final repository = _UnusedWorkplaceRepository();
+  return ProviderContainer(overrides: [
+    driveAttachmentUriValueProvider.overrideWithValue(
+      ValueNotifier<Uri?>(Uri.parse('https://platform.example.com')),
+    ),
+    driveOversizeUploaderProvider.overrideWithValue((
+      runner: WorkplaceAccessModeRunner(
+        exchangeTokenInteractor: ExchangeDriveTokenInteractor(repository),
+        oidcTokenGetter: () => null,
+        oidcRefreshTrigger: () async => null,
+      ),
+      interactor: UploadDriveFileInteractor(repository),
+    )),
+  ]);
+}
+
+/// The file names of every Drive batch the recovery starts in [container].
+List<List<String>> _recordStartedDriveBatches(ProviderContainer container) {
+  final batches = <List<String>>[];
+  container.listen<List<DriveOversizeTransferState>>(driveOversizeTransferProvider, (previous, rows) {
+    if ((previous?.isEmpty ?? true) && rows.isNotEmpty) {
+      batches.add(rows.map((row) => row.fileName).toList());
+    }
+  });
+  return batches;
 }
 
 @GenerateNiceMocks([
@@ -1348,10 +1451,40 @@ void main() {
         expect(composerController?.restoringSignatureButton, isFalse);
         expect(composerController?.synchronizeInitDraftHash, isFalse);
       });
+
+      test(
+        'Should clear restoringSignatureButton\n'
+        'When the restored nested signature is not inserted',
+      () async {
+        // arrange
+        const contentWithQuotedSignature = '$emailContent'
+            '<blockquote><div class="tmail-signature">quoted signature</div></blockquote>';
+        when(mockTransformHtmlEmailContentInteractor.execute(any, any))
+            .thenAnswer((_) => Stream.value(
+                Left(TransformHtmlEmailContentFailure(Exception()))));
+
+        // act
+        await composerController?.restoreCollapsibleSignatureButton(
+          contentWithQuotedSignature,
+        );
+
+        // assert
+        expect(composerController?.restoringSignatureButton, isFalse);
+      });
     });
 
     group('applySignature test:', () {
       const rawSignature = '<p style="line-height:0.1;">Alice</p>';
+
+      void useMobileEditor() {
+        composerController?.richTextMobileTabletController =
+            mockRichTextMobileTabletController;
+        when(mockRichTextMobileTabletController.htmlEditorApi)
+            .thenReturn(mockHtmlEditorApi);
+      }
+
+      void verifyNoMobileSignatureInserted() => verifyNever(mockHtmlEditorApi
+          .insertSignature(any, allowCollapsed: anyNamed('allowCollapsed')));
 
       test(
         'Should insert the normalized signature into the editor\n'
@@ -1360,10 +1493,7 @@ void main() {
         const transformedDocument =
             '<html><head></head><body><p>Alice</p></body></html>';
         const normalizedSignature = '<p>Alice</p>';
-        composerController?.richTextMobileTabletController =
-            mockRichTextMobileTabletController;
-        when(mockRichTextMobileTabletController.htmlEditorApi)
-            .thenReturn(mockHtmlEditorApi);
+        useMobileEditor();
         when(mockTransformHtmlEmailContentInteractor.execute(any, any))
             .thenAnswer((_) => Stream.value(
                 Right(TransformHtmlEmailContentSuccess(transformedDocument))));
@@ -1396,10 +1526,7 @@ void main() {
             '<body><p class="sig">Alice</p></body></html>';
         const normalizedSignature =
             '<style>.sig{color:#093}</style><p class="sig">Alice</p>';
-        composerController?.richTextMobileTabletController =
-            mockRichTextMobileTabletController;
-        when(mockRichTextMobileTabletController.htmlEditorApi)
-            .thenReturn(mockHtmlEditorApi);
+        useMobileEditor();
         when(mockTransformHtmlEmailContentInteractor.execute(any, any))
             .thenAnswer((_) => Stream.value(
                 Right(TransformHtmlEmailContentSuccess(transformedDocument))));
@@ -1435,101 +1562,113 @@ void main() {
       });
 
       test(
-        'Should insert the original signature into the editor\n'
+        'Should not insert the signature into the editor\n'
         'When TransformHtmlEmailContentInteractor fails',
       () async {
-        composerController?.richTextMobileTabletController =
-            mockRichTextMobileTabletController;
-        when(mockRichTextMobileTabletController.htmlEditorApi)
-            .thenReturn(mockHtmlEditorApi);
+        useMobileEditor();
         when(mockTransformHtmlEmailContentInteractor.execute(any, any))
             .thenAnswer((_) => Stream.value(
                 Left(TransformHtmlEmailContentFailure(Exception()))));
 
         await composerController?.applySignature(rawSignature);
 
-        verify(mockHtmlEditorApi.insertSignature(
-          rawSignature,
-          allowCollapsed: false,
-        )).called(1);
+        verifyNoMobileSignatureInserted();
       });
 
       test(
-        'Should insert the original signature into the editor\n'
+        'Should not insert the signature into the editor\n'
         'When TransformHtmlEmailContentInteractor throws a stream error',
       () async {
-        composerController?.richTextMobileTabletController =
-            mockRichTextMobileTabletController;
-        when(mockRichTextMobileTabletController.htmlEditorApi)
-            .thenReturn(mockHtmlEditorApi);
+        useMobileEditor();
         when(mockTransformHtmlEmailContentInteractor.execute(any, any))
             .thenAnswer((_) => Stream.error(Exception('transform crashed')));
 
         await composerController?.applySignature(rawSignature);
 
-        verify(mockHtmlEditorApi.insertSignature(
-          rawSignature,
-          allowCollapsed: false,
-        )).called(1);
+        verifyNoMobileSignatureInserted();
       });
 
       test(
-        'Should insert the original signature into the editor\n'
+        'Should not insert the signature into the editor\n'
         'When TransformHtmlEmailContentInteractor returns an empty stream',
       () async {
-        composerController?.richTextMobileTabletController =
-            mockRichTextMobileTabletController;
-        when(mockRichTextMobileTabletController.htmlEditorApi)
-            .thenReturn(mockHtmlEditorApi);
+        useMobileEditor();
         when(mockTransformHtmlEmailContentInteractor.execute(any, any))
             .thenAnswer((_) => const Stream.empty());
 
         await composerController?.applySignature(rawSignature);
 
-        verify(mockHtmlEditorApi.insertSignature(
-          rawSignature,
-          allowCollapsed: false,
-        )).called(1);
+        verifyNoMobileSignatureInserted();
       });
 
       test(
-        'Should insert the original signature into the editor\n'
-        'When the transform succeeds but returns blank content',
+        'Should not insert the signature into the editor\n'
+        'When the sanitized signature is blank (only active content)',
       () async {
-        composerController?.richTextMobileTabletController =
-            mockRichTextMobileTabletController;
-        when(mockRichTextMobileTabletController.htmlEditorApi)
-            .thenReturn(mockHtmlEditorApi);
+        useMobileEditor();
         when(mockTransformHtmlEmailContentInteractor.execute(any, any))
             .thenAnswer((_) => Stream.value(
                 Right(TransformHtmlEmailContentSuccess('   '))));
 
         await composerController?.applySignature(rawSignature);
 
-        verify(mockHtmlEditorApi.insertSignature(
-          rawSignature,
-          allowCollapsed: false,
-        )).called(1);
+        verifyNoMobileSignatureInserted();
       });
 
       test(
-        'Should insert the original signature into the editor\n'
+        'Should not insert the signature into the editor\n'
         'When the last emitted state is not TransformHtmlEmailContentSuccess',
       () async {
-        composerController?.richTextMobileTabletController =
-            mockRichTextMobileTabletController;
-        when(mockRichTextMobileTabletController.htmlEditorApi)
-            .thenReturn(mockHtmlEditorApi);
+        useMobileEditor();
         when(mockTransformHtmlEmailContentInteractor.execute(any, any))
             .thenAnswer((_) => Stream.value(
                 Right(TransformHtmlEmailContentLoading())));
 
         await composerController?.applySignature(rawSignature);
 
-        verify(mockHtmlEditorApi.insertSignature(
-          rawSignature,
-          allowCollapsed: false,
-        )).called(1);
+        verifyNoMobileSignatureInserted();
+      });
+
+      test(
+        'Should not insert the signature into the web editor\n'
+        'When the sanitized signature is blank (only active content)',
+      () async {
+        PlatformInfo.isTestingForWeb = true;
+        addTearDown(() => PlatformInfo.isTestingForWeb = false);
+        composerController?.richTextWebController = mockRichTextWebController;
+        when(mockTransformHtmlEmailContentInteractor.execute(any, any))
+            .thenAnswer((_) => Stream.value(Right(TransformHtmlEmailContentSuccess(
+                '<html><head></head><body></body></html>'))));
+
+        await composerController?.applySignature(
+          '<iframe src="javascript:alert(1)"></iframe>',
+        );
+
+        final editor =
+            mockRichTextWebController.editorController as MockHtmlEditorController;
+        verifyNever(editor.insertSignature(
+          any,
+          allowCollapsed: anyNamed('allowCollapsed'),
+        ));
+      });
+
+      test(
+        'Should log an error forced to the web console\n'
+        'When no signature is inserted because sanitizing left it blank',
+      () async {
+        final logHandler = CapturingLogHandler();
+        AppLoggerRegistry.instance.registerHandler(logHandler);
+        addTearDown(AppLoggerRegistry.instance.resetForTesting);
+        useMobileEditor();
+        when(mockTransformHtmlEmailContentInteractor.execute(any, any))
+            .thenAnswer((_) => Stream.value(
+                Right(TransformHtmlEmailContentSuccess('   '))));
+
+        await composerController?.applySignature(rawSignature);
+
+        verifyNoMobileSignatureInserted();
+        expect(logHandler.errorRecords, isNotEmpty);
+        expect(logHandler.errorRecords.single.webConsoleEnabled, isTrue);
       });
     });
 
@@ -1575,6 +1714,64 @@ void main() {
       });
 
       testWidgets(
+        'Should keep the composer open, delete the refused email and show the domain dialog\n'
+        'When the server refuses the submission with ForbiddenToSendException',
+      (tester) async {
+        final context = await pumpContext(tester);
+        composerController?.invalidRecipients.value = {'stale@linagora.com'};
+
+        var handled = false;
+        composerController
+            ?.handleSendMessageResult(
+              context: context,
+              resultState: SendEmailFailure(
+                exception: ForbiddenToSendException(
+                  createdEmailId: EmailId(Id('email-1')),
+                ),
+              ),
+            )
+            .then((_) => handled = true);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(DomainActivationPendingDialog), findsOneWidget);
+        expect(composerController?.invalidRecipients.value, isEmpty);
+        verify(mockMailboxDashBoardController
+            .deleteEmailPermanentlyInBackground(EmailId(Id('email-1'))))
+            .called(1);
+        verifyNever(mockAppToast.showToastErrorMessage(any, any));
+        // The generic failure dialog offers "Close anyway", which drops the email.
+        expect(find.text('Close anyway'), findsNothing);
+
+        await tester.tap(find.byKey(LinagoraDialog.primaryActionKey));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(DomainActivationPendingDialog), findsNothing);
+        expect(handled, isTrue);
+      });
+
+      testWidgets(
+        'Should show the domain dialog without deleting any email\n'
+        'When the pre-send check refuses with ForbiddenToSendException',
+      (tester) async {
+        final context = await pumpContext(tester);
+
+        composerController?.handleSendMessageResult(
+          context: context,
+          resultState: SendEmailFailure(exception: ForbiddenToSendException()),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(DomainActivationPendingDialog), findsOneWidget);
+        verify(mockMailboxDashBoardController
+            .deleteEmailPermanentlyInBackground(null))
+            .called(1);
+
+        await tester.tap(find.byKey(LinagoraDialog.closeButtonKey));
+        await tester.pumpAndSettle();
+        expect(find.byType(DomainActivationPendingDialog), findsNothing);
+      });
+
+      testWidgets(
         'Should clear the invalid marks\n'
         'When sending fails with an exception other than InvalidRecipientsException',
       (tester) async {
@@ -1589,6 +1786,198 @@ void main() {
         );
 
         expect(composerController?.invalidRecipients.value, isEmpty);
+      });
+    });
+
+    group('insertHtmlIntoEditor on mobile:', () {
+      const cardHtml = '<div class="file-card">a.zip</div>';
+
+      // The rich text mock is shared by the whole file: start and end each test clean.
+      setUp(() => reset(mockRichTextMobileTabletController));
+      tearDown(() => reset(mockRichTextMobileTabletController));
+
+      test(
+        'Should return false and insert nothing\n'
+        'When no mobile editor is attached',
+      () async {
+        composerController?.richTextMobileTabletController =
+            mockRichTextMobileTabletController;
+        when(mockRichTextMobileTabletController.htmlEditorApi).thenReturn(null);
+
+        final inserted = await composerController?.insertHtmlIntoEditor(cardHtml);
+
+        expect(inserted, isFalse);
+        verifyNever(mockRichTextMobileTabletController.restoreMobileEditorFocus());
+      });
+
+      testWidgets(
+        'Should restore the editor focus, insert the html once and return true\n'
+        'When a mobile editor is attached',
+      (tester) async {
+        composerController?.richTextMobileTabletController =
+            mockRichTextMobileTabletController;
+        when(mockRichTextMobileTabletController.htmlEditorApi)
+            .thenReturn(mockHtmlEditorApi);
+        final calls = <String>[];
+        when(mockRichTextMobileTabletController.restoreMobileEditorFocus())
+            .thenAnswer((_) async => calls.add('restoreFocus'));
+        when(mockHtmlEditorApi.insertHtml(any))
+            .thenAnswer((invocation) async => calls.add('insertHtml:${invocation.positionalArguments.single}'));
+
+        bool? inserted;
+        composerController!.insertHtmlIntoEditor(cardHtml).then((value) => inserted = value);
+        // The insert completes at the end of a frame scheduled after the mocks resolve.
+        for (var frame = 0; frame < 5 && inserted == null; frame++) {
+          await tester.pump();
+        }
+
+        expect(inserted, isTrue);
+        expect(calls, ['restoreFocus', 'insertHtml:$cardHtml']);
+      });
+    });
+
+    group('insertHtmlIntoEditor on web:', () {
+      const cardHtml = '<div class="file-card">a.zip</div>';
+
+      setUp(() {
+        PlatformInfo.isTestingForWeb = true;
+        // The web editor mock is shared by the whole file: start each test clean.
+        reset(mockRichTextWebController.editorController);
+      });
+      tearDown(() => PlatformInfo.isTestingForWeb = false);
+
+      test(
+        'Should return false\n'
+        'When no web editor is attached',
+      () async {
+        composerController?.richTextWebController = null;
+
+        final inserted = await composerController?.insertHtmlIntoEditor(cardHtml);
+
+        expect(inserted, isFalse);
+      });
+
+      testWidgets(
+        'Should insert the html once and return true\n'
+        'When a web editor is attached',
+      (tester) async {
+        composerController?.richTextWebController = mockRichTextWebController;
+
+        bool? inserted;
+        composerController!.insertHtmlIntoEditor(cardHtml).then((value) => inserted = value);
+        // The insert completes at the end of the next frame.
+        for (var frame = 0; frame < 5 && inserted == null; frame++) {
+          await tester.pump();
+        }
+
+        expect(inserted, isTrue);
+        verify(mockRichTextWebController.editorController.insertHtml(cardHtml)).called(1);
+      });
+    });
+
+    group('code view on web:', () {
+      setUp(() {
+        reset(mockRichTextWebController.editorController);
+        composerController?.richTextWebController = mockRichTextWebController;
+      });
+
+      tearDown(() {
+        mockRichTextWebController.isCodeViewBusyForTest = false;
+        mockRichTextWebController.isCodeViewOnForTest = false;
+      });
+
+      test(
+        'Should sanitize the body it hands out\n'
+        'When the editor changed it while code view is on',
+      () {
+        PlatformInfo.isTestingForWeb = true;
+        addTearDown(() => PlatformInfo.isTestingForWeb = false);
+        mockRichTextWebController.isCodeViewOnForTest = true;
+
+        composerController?.onChangeTextEditorWeb('<img src="x" onerror="alert(1)"><p>text</p>');
+
+        expect(composerController?.textEditorWeb, isNot(contains('onerror')));
+      });
+
+      test(
+        'Should not read and write back the editor HTML\n'
+        'When code view is on or being left',
+      () async {
+        mockRichTextWebController.isCodeViewBusyForTest = true;
+
+        composerController?.displayScreenTypeComposerAction(ScreenDisplayMode.fullScreen);
+        await Future<void>.delayed(Duration.zero);
+
+        verifyNever(mockRichTextWebController.editorController.getText());
+        expect(composerController?.screenDisplayMode.value, ScreenDisplayMode.fullScreen);
+      });
+
+      test(
+        'Should write the editor HTML back before switching\n'
+        'When code view is off',
+      () async {
+        when(mockRichTextWebController.editorController.getText())
+            .thenAnswer((_) async => '<p>body</p>');
+
+        composerController?.displayScreenTypeComposerAction(ScreenDisplayMode.fullScreen);
+        await untilCalled(mockRichTextWebController.editorController.setText('<p>body</p>'));
+
+        verify(mockRichTextWebController.editorController.setText('<p>body</p>')).called(1);
+      });
+
+      test(
+        'Should not write the editor HTML back\n'
+        'When code view becomes busy during getText',
+      () async {
+        final html = Completer<String>();
+        when(mockRichTextWebController.editorController.getText())
+            .thenAnswer((_) => html.future);
+
+        composerController?.displayScreenTypeComposerAction(ScreenDisplayMode.fullScreen);
+        await untilCalled(mockRichTextWebController.editorController.getText());
+        mockRichTextWebController.isCodeViewBusyForTest = true;
+        const rawHtml = '<img src=x onerror="alert(1)">';
+        html.complete(rawHtml);
+        await Future<void>.delayed(Duration.zero);
+
+        verifyNever(mockRichTextWebController.editorController.setText(rawHtml));
+        expect(composerController?.screenDisplayMode.value, ScreenDisplayMode.fullScreen);
+      });
+    });
+
+    group('oversize files and the Drive recovery:', () {
+      testWidgets(
+        'Should hand the files to the Drive recovery and not upload them\n'
+        'When they exceed the server limit and Drive is enabled',
+      (tester) async {
+        when(mockMailboxDashBoardController.maxSizeAttachmentsPerEmail)
+            .thenReturn(UnsignedInt(100));
+        // The dashboard mock is shared by the whole file: drop the limit after the test.
+        addTearDown(() => when(mockMailboxDashBoardController.maxSizeAttachmentsPerEmail)
+            .thenReturn(null));
+        final container = _buildDriveRecoveryContainer();
+        addTearDown(container.dispose);
+        final startedBatches = _recordStartedDriveBatches(container);
+        await tester.pumpWidget(WidgetFixtures.makeTestableWidget(
+          providerContainer: container,
+          child: const SizedBox.shrink(),
+        ));
+        // Lets the localizations load: the recovery's dialog reads them.
+        await tester.pumpAndSettle();
+        final context = tester.element(find.byType(SizedBox));
+        var allowed = false;
+
+        unawaited(composerController!.attachmentUploadValidationService.validateFiles(
+          context: context,
+          files: [
+            FileBytesInfo(fileName: 'big.zip', fileSize: 200, bytes: Uint8List(200)),
+          ],
+          onAllowed: () => allowed = true,
+        ));
+        await tester.pumpAndSettle();
+
+        expect(startedBatches, [['big.zip']]);
+        expect(allowed, isFalse);
       });
     });
 
@@ -2146,8 +2535,9 @@ void main() {
             mockRichTextWebController.editorController as MockHtmlEditorController;
         clearInteractions(editor);
         when(mockTransformHtmlEmailContentInteractor.execute(any, any))
-            .thenAnswer((_) => Stream.value(
-                Left(TransformHtmlEmailContentFailure(Exception()))));
+            .thenAnswer((invocation) => Stream.value(Right(
+                TransformHtmlEmailContentSuccess(
+                    invocation.positionalArguments.first as String))));
 
         await reopened.setupSelectedIdentity();
 
@@ -2800,13 +3190,13 @@ void main() {
         });
 
         test(
-          'Should set textEditorWeb to body content\n'
+          'Should set textEditorWeb to the body as escaped plain text\n'
           'When $actionType with non-empty body',
         () async {
           PlatformInfo.isTestingForWeb = true;
           try {
             composerController?.currentEmailActionType = actionType;
-            const body = '<p>Hello from mailto body</p>';
+            const body = 'Hello from mailto body\nSecond line';
             final arguments = ComposerArguments(
               emailActionType: actionType,
               displayMode: ScreenDisplayMode.normal,
@@ -2815,7 +3205,32 @@ void main() {
 
             await composerController?.setupEmailContent(arguments);
 
-            expect(composerController?.textEditorWeb, equals(body));
+            expect(
+              composerController?.textEditorWeb,
+              equals('<div>Hello from mailto body<br>Second line</div>'),
+            );
+          } finally {
+            PlatformInfo.isTestingForWeb = false;
+          }
+        });
+
+        test(
+          'Should NOT interpret markup from the mailto body\n'
+          'When $actionType with a body containing HTML',
+        () async {
+          PlatformInfo.isTestingForWeb = true;
+          try {
+            composerController?.currentEmailActionType = actionType;
+            final arguments = ComposerArguments(
+              emailActionType: actionType,
+              displayMode: ScreenDisplayMode.normal,
+              body: '<img src=x onerror="alert(1)">',
+            );
+
+            await composerController?.setupEmailContent(arguments);
+
+            expect(composerController?.textEditorWeb, isNot(contains('<img')));
+            expect(composerController?.textEditorWeb, contains('&lt;img'));
           } finally {
             PlatformInfo.isTestingForWeb = false;
           }
@@ -2865,6 +3280,354 @@ void main() {
           // Let the asynchronous drop processing (loading dialog/toast) settle.
           await tester.pump(const Duration(seconds: 1));
         });
+      });
+
+      group('error toast:', () {
+        late Directory dropDir;
+
+        setUp(() => dropDir = Directory.systemTemp.createTempSync('composer-drop'));
+        tearDown(() => dropDir.deleteSync(recursive: true));
+
+        Directory folder(String name) => Directory('${dropDir.path}/$name')..createSync();
+
+        testWidgets('Should name the folder When only one folder is dropped', (tester) async {
+          final message = await _dropAndCaptureErrorToast(
+            tester, composerController!, mockAppToast, [DropItemFile(folder('docs').path)]);
+
+          expect(message, 'Cannot upload this folder as attachment');
+        });
+
+        testWidgets('Should name the folders When only folders are dropped', (tester) async {
+          final message = await _dropAndCaptureErrorToast(
+            tester, composerController!, mockAppToast, [DropItemFile(folder('docs').path), DropItemFile(folder('photos').path)]);
+
+          expect(message, 'Cannot upload these folders as attachments');
+        });
+
+        testWidgets('Should show the file toast When nothing is dropped', (tester) async {
+          final message = await _dropAndCaptureErrorToast(tester, composerController!, mockAppToast, []);
+
+          expect(message, 'Can not upload this file as attachments');
+        });
+
+        testWidgets('Should show the file toast When a folder is dropped with a file that cannot be read', (tester) async {
+          final note = File('${dropDir.path}/note.txt')..writeAsStringSync('hello drop');
+
+          final message = await _dropAndCaptureErrorToast(
+            tester, composerController!, mockAppToast, [DropItemFile(folder('docs').path), _SizeFailingXFile(note.path)]);
+
+          expect(message, 'Can not upload this file as attachments');
+        });
+
+        testWidgets('Should name the folder When a folder is dropped with a readable file', (tester) async {
+          final validationService = MockAttachmentUploadValidationService();
+          composerController!.attachmentUploadValidationService = validationService;
+          final note = File('${dropDir.path}/note.txt')..writeAsStringSync('hello drop');
+
+          final message = await _dropAndCaptureErrorToast(
+            tester, composerController!, mockAppToast, [DropItemFile(folder('docs').path), DropItemFile(note.path)]);
+
+          expect(message, 'Cannot upload this folder as attachment');
+          final files = verify(validationService.validateFiles(
+            context: anyNamed('context'),
+            files: captureAnyNamed('files'),
+            onAllowed: anyNamed('onAllowed'),
+          )).captured.single as List<FileInfo>;
+          expect(files.map((file) => file.fileName), ['note.txt']);
+        });
+      });
+    });
+
+    group('isEmailBodyNotReady test:', () {
+      final contentLoaded = Right<Failure, Success>(
+        GetEmailContentSuccess(htmlEmailContent: 'content'),
+      );
+
+      test(
+        'Should return true\n'
+        'When email content is still loading',
+      () {
+        composerController?.isEmailBodyLoaded = true;
+        composerController?.emailContentsViewState.value =
+          Right(GetEmailContentLoading());
+
+        expect(composerController?.isEmailBodyNotReady, isTrue);
+      });
+
+      test(
+        'Should return true\n'
+        'When editor is not loaded on mobile',
+      () {
+        composerController?.isEmailBodyLoaded = false;
+        composerController?.emailContentsViewState.value = contentLoaded;
+
+        expect(composerController?.isEmailBodyNotReady, isTrue);
+      });
+
+      test(
+        'Should return false\n'
+        'When content is loaded and editor is loaded',
+      () {
+        composerController?.isEmailBodyLoaded = true;
+        composerController?.emailContentsViewState.value = contentLoaded;
+
+        expect(composerController?.isEmailBodyNotReady, isFalse);
+      });
+
+      test(
+        'Should return false\n'
+        'When email content loading failed and editor is loaded',
+      () {
+        composerController?.isEmailBodyLoaded = true;
+        composerController?.emailContentsViewState.value =
+          Left(GetEmailContentFailure(Exception('failure')));
+
+        expect(composerController?.isEmailBodyNotReady, isFalse);
+      });
+
+      test(
+        'Should return true\n'
+        'When editor is not loaded on web and composer content is visible',
+      () {
+        PlatformInfo.isTestingForWeb = true;
+        addTearDown(() => PlatformInfo.isTestingForWeb = false);
+        composerController?.isEmailBodyLoaded = false;
+        composerController?.screenDisplayMode.value = ScreenDisplayMode.normal;
+        composerController?.emailContentsViewState.value = contentLoaded;
+
+        expect(composerController?.isEmailBodyNotReady, isTrue);
+      });
+
+      test(
+        'Should return false\n'
+        'When editor is not loaded on web and composer is minimized',
+      () {
+        PlatformInfo.isTestingForWeb = true;
+        addTearDown(() => PlatformInfo.isTestingForWeb = false);
+        composerController?.isEmailBodyLoaded = false;
+        composerController?.screenDisplayMode.value = ScreenDisplayMode.minimize;
+        composerController?.emailContentsViewState.value = contentLoaded;
+
+        expect(composerController?.isEmailBodyNotReady, isFalse);
+      });
+    });
+
+    group('isEditedEmailContentLoadFailed test:', () {
+      const editingActionTypes = [
+        EmailActionType.editDraft,
+        EmailActionType.editAsNewEmail,
+        EmailActionType.reopenComposerBrowser,
+        EmailActionType.restoreComposerFromPersistentCache,
+      ];
+
+      for (final actionType in editingActionTypes) {
+        test(
+          'Should return true\n'
+          'When email content loading failed for $actionType',
+        () {
+          composerController?.currentEmailActionType = actionType;
+          composerController?.emailContentsViewState.value =
+            Left(GetEmailContentFailure(Exception('failure')));
+
+          expect(composerController?.isEditedEmailContentLoadFailed, isTrue);
+        });
+
+        test(
+          'Should return false\n'
+          'When email content is empty (EmptyEmailContentException) for $actionType',
+        () {
+          composerController?.currentEmailActionType = actionType;
+          composerController?.emailContentsViewState.value =
+            Left(GetEmailContentFailure(EmptyEmailContentException()));
+
+          expect(composerController?.isEditedEmailContentLoadFailed, isFalse);
+        });
+      }
+
+      test(
+        'Should return false\n'
+        'When email content loading failed for a non editing action type',
+      () {
+        composerController?.currentEmailActionType = EmailActionType.reply;
+        composerController?.emailContentsViewState.value =
+          Left(GetEmailContentFailure(Exception('failure')));
+
+        expect(composerController?.isEditedEmailContentLoadFailed, isFalse);
+      });
+
+      test(
+        'Should return false\n'
+        'When email content is loaded while editing a draft',
+      () {
+        composerController?.currentEmailActionType = EmailActionType.editDraft;
+        composerController?.emailContentsViewState.value =
+          Right(GetEmailContentSuccess(htmlEmailContent: 'content'));
+
+        expect(composerController?.isEditedEmailContentLoadFailed, isFalse);
+      });
+
+      test(
+        'Should return false\n'
+        'When email content is still loading while editing a draft',
+      () {
+        composerController?.currentEmailActionType = EmailActionType.editDraft;
+        composerController?.emailContentsViewState.value =
+          Right(GetEmailContentLoading());
+
+        expect(composerController?.isEditedEmailContentLoadFailed, isFalse);
+      });
+    });
+
+    group('handleClickSendButton guards on email body test:', () {
+      Future<BuildContext> pumpContext(WidgetTester tester) async {
+        late BuildContext capturedContext;
+        await tester.pumpWidget(WidgetFixtures.makeTestableWidget(
+          child: Builder(builder: (context) {
+            capturedContext = context;
+            return const SizedBox.shrink();
+          }),
+        ));
+        await tester.pump();
+        return capturedContext;
+      }
+
+      void arrangeOtherwiseSendableEmail() {
+        final validationService = MockAttachmentUploadValidationService();
+        when(validationService.isExceededMaxSizeAttachmentsPerEmail()).thenReturn(false);
+        when(mockUploadController.allUploadAttachmentsCompleted).thenReturn(true);
+        composerController!
+          ..attachmentUploadValidationService = validationService
+          ..isEnableEmailSendButton.value = true
+          ..subjectEmail.value = 'subject';
+      }
+
+      testWidgets(
+        'Should show the content loading dialog and not send the email\n'
+        'When send is clicked while email content is still loading',
+      (tester) async {
+        final context = await pumpContext(tester);
+        arrangeOtherwiseSendableEmail();
+        composerController?.isEmailBodyLoaded = true;
+        composerController?.emailContentsViewState.value =
+          Right(GetEmailContentLoading());
+
+        composerController?.handleClickSendButton(context);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(AppLocalizations.of(context).messageDialogSendEmailContentLoading),
+          findsOneWidget,
+        );
+        verifyNever(mockCreateNewAndSendEmailInteractor.execute(
+          createEmailRequest: anyNamed('createEmailRequest'),
+        ));
+      });
+
+      testWidgets(
+        'Should show the content load failed dialog and not send the email\n'
+        'When send is clicked after draft content failed to load',
+      (tester) async {
+        final context = await pumpContext(tester);
+        arrangeOtherwiseSendableEmail();
+        composerController?.isEmailBodyLoaded = true;
+        composerController?.currentEmailActionType = EmailActionType.editDraft;
+        composerController?.emailContentsViewState.value =
+          Left(GetEmailContentFailure(Exception('failure')));
+
+        composerController?.handleClickSendButton(context);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(AppLocalizations.of(context).messageDialogSendEmailContentLoadFailed),
+          findsOneWidget,
+        );
+        verifyNever(mockCreateNewAndSendEmailInteractor.execute(
+          createEmailRequest: anyNamed('createEmailRequest'),
+        ));
+      });
+
+      Future<void> expectGuardDialogShownAgainAfterDismiss(
+        WidgetTester tester,
+        BuildContext context,
+        String message,
+      ) async {
+        composerController?.handleClickSendButton(context);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(AppLocalizations.of(context).got_it));
+        await tester.pumpAndSettle();
+        expect(find.text(message), findsNothing);
+
+        composerController?.handleClickSendButton(context);
+        await tester.pumpAndSettle();
+
+        expect(find.text(message), findsOneWidget);
+      }
+
+      testWidgets(
+        'Should show the content loading dialog again\n'
+        'When send is clicked again after dismissing the content loading dialog',
+      (tester) async {
+        final context = await pumpContext(tester);
+        arrangeOtherwiseSendableEmail();
+        composerController?.isEmailBodyLoaded = true;
+        composerController?.emailContentsViewState.value =
+          Right(GetEmailContentLoading());
+
+        await expectGuardDialogShownAgainAfterDismiss(
+          tester,
+          context,
+          AppLocalizations.of(context).messageDialogSendEmailContentLoading,
+        );
+      });
+
+      testWidgets(
+        'Should show the content load failed dialog again\n'
+        'When send is clicked again after dismissing the content load failed dialog',
+      (tester) async {
+        final context = await pumpContext(tester);
+        arrangeOtherwiseSendableEmail();
+        composerController?.isEmailBodyLoaded = true;
+        composerController?.currentEmailActionType = EmailActionType.editDraft;
+        composerController?.emailContentsViewState.value =
+          Left(GetEmailContentFailure(Exception('failure')));
+
+        await expectGuardDialogShownAgainAfterDismiss(
+          tester,
+          context,
+          AppLocalizations.of(context).messageDialogSendEmailContentLoadFailed,
+        );
+      });
+
+      testWidgets(
+        'Should send the email again\n'
+        'When send is clicked again after dismissing the domain activation pending dialog',
+      (tester) async {
+        final context = await pumpContext(tester);
+        arrangeOtherwiseSendableEmail();
+        composerController?.isEmailBodyLoaded = true;
+        composerController?.composerArguments.value = ComposerArguments();
+        when(mockCreateNewAndSendEmailInteractor.execute(
+          createEmailRequest: anyNamed('createEmailRequest'),
+        )).thenAnswer((_) => Stream.value(
+          Left(SendEmailFailure(exception: ForbiddenToSendException())),
+        ));
+
+        composerController?.handleClickSendButton(context);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(LinagoraDialog.primaryActionKey));
+        await tester.pumpAndSettle();
+        expect(find.byType(DomainActivationPendingDialog), findsNothing);
+
+        composerController?.handleClickSendButton(context);
+        await tester.pumpAndSettle();
+
+        expect(find.byType(DomainActivationPendingDialog), findsOneWidget);
+        verify(mockCreateNewAndSendEmailInteractor.execute(
+          createEmailRequest: anyNamed('createEmailRequest'),
+        )).called(2);
+        verify(mockMailboxDashBoardController
+            .deleteEmailPermanentlyInBackground(null))
+            .called(2);
       });
     });
   });

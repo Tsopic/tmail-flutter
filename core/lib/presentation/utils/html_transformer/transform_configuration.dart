@@ -18,11 +18,16 @@ import 'package:core/presentation/utils/html_transformer/dom/responsive_table_ce
 import 'package:core/presentation/utils/html_transformer/dom/sanitize_hyper_link_tag_in_html_transformers.dart';
 import 'package:core/presentation/utils/html_transformer/dom/script_transformers.dart';
 import 'package:core/presentation/utils/html_transformer/text/new_line_transformer.dart';
+import 'package:core/presentation/utils/html_transformer/text/persist_preformatted_text_transformer.dart';
+import 'package:core/presentation/utils/html_transformer/text/sanitize_autolink_html_transformers.dart';
+import 'package:core/presentation/utils/html_transformer/text/sanitize_plain_text_html_output_transformer.dart';
 import 'package:core/presentation/utils/html_transformer/dom/signature_transformers.dart';
 import 'package:core/presentation/utils/html_transformer/text/standardize_html_sanitizing_transformers.dart';
 import 'package:core/utils/platform_info.dart';
 
 /// Contains the configuration for all transformations.
+///
+/// New factory → add a row in the TransformConfiguration contract test.
 class TransformConfiguration {
 
   /// The list of DOM transformers being used
@@ -45,16 +50,27 @@ class TransformConfiguration {
     List<TextTransformer> textTransformers
   ) => TransformConfiguration([], textTransformers);
 
+  /// Quoted content already loaded for display: the preview pipeline
+  /// sanitized it, and sanitizing again would drop the `cid:` ids and webp
+  /// sources added by [ImageTransformer].
   factory TransformConfiguration.forReplyForwardEmail() => TransformConfiguration.fromDomTransformers([
+    const RemoveScriptTransformer(),
     const SignatureTransformer(),
     const RemoveCollapsedSignatureButtonTransformer(),
     const NormalizeLineHeightInStyleTransformer(),
   ]);
 
-  factory TransformConfiguration.forReplyForwardEmptyEmail() => TransformConfiguration.fromDomTransformers([
-    ...TransformConfiguration.forReplyForwardEmail().domTransformers,
-    const ImageTransformer(),
-  ]);
+  /// Raw server HTML (email body not loaded yet, e.g. a collapsed message in
+  /// a thread) inserted into the same-origin composer editor: sanitize it.
+  factory TransformConfiguration.forReplyForwardEmptyEmail() => TransformConfiguration(
+    [
+      ...TransformConfiguration.forReplyForwardEmail().domTransformers,
+      const ImageTransformer(),
+    ],
+    const [
+      StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable']),
+    ],
+  );
 
   factory TransformConfiguration.forDraftsEmail() => TransformConfiguration.create(
     customDomTransformers: [
@@ -109,7 +125,11 @@ class TransformConfiguration {
     ],
   );
 
+  /// Input is the displayed content, already sanitized by the preview
+  /// pipeline; sanitizing again would drop the `lazy`/`data-src` attributes
+  /// [RemoveLazyLoadingForBackgroundImageTransformer] restores.
   factory TransformConfiguration.forPrintEmail() => TransformConfiguration.fromDomTransformers([
+    const RemoveScriptTransformer(),
     const RemoveLazyLoadingForBackgroundImageTransformer(),
     const RemoveLazyLoadingImageTransformer(),
     const RemoveCollapsedSignatureButtonTransformer(),
@@ -131,10 +151,34 @@ class TransformConfiguration {
   /// Signature HTML inserted into the composer editor. Kept minimal — only
   /// degenerate `line-height` values are stripped — because the inserted
   /// signature becomes part of the email that is sent and must not be
-  /// rewritten by display-only transformers.
+  /// rewritten by display-only transformers. It is still sanitized: identity
+  /// signatures are stored raw on the server (other clients, provisioning)
+  /// and the editor iframe is same-origin with the application.
   factory TransformConfiguration.forComposerSignature() =>
-      TransformConfiguration.fromDomTransformers([
-        const NormalizeLineHeightInStyleTransformer(),
+      const TransformConfiguration(
+        [NormalizeLineHeightInStyleTransformer()],
+        [StandardizeHtmlSanitizingTransformers(allowAttributes: ['contenteditable'])],
+      );
+
+  factory TransformConfiguration.forPreviewEmailOnPlatform() => PlatformInfo.isWeb
+      ? TransformConfiguration.forPreviewEmailOnWeb()
+      : TransformConfiguration.forPreviewEmail();
+
+  factory TransformConfiguration.forAttachmentPreview() =>
+      TransformConfiguration.create(
+        customDomTransformers: [SanitizeHyperLinkTagInHtmlTransformer()],
+        customTextTransformers: const [
+          StandardizeHtmlSanitizingTransformers(),
+        ],
+      );
+
+  /// A `text/plain` body: autolinks and HTML-escapes the text, then keeps only
+  /// safe `<a>` tags, then preserves ASCII tables in a monospace block.
+  factory TransformConfiguration.forPlainTextEmail() =>
+      TransformConfiguration.fromTextTransformers(const [
+        SanitizeAutolinkHtmlTransformers(),
+        SanitizePlainTextHtmlOutputTransformer(),
+        PersistPreformattedTextTransformer(),
       ]);
 
   factory TransformConfiguration.forCalendarEvent() => TransformConfiguration.create(

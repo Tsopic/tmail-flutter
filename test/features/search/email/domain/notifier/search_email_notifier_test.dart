@@ -221,6 +221,33 @@ void main() {
 
   tearDown(Get.reset);
 
+  group('search sort forwarding', () {
+    for (final sortOrder in [null, EmailSortOrderType.relevance, EmailSortOrderType.mostRecent]) {
+      test('full search preserves ${sortOrder ?? "default relevance"}', () async {
+        final container = containerWith(committed: SearchEmailFilter(sortOrderType: sortOrder));
+        await runExecute(container, const NewSearchIntent());
+        final sort = verify(searchInteractor.execute(
+          any,
+          any,
+          limit: anyNamed('limit'),
+          position: anyNamed('position'),
+          sort: captureAnyNamed('sort'),
+          filter: anyNamed('filter'),
+          properties: anyNamed('properties'),
+          collapseThreads: anyNamed('collapseThreads'),
+          needRefreshSearchState: anyNamed('needRefreshSearchState'),
+        )).captured.single;
+        if (sortOrder == EmailSortOrderType.mostRecent) {
+          expect((sort as Set).map((value) => value.toJson()).toList(), [
+            {'property': 'receivedAt', 'isAscending': false},
+          ]);
+        } else {
+          expect(sort, isNull);
+        }
+      });
+    }
+  });
+
   group('NewSearchIntent', () {
     test('clears load-more cursors regardless of prior SSOT values', () async {
       final committed = SearchEmailFilter(
@@ -234,8 +261,8 @@ void main() {
       await runExecute(container, const NewSearchIntent());
 
       final args = capturedSearch();
-      // Relevance pages by receivedAt without an offset.
-      expect(args.position, isNull);
+      // Ranked results start at offset zero, independently of receivedAt.
+      expect(args.position, 0);
       expect((args.filter as EmailFilterCondition).before, isNull);
       expect((args.filter as EmailFilterCondition).after, isNull);
     });
@@ -268,14 +295,14 @@ void main() {
       expect((args.filter as EmailFilterCondition).after, isNull);
     });
 
-    test('relevance → before cursor only, position null', () async {
+    test('relevance → offset only, no date cursor', () async {
       final container = containerForSort(EmailSortOrderType.relevance);
 
       await runLoadMore(container);
 
       final args = capturedSearchMore();
-      expect(args.position, isNull);
-      expect((args.filter as EmailFilterCondition).before, cursorDate);
+      expect(args.position, 20);
+      expect((args.filter as EmailFilterCondition).before, isNull);
       expect((args.filter as EmailFilterCondition).after, isNull);
     });
 
@@ -334,7 +361,7 @@ void main() {
 
       final args = capturedRefresh();
       expect(args.limit?.value, 30);
-      expect(args.position, isNull);
+      expect(args.position, 0);
       expect((args.filter as EmailFilterCondition).before, isNull);
       expect((args.filter as EmailFilterCondition).after, isNull);
     });

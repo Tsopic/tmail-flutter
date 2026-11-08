@@ -68,7 +68,7 @@ class SidebarMailboxItem extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
                 borderRadius: BorderRadius.circular(8),
-                onTap: () => onOpenMailboxFolderClick?.call(mailboxNode),
+                onTap: () => _onTap(context),
                 child: SizedBox(
                   height: 40,
                   child: Center(child: _buildCollapsedIcon(context)),
@@ -97,7 +97,7 @@ class SidebarMailboxItem extends StatelessWidget {
                 : null,
             scrollIntoViewOnExpand: hasChildren,
             active: _isActive,
-            onTap: () => onOpenMailboxFolderClick?.call(mailboxNode),
+            onTap: () => _onTap(context),
           );
 
     return _withTreeIndent(
@@ -141,6 +141,20 @@ class SidebarMailboxItem extends StatelessWidget {
           ),
       ],
     );
+  }
+
+  /// A team mailbox root is a container: its mails live in its children
+  /// (INBOX, ...), so tapping it toggles the folder instead of opening it.
+  void _onTap(BuildContext context) {
+    if (!mailboxNode.item.isTeamMailboxRoot) {
+      onOpenMailboxFolderClick?.call(mailboxNode);
+    } else if (mailboxNode.hasChildren()) {
+      final isExpanding = !mailboxNode.expandMode.isExpanded;
+      onExpandFolderActionClick?.call(mailboxNode);
+      // Reveal like the chevron does: a root at the bottom of the menu would
+      // otherwise expand below the fold and the tap would look ignored.
+      if (isExpanding) LinagoraSidebarScrollCoordinator.scheduleReveal(context);
+    }
   }
 
   Widget _buildLeadingIcon(BuildContext context, ImagePaths imagePaths) {
@@ -214,7 +228,8 @@ class SidebarMailboxItem extends StatelessWidget {
   bool _canAcceptDrop(bool isWebDesktop) =>
       isWebDesktop &&
       onDragItemAccepted != null &&
-      !mailboxNode.item.isActionRequired;
+      !mailboxNode.item.isActionRequired &&
+      !mailboxNode.item.isTeamMailboxRoot;
 
   bool get _isSelected => mailboxNodeSelected?.id == mailboxNode.item.id;
 

@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:core/presentation/state/failure.dart';
 import 'package:core/presentation/state/success.dart';
+import 'package:core/utils/app_logger.dart';
+import 'package:core/utils/sentry/sentry_manager.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -102,7 +106,13 @@ class PreferencesController extends BaseController {
     if (success is GetServerSettingSuccess) {
       _updateSettingOptionValue(newSettingOption: success.settingOption);
     } else if (success is UpdateServerSettingSuccess) {
+      final previousConsent = settingOption.value?.sentryUserOptIn;
+      final hasOptedInToSentry = previousConsent != true &&
+          success.settingOption.sentryUserOptIn == true;
       _updateSettingOptionValue(newSettingOption: success.settingOption);
+      if (hasOptedInToSentry) {
+        _logSentryOptInOnceReportingStarts(previousConsent);
+      }
     } else if (success is GetLocalSettingsSuccess) {
       _localSettingLoaderStatus = LoaderStatus.completed;
       _updateLocalSettingOptionValue(success.preferencesSetting);
@@ -159,6 +169,20 @@ class PreferencesController extends BaseController {
       _sentryEcosystem,
       newSettingOption.sentryUserOptIn,
     );
+  }
+
+  /// Sentry is stopped until the opt-in is applied and the SDK finishes
+  /// starting, so an event logged before then is silently dropped.
+  void _logSentryOptInOnceReportingStarts(bool? previousConsent) {
+    unawaited(SentryManager.instance.pendingLifecycleTransition.then((_) {
+      logError(
+        'User toggled Sentry reporting',
+        extras: {
+          'enabled': true,
+          'previousConsent': previousConsent,
+        },
+      );
+    }));
   }
 
   void _updateLocalSettingOptionValue(PreferencesSetting preferencesSetting) {

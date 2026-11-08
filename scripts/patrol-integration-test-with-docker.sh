@@ -10,192 +10,276 @@
 #   ./scripts/patrol-integration-test-with-docker.sh
 set -e
 
-echo "Installing patrol CLI..."
-dart pub global activate patrol_cli 4.3.1
+SCRIPT_STARTED=$SECONDS
+timing() {
+    echo "[timing $(date -u '+%Y-%m-%dT%H:%M:%SZ')] +$(( SECONDS - SCRIPT_STARTED ))s $*"
+}
+
+ROOT_DIR="$PWD"
+CI_LOGS="$ROOT_DIR/ci-logs"
+mkdir -p "$CI_LOGS"
+# Per-run paths: /tmp is host-wide, a neighbor job must never read our tunnel ports.
+RESET_SERVER_LOG="$CI_LOGS/backend-reset-server.log"
+BORE_RESET_LOG="$CI_LOGS/bore-reset.log"
+source "$ROOT_DIR/scripts/ci-bore-tunnels.sh"
+
+FTL_SHARDS="${FTL_SHARDS:-4}"
+POOL_SIZE="${POOL_SIZE:-6}"
+if ! [[ "$FTL_SHARDS" =~ ^[1-9][0-9]*$ && "$POOL_SIZE" =~ ^[1-9][0-9]*$ ]] || [ "$FTL_SHARDS" -gt "$POOL_SIZE" ] || [ "$POOL_SIZE" -gt 16 ]; then
+    echo "ERROR: FTL_SHARDS ($FTL_SHARDS) and POOL_SIZE ($POOL_SIZE) must be positive integers with FTL_SHARDS <= POOL_SIZE <= 16."
+    exit 1
+fi
+
+timing "agent backend wait start"
+bash "$ROOT_DIR/scripts/ci-wait-agent-backend-free.sh"
+timing "agent backend wait end"
+
+PATROL_BUILD_PID=""
+BACKEND_TEARDOWN_PID=""
+BACKEND_TORN_DOWN=0
+BORE_SLOT_PIDS=()
+BORE_RESET_PID=""
+RESET_SERVER_PID=""
+
+stop_services() {
+    local pid
+    for pid in "${BORE_SLOT_PIDS[@]}" "$BORE_RESET_PID" "$RESET_SERVER_PID"; do
+        [ -z "$pid" ] || kill "$pid" 2>/dev/null || true
+    done
+    # Reap services before releasing the backend lock.
+    for pid in "${BORE_SLOT_PIDS[@]}" "$BORE_RESET_PID" "$RESET_SERVER_PID"; do
+        [ -z "$pid" ] || wait "$pid" 2>/dev/null || true
+    done
+    BORE_SLOT_PIDS=()
+    BORE_RESET_PID=""
+    RESET_SERVER_PID=""
+}
+
+cleanup() {
+    local exit_code=$?
+    echo "Cleaning up..."
+    if [ -n "$PATROL_BUILD_PID" ]; then
+        # Stop the whole build group before releasing the backend lock.
+        kill -- "-$PATROL_BUILD_PID" 2>/dev/null || true
+        wait "$PATROL_BUILD_PID" 2>/dev/null || true
+    fi
+    if [ -n "$BACKEND_TEARDOWN_PID" ]; then
+        kill -- "-$BACKEND_TEARDOWN_PID" 2>/dev/null || true
+        wait "$BACKEND_TEARDOWN_PID" 2>/dev/null || true
+    fi
+    stop_services
+    if [ "$BACKEND_TORN_DOWN" -ne 1 ]; then
+        bash "$ROOT_DIR/scripts/ci-backend-teardown.sh" "$CI_LOGS/backend.log"
+    fi
+    timing "cleanup end (exit $exit_code)"
+    exit "$exit_code"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # ── bore tunnel setup ─────────────────────────────────────────────────────────
-echo "Starting bore tunnels..."
-nohup bore local 80 --to bore.pub > /tmp/bore-backend.log 2>&1 &
-BORE_BACKEND_PID=$!
-nohup bore local 9999 --to bore.pub > /tmp/bore-reset.log 2>&1 &
+echo "Starting bore tunnels via $BORE_HOST ($(bore --version 2>&1))..."
+timing "bore tunnels start"
+# One tunnel per backend slot; the reset server hands each lease the slot's public URL.
+for (( n = 0; n < POOL_SIZE; n++ )); do
+    : > "$CI_LOGS/bore-slot$n.log"
+    supervise_bore $(( 8100 + n )) "$CI_LOGS/bore-slot$n.log" &
+    BORE_SLOT_PIDS+=($!)
+done
+: > "$BORE_RESET_LOG"
+supervise_bore 9999 "$BORE_RESET_LOG" &
 BORE_RESET_PID=$!
 
 echo "Waiting for bore tunnels..."
-BORE_BACKEND_PORT=""
 BORE_RESET_PORT=""
-deadline=$(( SECONDS + 20 ))
-until [ -n "$BORE_BACKEND_PORT" ] && [ -n "$BORE_RESET_PORT" ]; do
+BORE_SLOT_PORTS=()
+deadline=$(( SECONDS + 40 ))
+until [ -n "$BORE_RESET_PORT" ] && [ "${#BORE_SLOT_PORTS[@]}" -eq "$POOL_SIZE" ]; do
     if (( SECONDS >= deadline )); then
-        echo "ERROR: bore tunnels did not connect within 20s."
-        echo "--- backend log ---"
-        cat /tmp/bore-backend.log
-        echo "--- reset log ---"
-        cat /tmp/bore-reset.log
+        echo "ERROR: bore tunnels did not connect within 40s."
+        for f in "$CI_LOGS"/bore-slot*.log "$BORE_RESET_LOG"; do
+            echo "--- $f ---"
+            cat "$f"
+        done
         exit 1
     fi
 
-    BORE_BACKEND_PORT=$(python3 -c "
-import os, re
-path = '/tmp/bore-backend.log'
-if os.path.exists(path):
-    with open(path) as f:
-        for line in f:
-            m = re.search(r'listening at bore\.pub:(\d+)', line)
-            if m:
-                print(m.group(1))
-                break
-" 2>/dev/null)
-
-    BORE_RESET_PORT=$(python3 -c "
-import os, re
-path = '/tmp/bore-reset.log'
-if os.path.exists(path):
-    with open(path) as f:
-        for line in f:
-            m = re.search(r'listening at bore\.pub:(\d+)', line)
-            if m:
-                print(m.group(1))
-                break
-" 2>/dev/null)
+    BORE_RESET_PORT=$(bore_port "$BORE_RESET_LOG")
+    BORE_SLOT_PORTS=()
+    for (( n = 0; n < POOL_SIZE; n++ )); do
+        port=$(bore_port "$CI_LOGS/bore-slot$n.log")
+        [ -z "$port" ] || BORE_SLOT_PORTS+=("$port")
+    done
 
     sleep 1
 done
 
-BORE_BACKEND_URL="http://bore.pub:$BORE_BACKEND_PORT"
-BORE_RESET_URL="http://bore.pub:$BORE_RESET_PORT"
-BORE_WS_URL="ws://bore.pub:$BORE_BACKEND_PORT"
-
-echo "bore backend tunnel:   $BORE_BACKEND_URL"
+BORE_RESET_URL="http://$BORE_HOST:$BORE_RESET_PORT"
+POOL_URLS=$(python3 -c 'import sys; print(",".join(f"http://{sys.argv[1]}:{p}" for p in sys.argv[2:]))' "$BORE_HOST" "${BORE_SLOT_PORTS[@]}")
+# Slots are numbered by their local port, so keep tunnel order = slot order.
+echo "bore backend tunnels:  $POOL_URLS"
 echo "bore reset tunnel:     $BORE_RESET_URL"
+timing "bore tunnels ready"
+
+export BOB="bob"
+export ALICE="alice"
+export DOMAIN="example.com"
+export BASIC_AUTH_URL="${POOL_URLS%%,*}"
+export RESET_PORT=9999
+
+# Job control gives cleanup a process group containing Patrol and its build children.
+set -m
+(
+    trap - EXIT INT TERM
+    set -o pipefail
+    timing "patrol CLI check start"
+    if command -v patrol >/dev/null 2>&1 && [ "$(CI=true PATROL_ANALYTICS_ENABLED=false patrol --version 2>/dev/null)" = 'patrol_cli v4.3.1' ]; then
+        echo "Using installed patrol_cli 4.3.1."
+    else
+        dart pub global activate patrol_cli 4.3.1
+    fi
+    timing "patrol CLI ready"
+    timing "Patrol/Gradle build start (android-arm64)"
+    build_started=$SECONDS
+    # Patrol runs config-only itself and forwards inherited JVM options to both Gradle builds.
+    GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.project.target-platform=android-arm64" \
+        patrol build android -v \
+        --tags=android \
+        --dart-define=USERNAME="$BOB" \
+        --dart-define=PASSWORD="$BOB" \
+        --dart-define=ADDITIONAL_MAIL_RECIPIENT="$ALICE@$DOMAIN" \
+        --dart-define=BASIC_AUTH_EMAIL="$BOB@$DOMAIN" \
+        --dart-define=BASIC_AUTH_URL="$BASIC_AUTH_URL" \
+        --dart-define=RESET_SERVER_URL="$BORE_RESET_URL" 2>&1 | tee "$CI_LOGS/patrol-build.log" | perl scripts/ci-console-filter.pl "ci-logs/patrol-build.log"
+    timing "Patrol/Gradle build end ($(( SECONDS - build_started ))s)"
+) &
+PATROL_BUILD_PID=$!
+set +m
 
 # ── Backend ──────────────────────────────────────────────────────────────────
 
+timing "backend setup start"
 cd backend-docker
 
 openssl genpkey -algorithm rsa -pkeyopt rsa_keygen_bits:4096 -out jwt_privatekey 2>/dev/null
 openssl rsa -in jwt_privatekey -pubout -out jwt_publickey 2>/dev/null
 
-sed -i.bak "s|url.prefix=.*|url.prefix=${BORE_BACKEND_URL}|" jmap.properties
-sed -i.bak "s|websocket.url.prefix=.*|websocket.url.prefix=${BORE_WS_URL}|" jmap.properties
-
-echo "Starting tmail-backend..."
-docker compose up -d tmail-backend --quiet-pull
-deadline=$(( SECONDS + 180 ))
-until docker compose logs tmail-backend 2>/dev/null | grep -qi "JAMES server started"; do
-    if (( SECONDS >= deadline )); then
-        echo "tmail-backend did not start within 180s; recent logs:"
-        docker compose logs --tail=200 tmail-backend
-        exit 1
-    fi
-    echo "Waiting for tmail-backend..."
-    sleep 2
-done
-
-export BOB="bob"
-export ALICE="alice"
-export DOMAIN="example.com"
-
-docker exec tmail-backend /root/conf/integration_test/provisioning.sh >/dev/null 2>&1
-
+# The reset server starts a fresh backend container per lease slot.
 cd ..
+timing "backend keys generated"
 
-export BASIC_AUTH_URL="$BORE_BACKEND_URL"
-export RESET_PORT=9999
-
-RESET_SERVER_LOG="/tmp/backend-reset-server.log"
 echo "Starting backend reset server on port $RESET_PORT (logs: $RESET_SERVER_LOG)..."
 BACKUP_ZIP="$PWD/provisioning/integration_test/backup.zip" \
     RESET_PORT="$RESET_PORT" \
+    POOL_SIZE="$POOL_SIZE" \
+    POOL_URLS="$POOL_URLS" \
+    POOL_MIN_FREE="$FTL_SHARDS" \
+    POOL_LOG_DIR="$CI_LOGS" \
+    WORK_DIR="$ROOT_DIR" \
     python3 scripts/backend-reset-server.py > "$RESET_SERVER_LOG" 2>&1 &
 RESET_SERVER_PID=$!
 
-cleanup() {
-    echo "Cleaning up..."
-    kill "$BORE_BACKEND_PID" 2>/dev/null || true
-    kill "$BORE_RESET_PID" 2>/dev/null || true
-    kill "$RESET_SERVER_PID" 2>/dev/null || true
-    cd backend-docker
-    docker compose down --remove-orphans 2>/dev/null
-    cd ..
-}
-trap cleanup EXIT
+deadline=$(( SECONDS + 15 ))
+until grep -q 'Listening on port' "$RESET_SERVER_LOG"; do
+    if ! kill -0 "$RESET_SERVER_PID" 2>/dev/null || (( SECONDS >= deadline )); then
+        echo "ERROR: backend reset server did not start:"
+        cat "$RESET_SERVER_LOG"
+        exit 1
+    fi
+    sleep 1
+done
 
-echo "Running Patrol tests..."
-flutter build apk --config-only --quiet
-patrol build android -v \
-    --tags=android \
-    --dart-define=USERNAME="$BOB" \
-    --dart-define=PASSWORD="$BOB" \
-    --dart-define=ADDITIONAL_MAIL_RECIPIENT="$ALICE@$DOMAIN" \
-    --dart-define=BASIC_AUTH_EMAIL="$BOB@$DOMAIN" \
-    --dart-define=BASIC_AUTH_URL="$BASIC_AUTH_URL" \
-    --dart-define=RESET_SERVER_URL="$BORE_RESET_URL"
+timing "backend reset server ready"
+deadline=$(( SECONDS + 300 ))
+until grep -q "pool ready" "$RESET_SERVER_LOG"; do
+    if ! kill -0 "$RESET_SERVER_PID" 2>/dev/null || (( SECONDS >= deadline )); then
+        echo "ERROR: backend pool did not become ready:"
+        tail -n 50 "$RESET_SERVER_LOG"
+        exit 1
+    fi
+    sleep 1
+done
+timing "backend pool ready"
 
 echo "google cli auth"
+timing "gcloud auth start"
 gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
-gcloud config set project "$FIREBASE_PROJECT_ID"
+timing "gcloud auth end"
 
-echo "start firebase tests"
-FTL_OUTPUT=$(mktemp)
-RESULTS_DIR="jenkins/${BUILD_NUMBER:-local-$(date +%s)}"
+wait "$PATROL_BUILD_PID"
+PATROL_BUILD_PID=""
+check_bore_supervisors || { bore_summary; exit 1; }
+kill -0 "$RESET_SERVER_PID"
+timing "bore probe start"
+probe_bore_tunnels || { bore_summary; exit 1; }
+timing "bore probe end"
 
+# AGP 8.12 puts the APKs under android/app/build, not ../build
+APP_APK=$(find build android/app/build -path '*/apk/debug/app-debug.apk' 2>/dev/null | head -1)
+TEST_APK=$(find build android/app/build -path '*/apk/androidTest/debug/app-debug-androidTest.apk' 2>/dev/null | head -1)
+if [ ! -f "$APP_APK" ] || [ ! -f "$TEST_APK" ]; then
+    echo "ERROR: APKs not found (app: '$APP_APK', test: '$TEST_APK'). APKs present:"
+    find . -name '*.apk' -not -path './.pub-cache/*'
+    exit 1
+fi
+
+FTL_OUTPUT="$CI_LOGS/firebase-test-lab.log"
+# BUILD_TAG holds the job name, so PR jobs with the same build number do not share a GCS dir.
+RESULTS_DIR="jenkins/$(printf '%s' "${BUILD_TAG:-local-$(date +%s)}" | tr -c 'A-Za-z0-9._-' '_')"
+
+# Seed the results path so result discovery does not depend on gcloud output.
+printf 'Results GCS path: gs://%s/%s/\n' "$RESULTS_BUCKET" "$RESULTS_DIR" | tee "$FTL_OUTPUT"
+
+timing "FTL start ($FTL_SHARDS shards)"
+ftl_started=$SECONDS
 set +e
-gcloud firebase test android run \
+# Normal shards take ~7 min; a stuck instrumentation must fail fast.
+gcloud beta firebase test android run \
+    --project="$FIREBASE_PROJECT_ID" \
     --type instrumentation \
-    --app build/app/outputs/apk/debug/app-debug.apk \
-    --test build/app/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+    --app "$APP_APK" \
+    --test "$TEST_APK" \
     --device model=MediumPhone.arm,version=34 \
-    --timeout 60m \
+    --timeout 20m \
     --use-orchestrator \
+    --num-uniform-shards="$FTL_SHARDS" \
     --environment-variables clearPackageData=true \
     --no-record-video \
+    --no-performance-metrics \
+    --num-flaky-test-attempts=0 \
     --results-bucket="gs://$RESULTS_BUCKET" \
     --results-dir="$RESULTS_DIR" \
-    2>&1 | tee "$FTL_OUTPUT"
+    2>&1 | tee -a "$FTL_OUTPUT"
 TEST_EXIT_CODE=${PIPESTATUS[0]}
 set -e
+timing "FTL end ($(( SECONDS - ftl_started ))s, exit $TEST_EXIT_CODE)"
+SERVICES_EXIT_CODE=0
+check_bore_supervisors || SERVICES_EXIT_CODE=1
+kill -0 "$RESET_SERVER_PID" || SERVICES_EXIT_CODE=1
+bore_summary
+stop_services
 
-echo "Downloading test results from Firebase Test Lab..."
+# Devices have finished, so backend teardown can overlap artifact downloads.
+set -m
+(
+    trap - EXIT INT TERM
+    timing "backend teardown start"
+    bash "$ROOT_DIR/scripts/ci-backend-teardown.sh" "$CI_LOGS/backend.log"
+    timing "backend teardown end"
+) &
+BACKEND_TEARDOWN_PID=$!
+set +m
 
-# Strategy 1: parse gs:// URL directly from gcloud output
-GCS_PATH=$(grep -oP "gs://[^\s\"'\[\]]+" "$FTL_OUTPUT" | head -1)
+timing "result download start"
+DOWNLOAD_EXIT_CODE=0
+bash "$ROOT_DIR/scripts/ci-ftl-download-results.sh" "$FTL_OUTPUT" "$RESULTS_DIR" "$FIREBASE_PROJECT_ID" "$FTL_SHARDS" || DOWNLOAD_EXIT_CODE=$?
+timing "result download end (exit $DOWNLOAD_EXIT_CODE)"
 
-# Strategy 2: parse GCS browser URL and convert to gs://
-if [ -z "$GCS_PATH" ]; then
-    GCS_BROWSER=$(grep -oP "console\.(cloud|developers)\.google\.com/storage/browser/\K[^\s\"'\[\]]+" "$FTL_OUTPUT" | head -1)
-    if [ -n "$GCS_BROWSER" ]; then
-        GCS_PATH="gs://${GCS_BROWSER}"
-        echo "Extracted GCS path from console URL: $GCS_PATH"
-    fi
-fi
+wait "$BACKEND_TEARDOWN_PID"
+BACKEND_TEARDOWN_PID=""
+BACKEND_TORN_DOWN=1
 
-# Strategy 3: fallback to listing project buckets
-if [ -z "$GCS_PATH" ]; then
-    echo "GCS path not in gcloud output, trying project bucket lookup..."
-    FTL_BUCKET=$(gsutil ls -p "$FIREBASE_PROJECT_ID" 2>/dev/null \
-        | grep 'test-lab' | head -1 || true)
-    if [ -n "$FTL_BUCKET" ]; then
-        GCS_PATH="${FTL_BUCKET}${RESULTS_DIR}"
-    fi
-fi
-
-if [ -n "$GCS_PATH" ]; then
-    mkdir -p ftl-results
-    echo "Results GCS path: $GCS_PATH"
-    gsutil ls -r "${GCS_PATH}" 2>/dev/null \
-        | grep 'test_result_.*\.xml$' \
-        | while read -r xml_file; do
-            echo "  $xml_file"
-            gsutil cp "$xml_file" ftl-results/ 2>/dev/null || true
-          done || true
-
-    if ls ftl-results/test_result_*.xml >/dev/null 2>&1; then
-        echo "Downloaded $(ls ftl-results/test_result_*.xml | wc -l) result file(s)"
-    else
-        echo "Warning: no test_result XML files found at $GCS_PATH"
-    fi
-else
-    echo "Warning: could not determine GCS results path"
-fi
-
-exit $TEST_EXIT_CODE
+[ "$TEST_EXIT_CODE" -ne 0 ] && exit "$TEST_EXIT_CODE"
+[ "$SERVICES_EXIT_CODE" -ne 0 ] && exit "$SERVICES_EXIT_CODE"
+exit "$DOWNLOAD_EXIT_CODE"
