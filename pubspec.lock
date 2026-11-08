@@ -747,8 +747,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: upgrade-flutter-appauth
-      resolved-ref: "0952346bf781bd87b93b8c61619f81a264be52db"
+      ref: "6b333bbb10c8923b2bd89bafe16420e4a40ccad6"
+      resolved-ref: "6b333bbb10c8923b2bd89bafe16420e4a40ccad6"
       url: "https://github.com/Tsopic/flutter_appauth_web.git"
     source: git
     version: "1.0.0"

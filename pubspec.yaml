@@ -103,7 +103,7 @@ dependencies:
   flutter_appauth_web:
     git:
       url: https://github.com/Tsopic/flutter_appauth_web.git
-      ref: upgrade-flutter-appauth
+      ref: 6b333bbb10c8923b2bd89bafe16420e4a40ccad6
 
   flutter_date_range_picker:
     git:
