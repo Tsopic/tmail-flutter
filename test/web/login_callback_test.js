@@ -5,7 +5,9 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '../../web/login-callback.html'), 'utf8');
-const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+assert.match(html, /<script src="js\/login-callback\.js"><\/script>/);
+assert.doesNotMatch(html, /<script>/);
+const script = fs.readFileSync(path.join(__dirname, '../../web/js/login-callback.js'), 'utf8');
 
 function callback(query, destination = 'https://mail.example/login', storageBlocked = false,
     transaction = {state: 'test-state', verifier: 'test-verifier'}) {

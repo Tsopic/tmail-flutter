@@ -800,6 +800,7 @@ class MailboxDashBoardController extends ReloadableController
         _deepLinksManager?.handleOpenAppDeepLinks(
           openAppDeepLinkData: deepLinkData,
           isSignedIn: true,
+          isCallerActive: () => !isClosed,
           username: sessionCurrent?.username,
           onConfirmLogoutCallback: _handleLogOutAndSignInNewAccount,
         );
@@ -807,9 +808,11 @@ class MailboxDashBoardController extends ReloadableController
     );
   }
 
-  void _handleLogOutAndSignInNewAccount(
+  /// Completes once the logout and the sign-in to the link account are done,
+  /// so no other sign-in link is handled meanwhile.
+  Future<void> _handleLogOutAndSignInNewAccount(
     OpenAppDeepLinkData openAppDeepLinkData,
-  ) {
+  ) async {
     if (sessionCurrent == null || accountId.value == null) return;
 
     if (currentContext != null) {
@@ -818,12 +821,12 @@ class MailboxDashBoardController extends ReloadableController
       );
     }
 
-    logoutToSignInNewAccount(
+    await logoutToSignInNewAccount(
       session: sessionCurrent!,
       accountId: accountId.value!,
-      onFailureCallback: ({exception}) {
+      onFailureCallback: ({exception}) async {
         if (exception is UserCancelledLogoutOIDCFlowException) {
-          _deepLinksManager?.autoSignInViaDeepLink(
+          await _deepLinksManager?.autoSignInViaDeepLink(
             openAppDeepLinkData: openAppDeepLinkData,
             onFailureCallback: SmartDialog.dismiss,
             onAutoSignInSuccessCallback: _handleAutoSignInViaDeepLinkSuccess,

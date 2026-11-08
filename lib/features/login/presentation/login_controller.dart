@@ -57,6 +57,7 @@ import 'package:tmail_ui_user/features/login/presentation/extensions/generate_oi
 import 'package:tmail_ui_user/features/login/presentation/extensions/handle_company_server_login_info_extension.dart';
 import 'package:tmail_ui_user/features/login/presentation/extensions/handle_openid_configuration.dart';
 import 'package:tmail_ui_user/features/login/presentation/login_form_type.dart';
+import 'package:tmail_ui_user/features/login/presentation/widgets/discovered_server_confirm_dialog.dart';
 import 'package:tmail_ui_user/features/login/presentation/model/login_arguments.dart';
 import 'package:tmail_ui_user/features/starting_page/domain/state/sign_in_twake_workplace_state.dart';
 import 'package:tmail_ui_user/features/starting_page/domain/usecase/sign_in_twake_workplace_interactor.dart';
@@ -316,14 +317,13 @@ class LoginController extends ReloadableController {
       onSuccessCallback: (deepLinkData) {
         if (deepLinkData is! OpenAppDeepLinkData) return;
 
-        if (currentContext != null) {
-          SmartDialog.showLoading(
-            msg: AppLocalizations.of(currentContext!).loadingPleaseWait,
-          );
-        }
+        // A loading overlay would hide the sign-in confirmation dialog.
+        SmartDialog.dismiss();
 
-        _deepLinksManager?.autoSignInViaDeepLink(
+        _deepLinksManager?.handleOpenAppDeepLinks(
           openAppDeepLinkData: deepLinkData,
+          isSignedIn: false,
+          isCallerActive: () => !isClosed,
           onAutoSignInSuccessCallback: _handleAutoSignInViaDeepLinkSuccess,
           onFailureCallback: SmartDialog.dismiss,
         );
@@ -334,6 +334,11 @@ class LoginController extends ReloadableController {
   void _handleAutoSignInViaDeepLinkSuccess(
     AutoSignInViaDeepLinkSuccess success,
   ) {
+    if (currentContext != null) {
+      SmartDialog.showLoading(
+        msg: AppLocalizations.of(currentContext!).loadingPleaseWait,
+      );
+    }
     if (PlatformInfo.isMobile) {
       removeCompanyServerLoginInfo();
     }
@@ -636,12 +641,47 @@ class LoginController extends ReloadableController {
     }
   }
 
-  void _handleDNSLookupToGetJmapUrlSuccess(
+  /// Confirms a server found over plaintext DNS before any request reaches it.
+  @visibleForTesting
+  DiscoveredServerConfirmDialog discoveredServerConfirmDialog =
+      const DiscoveredServerConfirmDialog();
+
+  Future<void> _handleDNSLookupToGetJmapUrlSuccess(
     DNSLookupToGetJmapUrlSuccess success,
-  ) {
+  ) async {
+    if (!await _confirmDiscoveredServer(success)) {
+      // A stale or unconfirmed server never becomes the base URL. A base URL still
+      // set here (a newer answer, or one kept from a retry) is left as is;
+      // only a decline with no base URL resets the view state.
+      if (_baseUri == null) clearState();
+      return;
+    }
     onBaseUrlChange(success.jmapUrl);
     _checkOIDCIsAvailable();
   }
+
+  /// A server found over plaintext DNS can be spoofed: the base URL stays
+  /// unset until the user confirms it, so no webfinger, OIDC or password
+  /// request reaches an unconfirmed server. A late answer, after the user left
+  /// the email form, or for an email edited since the lookup started, is
+  /// dropped whatever resolver found it.
+  Future<bool> _confirmDiscoveredServer(
+    DNSLookupToGetJmapUrlSuccess success,
+  ) async {
+    if (!_isOnEmailForm) return false;
+
+    final isConfirmed = await discoveredServerConfirmDialog.confirm(
+      currentContext,
+      answer: success,
+      currentEmail: () => _username?.value,
+    );
+    return isConfirmed && _isOnEmailForm;
+  }
+
+  bool get _isOnEmailForm =>
+      !isClosed && _emailFormTypes.contains(loginFormType.value);
+
+  static const _emailFormTypes = {LoginFormType.dnsLookupForm, LoginFormType.retry};
 
   void _handleCommonOIDCFailure() {
     if (PlatformInfo.isMobile) {
